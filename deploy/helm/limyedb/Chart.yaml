@@ -1,0 +1,19 @@
+apiVersion: v2
+name: limyedb
+description: LimyeDB - Enterprise Distributed Vector Database for AI & RAG
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - vector-database
+  - ai
+  - rag
+  - embeddings
+  - similarity-search
+  - hnsw
+home: https://github.com/loreste/limyeDB
+sources:
+  - https://github.com/loreste/limyeDB
+maintainers:
+  - name: LimyeDB Team
+    url: https://github.com/loreste/limyeDB

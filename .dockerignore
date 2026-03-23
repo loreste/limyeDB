@@ -1,0 +1,44 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Build artifacts
+bin/
+dist/
+release/
+coverage.out
+coverage.html
+*.prof
+
+# Data directories
+data/
+*.db
+*.log
+
+# Local configs
+config.local.yaml
+.env
+.env.*
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Testing
+test/
+*_test.go
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Other
+.DS_Store
+Thumbs.db

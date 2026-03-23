@@ -1,0 +1,58 @@
+# Binaries
+bin/
+dist/
+release/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.html
+
+# Profiling
+*.prof
+cpu.out
+mem.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Data directories
+data/
+*.db
+*.log
+
+# Local configs
+config.local.yaml
+.env
+.env.*
+
+# Dependencies (vendor is optional)
+# vendor/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Generated files
+*.pb.go
+*_grpc.pb.go
+
+# Secrets
+*.pem
+*.key
+*.crt
+!deploy/certs/README.md
+
+# Helm charts (local values)
+deploy/helm/*/values-local.yaml

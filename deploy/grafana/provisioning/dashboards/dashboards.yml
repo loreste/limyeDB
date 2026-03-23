@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: 'LimyeDB'
+    orgId: 1
+    folder: 'LimyeDB'
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards

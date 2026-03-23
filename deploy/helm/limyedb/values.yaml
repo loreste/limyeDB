@@ -1,0 +1,113 @@
+# Default values for LimyeDB
+replicaCount: 3
+
+image:
+  repository: limyedb/limyedb
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+
+service:
+  type: ClusterIP
+  restPort: 8080
+  grpcPort: 6334
+  raftPort: 7000
+  gossipPort: 7001
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: limyedb.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+
+resources:
+  limits:
+    cpu: 4
+    memory: 8Gi
+  requests:
+    cpu: 1
+    memory: 2Gi
+
+autoscaling:
+  enabled: false
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 100Gi
+
+config:
+  logLevel: info
+  hnsw:
+    m: 16
+    efConstruction: 200
+    efSearch: 100
+  wal:
+    syncWrites: true
+    segmentSize: 67108864
+
+auth:
+  enabled: false
+  token: ""
+  existingSecret: ""
+  secretKey: "auth-token"
+
+tls:
+  enabled: false
+  certFile: ""
+  keyFile: ""
+  existingSecret: ""
+
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - limyedb
+          topologyKey: kubernetes.io/hostname

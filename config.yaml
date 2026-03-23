@@ -1,0 +1,139 @@
+# LimyeDB Configuration
+# This is a sample configuration file for LimyeDB
+
+server:
+  # REST API server address
+  rest_addr: "0.0.0.0:8080"
+  # gRPC server address
+  grpc_addr: "0.0.0.0:6334"
+  # Data directory for persistence
+  data_dir: "./data"
+  # Log level: debug, info, warn, error
+  log_level: "info"
+  # Log format: text, json
+  log_format: "json"
+  # Enable CORS
+  cors_enabled: true
+  cors_origins:
+    - "*"
+
+# Security settings
+security:
+  # Enable authentication
+  auth_enabled: false
+  # Bearer token for authentication
+  auth_token: ""
+  # TLS settings
+  tls:
+    enabled: false
+    cert_file: ""
+    key_file: ""
+    # Enable mTLS (mutual TLS)
+    mtls_enabled: false
+    client_ca_file: ""
+
+# Cluster settings (Raft consensus)
+cluster:
+  # Enable clustering
+  enabled: false
+  # Unique node ID
+  node_id: "node1"
+  # Raft configuration
+  raft:
+    # Address for Raft communication
+    bind_addr: "0.0.0.0:7000"
+    # Bootstrap this node as the first in the cluster
+    bootstrap: false
+    # Address to join an existing cluster
+    join_addr: ""
+    # Raft data directory
+    data_dir: "./data/raft"
+    # Snapshot interval
+    snapshot_interval: "1h"
+    # Snapshot threshold (number of logs before snapshot)
+    snapshot_threshold: 8192
+  # Gossip configuration (SWIM protocol)
+  gossip:
+    # Address for gossip communication
+    bind_addr: "0.0.0.0:7001"
+    # Seed nodes for gossip
+    seeds: []
+    # Gossip interval
+    interval: "1s"
+    # Probe timeout
+    probe_timeout: "500ms"
+
+# HNSW index defaults
+hnsw:
+  # Maximum connections per node
+  default_m: 16
+  # Index build quality (higher = better quality, slower build)
+  default_ef_construction: 200
+  # Search quality (higher = better recall, slower search)
+  default_ef_search: 100
+  # Maximum elements per segment
+  max_elements: 1000000
+
+# Storage settings
+storage:
+  # Write-ahead log settings
+  wal:
+    # Enable WAL
+    enabled: true
+    # Sync writes to disk (durability vs performance)
+    sync_writes: true
+    # Segment size in bytes
+    segment_size: 67108864  # 64MB
+    # Maximum segments before compaction
+    max_segments: 10
+  # Memory-mapped storage
+  mmap:
+    enabled: true
+    # Maximum mmap size (0 = unlimited)
+    max_size: 0
+  # Snapshot settings
+  snapshot:
+    # Enable automatic snapshots
+    enabled: true
+    # Snapshot interval
+    interval: "1h"
+    # Number of snapshots to retain
+    retention: 5
+
+# Observability settings
+observability:
+  # Prometheus metrics
+  metrics:
+    enabled: true
+    path: "/metrics"
+  # OpenTelemetry tracing
+  tracing:
+    enabled: false
+    # OTLP endpoint
+    endpoint: "http://localhost:4318"
+    # Service name for traces
+    service_name: "limyedb"
+    # Sample rate (0.0 to 1.0)
+    sample_rate: 0.1
+
+# Resource limits
+limits:
+  # Maximum request body size
+  max_request_size: "100MB"
+  # Maximum batch size for point operations
+  max_batch_size: 10000
+  # Maximum search results
+  max_search_results: 10000
+  # Request timeout
+  request_timeout: "60s"
+  # Maximum concurrent requests
+  max_concurrent_requests: 1000
+
+# Multi-tenancy settings
+tenancy:
+  enabled: false
+  # Default tenant quota
+  default_quota:
+    max_collections: 10
+    max_vectors: 1000000
+    max_storage_gb: 10
