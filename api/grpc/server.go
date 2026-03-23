@@ -5,7 +5,9 @@ import (
 	"net"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
+	"time"
 
 	"github.com/limyedb/limyedb/pkg/collection"
 	"github.com/limyedb/limyedb/pkg/config"
@@ -27,6 +29,13 @@ func NewServer(cfg *config.ServerConfig, collections *collection.Manager, snapsh
 	opts := []grpc.ServerOption{
 		grpc.MaxRecvMsgSize(int(cfg.MaxRequestSize)),
 		grpc.MaxSendMsgSize(int(cfg.MaxRequestSize)),
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			MaxConnectionIdle:     15 * time.Minute, // Evict idle connections to prevent memory starvation
+			MaxConnectionAge:      30 * time.Minute, // Aggressively cycle connections checking load balancers scaling
+			MaxConnectionAgeGrace: 5 * time.Minute,
+			Time:                  5 * time.Minute,  // Ping the client if idle 
+			Timeout:               1 * time.Second,  // Wait 1 second for ping back
+		}),
 	}
 
 	grpcServer := grpc.NewServer(opts...)
