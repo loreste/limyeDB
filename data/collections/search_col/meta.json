@@ -1,0 +1,12 @@
+{
+  "name": "search_col",
+  "dimension": 3,
+  "metric": "euclidean",
+  "hnsw": {
+    "m": 16,
+    "ef_construction": 200,
+    "ef_search": 100,
+    "max_elements": 100000
+  },
+  "on_disk": false
+}

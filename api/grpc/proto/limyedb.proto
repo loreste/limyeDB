@@ -1,0 +1,338 @@
+syntax = "proto3";
+
+package limyedb;
+
+option go_package = "github.com/limyedb/limyedb/api/grpc/proto";
+
+// LimyeDB service provides high-performance distributed vector database operations
+// running across a resilient HashiCorp Raft backbone.
+service LimyeDB {
+  // Collection operations
+  // Collections define isolated namespaces containing specific vector dimensions.
+  rpc CreateCollection(CreateCollectionRequest) returns (CreateCollectionResponse);
+  rpc GetCollection(GetCollectionRequest) returns (GetCollectionResponse);
+  rpc ListCollections(ListCollectionsRequest) returns (ListCollectionsResponse);
+  rpc DeleteCollection(DeleteCollectionRequest) returns (DeleteCollectionResponse);
+
+  // Point operations
+  // Mutator requests automatically proxy to the active Raft Leader node.
+  rpc UpsertPoints(UpsertPointsRequest) returns (UpsertPointsResponse);
+  rpc GetPoints(GetPointsRequest) returns (GetPointsResponse);
+  rpc DeletePoints(DeletePointsRequest) returns (DeletePointsResponse);
+  rpc StreamUpsertPoints(stream UpsertPointsRequest) returns (UpsertPointsResponse);
+
+  // Search operations
+  // Search runs locally across scalable read-replicas. By default, limiting
+  // the Graph traversal (ef_search) strictly bounds sub-millisecond tail latencies.
+  rpc Search(SearchRequest) returns (SearchResponse);
+  rpc SearchBatch(SearchBatchRequest) returns (SearchBatchResponse);
+  rpc Recommend(RecommendRequest) returns (RecommendResponse);
+  
+  // Discover performs Graph-Native Context Search using Positive and Negative examples.
+  rpc Discover(DiscoverRequest) returns (DiscoverResponse);
+
+  // Snapshot operations
+  rpc CreateSnapshot(CreateSnapshotRequest) returns (CreateSnapshotResponse);
+  rpc ListSnapshots(ListSnapshotsRequest) returns (ListSnapshotsResponse);
+  rpc RestoreSnapshot(RestoreSnapshotRequest) returns (RestoreSnapshotResponse);
+
+  // Health check
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+// Common types
+
+message Vector {
+  repeated float data = 1;
+}
+
+// Point represents a unique document mapped tightly within the HNSW Graph.
+message Point {
+  // Unique UUID or standard String identifier
+  string id = 1;
+  // Deep dense floating representations mapping structural reality
+  Vector vector = 2;
+  // Arbitrary JSON map supporting deep AST structural boolean parsing
+  map<string, Value> payload = 3;
+}
+
+message Value {
+  oneof kind {
+    double number_value = 1;
+    string string_value = 2;
+    bool bool_value = 3;
+    ListValue list_value = 4;
+  }
+}
+
+message ListValue {
+  repeated Value values = 1;
+}
+
+message ScoredPoint {
+  string id = 1;
+  float score = 2;
+  Vector vector = 3;
+  map<string, Value> payload = 4;
+}
+
+message HNSWConfig {
+  int32 m = 1;
+  int32 ef_construction = 2;
+  int32 ef_search = 3;
+}
+
+message CollectionConfig {
+  string name = 1;
+  int32 dimension = 2;
+  string metric = 3;
+  bool on_disk = 4;
+  HNSWConfig hnsw = 5;
+}
+
+message CollectionInfo {
+  string name = 1;
+  int32 dimension = 2;
+  string metric = 3;
+  int64 size = 4;
+  CollectionConfig config = 5;
+  int64 created_at = 6;
+  int64 updated_at = 7;
+}
+
+// Filter types
+
+// Filter represents an AST boolean mapping executed precisely against
+// payload intersections during active HNSW segment traversals without skipping.
+message Filter {
+  oneof filter {
+    // $and equivalents bridging arrays of Sub-Filters natively
+    MustFilter must = 1;
+    // $or logic arrays supporting deep dimensional combinations
+    ShouldFilter should = 2;
+    // $not boolean inversion
+    MustNotFilter must_not = 3;
+    // Singular terminal field condition operators ($eq, $gt, $lt, $in)
+    FieldCondition field = 4;
+  }
+}
+
+message MustFilter {
+  repeated Filter conditions = 1;
+}
+
+message ShouldFilter {
+  repeated Filter conditions = 1;
+}
+
+message MustNotFilter {
+  repeated Filter conditions = 1;
+}
+
+message FieldCondition {
+  string field = 1;
+  oneof condition {
+    MatchCondition match = 2;
+    RangeCondition range = 3;
+    ValuesCondition values = 4;
+  }
+}
+
+// Represents a standard string, integer, float, or boolean equality comparison
+message MatchCondition {
+  Value value = 1;
+}
+
+// Numerical bounding properties supporting $gte, $gt, $lte, $lt AST structures
+message RangeCondition {
+  optional double gt = 1;
+  optional double gte = 2;
+  optional double lt = 3;
+  optional double lte = 4;
+}
+
+// Represents Array-based $in constraints
+message ValuesCondition {
+  repeated Value values = 1;
+}
+
+// Request/Response messages
+
+// Collections
+
+message CreateCollectionRequest {
+  CollectionConfig config = 1;
+}
+
+message CreateCollectionResponse {
+  bool success = 1;
+  CollectionInfo info = 2;
+}
+
+message GetCollectionRequest {
+  string name = 1;
+}
+
+message GetCollectionResponse {
+  CollectionInfo info = 1;
+}
+
+message ListCollectionsRequest {}
+
+message ListCollectionsResponse {
+  repeated CollectionInfo collections = 1;
+}
+
+message DeleteCollectionRequest {
+  string name = 1;
+}
+
+message DeleteCollectionResponse {
+  bool success = 1;
+}
+
+// Points
+
+message UpsertPointsRequest {
+  string collection = 1;
+  repeated Point points = 2;
+  bool wait = 3;
+}
+
+message UpsertPointsResponse {
+  bool success = 1;
+  int32 upserted = 2;
+  repeated string errors = 3;
+}
+
+message GetPointsRequest {
+  string collection = 1;
+  repeated string ids = 2;
+  bool with_vector = 3;
+  bool with_payload = 4;
+}
+
+message GetPointsResponse {
+  repeated Point points = 1;
+}
+
+message DeletePointsRequest {
+  string collection = 1;
+  repeated string ids = 2;
+  Filter filter = 3;
+}
+
+message DeletePointsResponse {
+  bool success = 1;
+  int32 deleted = 2;
+}
+
+// Search
+
+message SearchRequest {
+  string collection = 1;
+  Vector vector = 2;
+  int32 limit = 3;
+  int32 offset = 4;
+  Filter filter = 5;
+  bool with_vector = 6;
+  bool with_payload = 7;
+  int32 ef = 8;
+  float score_threshold = 9;
+}
+
+message SearchResponse {
+  repeated ScoredPoint results = 1;
+  int64 took_ms = 2;
+}
+
+message SearchBatchRequest {
+  string collection = 1;
+  repeated Vector vectors = 2;
+  int32 limit = 3;
+  Filter filter = 4;
+  bool with_vector = 5;
+  bool with_payload = 6;
+}
+
+message SearchBatchResponse {
+  repeated SearchResponse results = 1;
+}
+
+message RecommendRequest {
+  string collection = 1;
+  repeated string positive_ids = 2;
+  repeated string negative_ids = 3;
+  int32 limit = 4;
+  Filter filter = 5;
+  bool with_vector = 6;
+  bool with_payload = 7;
+}
+
+message RecommendResponse {
+  repeated ScoredPoint results = 1;
+  int64 took_ms = 2;
+}
+
+message ContextPair {
+  string positive_id = 1;
+  string negative_id = 2;
+}
+
+message DiscoverRequest {
+  string collection = 1;
+  Vector target = 2;
+  repeated ContextPair context = 3;
+  int32 limit = 4;
+  int32 offset = 5;
+  Filter filter = 6;
+  bool with_vector = 7;
+  bool with_payload = 8;
+}
+
+message DiscoverResponse {
+  repeated ScoredPoint results = 1;
+  int64 took_ms = 2;
+}
+
+// Snapshots
+
+message CreateSnapshotRequest {
+  repeated string collections = 1;
+}
+
+message CreateSnapshotResponse {
+  string id = 1;
+  int64 timestamp = 2;
+  int64 size = 3;
+}
+
+message ListSnapshotsRequest {}
+
+message ListSnapshotsResponse {
+  repeated SnapshotInfo snapshots = 1;
+}
+
+message SnapshotInfo {
+  string id = 1;
+  int64 timestamp = 2;
+  int64 size = 3;
+  repeated string collections = 4;
+}
+
+message RestoreSnapshotRequest {
+  string id = 1;
+}
+
+message RestoreSnapshotResponse {
+  bool success = 1;
+}
+
+// Health
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;
+  string version = 2;
+}
