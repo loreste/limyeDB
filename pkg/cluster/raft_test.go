@@ -31,8 +31,6 @@ func waitForServer(url string, timeout time.Duration) bool {
 
 func startNode(t *testing.T, id, restPort, raftPort, dataDir string, bootstrap bool, joinAddr string) *exec.Cmd {
 	args := []string{
-		"-C", "../..", 
-		"run", "cmd/limyedb/main.go",
 		"--rest", restPort,
 		"--grpc", ":0", // disable static grpc collision
 		"--data", dataDir,
@@ -47,13 +45,19 @@ func startNode(t *testing.T, id, restPort, raftPort, dataDir string, bootstrap b
 		args = append(args, "--raft-join", joinAddr)
 	}
 
-	cmd := exec.Command("go", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd := exec.Command("/tmp/limyedb_raft_test_bin", args...)
+	// Decouple stdout/stderr to prevent go test I/O wait timeout panics on Linux
+	cmd.Stdout = nil
+	cmd.Stderr = nil
 
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("Failed to start node %s: %v", id, err)
 	}
+
+	// Asynchronously reap the zombie process safely avoiding locking the primary test runner loop
+	go func() {
+		_ = cmd.Wait()
+	}()
 
 	if !waitForServer("http://localhost"+restPort, 15*time.Second) {
 		cmd.Process.Kill()
@@ -64,6 +68,13 @@ func startNode(t *testing.T, id, restPort, raftPort, dataDir string, bootstrap b
 }
 
 func TestRaftClusterIntegration(t *testing.T) {
+	// Pre-compile the binary to avert orphaned processes from 'go run'
+	buildCmd := exec.Command("go", "build", "-o", "/tmp/limyedb_raft_test_bin", "../../cmd/limyedb/main.go")
+	if err := buildCmd.Run(); err != nil {
+		t.Fatalf("Failed to pre-compile test binary: %v", err)
+	}
+	defer os.Remove("/tmp/limyedb_raft_test_bin")
+
 	// Clean up any remaining previous state
 	_ = os.RemoveAll("/tmp/limyedb_raft1")
 	_ = os.RemoveAll("/tmp/limyedb_raft2")
