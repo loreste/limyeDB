@@ -68,8 +68,7 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Println(`LimyeDB CLI - Command line interface for LimyeDB
-
+	fmt.Print(`LimyeDB CLI - Command line interface for LimyeDB
 Usage:
   limyedb-cli [options] <command> [arguments]
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -454,9 +455,50 @@ func NewConsulDiscovery(addr, serviceName string) (*ConsulDiscovery, error) {
 }
 
 func (d *ConsulDiscovery) Discover(ctx context.Context) ([]string, error) {
-	// In a real implementation, this would query Consul
-	// For now, return empty
-	return nil, errors.New("consul discovery not implemented")
+	url := fmt.Sprintf("http://%s/v1/catalog/service/%s", d.addr, d.serviceName)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("consul returned status: %d", resp.StatusCode)
+	}
+
+	var services []struct {
+		ServiceAddress string `json:"ServiceAddress"`
+		Address        string `json:"Address"`
+		ServicePort    int    `json:"ServicePort"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&services); err != nil {
+		return nil, err
+	}
+
+	var addrs []string
+	for _, srv := range services {
+		host := srv.ServiceAddress
+		if host == "" {
+			host = srv.Address
+		}
+		port := srv.ServicePort
+		if port == 0 {
+			port = 7946 // Default Gossip/Raft port
+		}
+		addrs = append(addrs, fmt.Sprintf("%s:%d", host, port))
+	}
+
+	if len(addrs) == 0 {
+		return nil, errors.New("no nodes found via consul")
+	}
+
+	return addrs, nil
 }
 
 func (d *ConsulDiscovery) Type() DiscoveryType {

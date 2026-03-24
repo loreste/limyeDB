@@ -1,10 +1,10 @@
 package cluster
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -191,8 +191,41 @@ func (t *HTTPTransport) Send(ctx context.Context, nodeAddr string, msg *Message)
 }
 
 func (t *HTTPTransport) Stream(ctx context.Context, nodeAddr string) (Stream, error) {
-	// HTTP-based streaming using chunked transfer
-	return nil, errors.New("streaming not implemented for HTTP transport")
+	// HTTP bidirectional streaming using Upgrade
+	dialer := &net.Dialer{Timeout: 5 * time.Second}
+	conn, err := dialer.DialContext(ctx, "tcp", nodeAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", "/cluster/stream", nil)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", "limyedb-stream")
+
+	if err := req.Write(conn); err != nil {
+		conn.Close()
+		return nil, err
+	}
+
+	resp, err := http.ReadResponse(bufio.NewReader(conn), req)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		conn.Close()
+		return nil, fmt.Errorf("unexpected streaming status: %d", resp.StatusCode)
+	}
+
+	return &tcpStream{
+		conn:    conn,
+		encoder: json.NewEncoder(conn),
+		decoder: json.NewDecoder(conn),
+	}, nil
 }
 
 func (t *HTTPTransport) OnMessage(handler MessageHandler) {
@@ -239,8 +272,53 @@ func (t *HTTPTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (t *HTTPTransport) handleStream(w http.ResponseWriter, r *http.Request) {
-	// Implement SSE or WebSocket for streaming
-	http.Error(w, "Not implemented", http.StatusNotImplemented)
+	if r.Header.Get("Upgrade") != "limyedb-stream" {
+		http.Error(w, "Upgrade Required", http.StatusUpgradeRequired)
+		return
+	}
+
+	hijacker, ok := w.(http.Hijacker)
+	if !ok {
+		http.Error(w, "Hijacking not supported", http.StatusInternalServerError)
+		return
+	}
+
+	conn, _, err := hijacker.Hijack()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Write successful upgrade response manually since we hijacked the connection
+	response := "HTTP/1.1 101 Switching Protocols\r\n" +
+		"Connection: Upgrade\r\n" +
+		"Upgrade: limyedb-stream\r\n\r\n"
+	
+	if _, err := conn.Write([]byte(response)); err != nil {
+		conn.Close()
+		return
+	}
+
+	// We successfully grabbed the raw TCP conn! Treat it as a standard cluster stream.
+	go func() {
+		defer conn.Close()
+		decoder := json.NewDecoder(conn)
+		encoder := json.NewEncoder(conn)
+		for {
+			var msg Message
+			if err := decoder.Decode(&msg); err != nil {
+				return
+			}
+			t.mu.RLock()
+			handler := t.handler
+			t.mu.RUnlock()
+			if handler != nil {
+				if response := handler(&msg); response != nil {
+					encoder.Encode(response)
+				}
+			}
+		}
+	}()
 }
 
 // TCPTransport implements Transport using TCP with message framing

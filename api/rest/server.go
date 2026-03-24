@@ -11,6 +11,7 @@ import (
 	"github.com/limyedb/limyedb/pkg/cluster"
 	"github.com/limyedb/limyedb/pkg/collection"
 	"github.com/limyedb/limyedb/pkg/config"
+	"github.com/limyedb/limyedb/pkg/realtime"
 	"github.com/limyedb/limyedb/pkg/storage/snapshot"
 )
 
@@ -24,6 +25,7 @@ type Server struct {
 	aliases     *collection.AliasManager
 	raft        *cluster.RaftNode
 	opts        *ServerOptions // Added to store ServerOptions
+	realtimeHub *realtime.Hub
 }
 
 // ServerOptions configures the REST server
@@ -54,6 +56,7 @@ func NewServerWithOptions(cfg *config.ServerConfig, collections *collection.Mana
 		config:      cfg,
 		collections: collections,
 		opts:        opts, // Store opts
+		realtimeHub: realtime.NewHub(),
 	}
 
 	if opts != nil {
@@ -61,6 +64,9 @@ func NewServerWithOptions(cfg *config.ServerConfig, collections *collection.Mana
 		s.aliases = opts.Aliases
 		s.raft = opts.Raft
 	}
+
+	// Start Real-Time Event Hub
+	go s.realtimeHub.Run(context.Background())
 
 	s.setupRoutes()
 	s.setupMiddleware()
@@ -136,6 +142,9 @@ func (s *Server) setupRoutes() {
 	s.router.GET("/snapshots", s.handleListSnapshots)
 	s.router.POST("/snapshots/:id/restore", s.handleRestoreSnapshot)
 	s.router.DELETE("/snapshots/:id", s.handleDeleteSnapshot)
+
+	// Cluster HTTP Streaming / WebSockets
+	s.router.GET("/stream", s.handleWebSocket)
 
 	// Metrics
 	s.router.GET("/metrics", s.handleMetrics)
@@ -268,4 +277,9 @@ func respondCreated(c *gin.Context, data interface{}) {
 		Success: true,
 		Data:    data,
 	})
+}
+
+// handleWebSocket transparently passes the Gin HTTP structures into the pure Real-Time WebSocket hub upgrader.
+func (s *Server) handleWebSocket(c *gin.Context) {
+	s.realtimeHub.ServeWS(c.Writer, c.Request)
 }
