@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -60,8 +60,11 @@ func main() {
 		return
 	}
 
-	fmt.Print(banner)
-	fmt.Printf("Version: %s\n\n", version)
+	// Initialize Enterprise JSON Logger natively
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	slog.SetDefault(logger)
+
+	slog.Info(fmt.Sprintf("\n%s\nVersion: %s", banner, version))
 
 	// Load configuration
 	var cfg *config.Config
@@ -70,7 +73,8 @@ func main() {
 	if *configPath != "" {
 		cfg, err = config.Load(*configPath)
 		if err != nil {
-			log.Fatalf("Failed to load config: %v", err)
+			slog.Error("Failed to load config", "error", err)
+			os.Exit(1)
 		}
 	} else {
 		cfg = config.DefaultConfig()
@@ -89,26 +93,27 @@ func main() {
 
 	// Initialize storage directories with restricted permissions
 	if err := os.MkdirAll(cfg.Storage.DataDir, 0750); err != nil {
-		log.Fatalf("Failed to create data directory: %v", err)
+		slog.Error("Failed to create data directory", "error", err, "path", cfg.Storage.DataDir)
+		os.Exit(1)
 	}
 
-	// Initialize collection manager
 	collMgr, err := collection.NewManager(&collection.ManagerConfig{
 		DataDir:        cfg.Storage.DataDir + "/collections",
 		MaxCollections: cfg.Storage.MaxCollections,
 	})
 	if err != nil {
-		log.Fatalf("Failed to initialize collection manager: %v", err)
+		slog.Error("Failed to initialize collection manager", "error", err)
+		os.Exit(1)
 	}
 
-	// Initialize snapshot manager
 	snapMgr, err := snapshot.NewManager(&snapshot.Config{
 		Dir:             cfg.Snapshot.Dir,
 		RetainCount:     cfg.Snapshot.RetainCount,
 		CompressionLevel: cfg.Snapshot.CompressionLvl,
 	})
 	if err != nil {
-		log.Fatalf("Failed to initialize snapshot manager: %v", err)
+		slog.Error("Failed to initialize snapshot manager", "error", err)
+		os.Exit(1)
 	}
 
 	// Initialize Raft if configured
@@ -126,13 +131,14 @@ func main() {
 
 		rn, err := cluster.NewRaftNode(rcfg, collMgr, snapMgr)
 		if err != nil {
-			log.Fatalf("Failed to initialize Raft subsystem: %v", err)
+			slog.Error("Failed to initialize Raft subsystem", "error", err)
+			os.Exit(1)
 		}
 		raftNode = rn
-		log.Printf("Raft node %s bound to %s", *raftNodeID, *raftBind)
+		slog.Info("Raft subsystem bound", "node", *raftNodeID, "bind", *raftBind)
 
 		if *raftJoinAddr != "" {
-			log.Printf("Node %s configured to join cluster at: %s", *raftNodeID, *raftJoinAddr)
+			slog.Info("Configured to join cluster", "node", *raftNodeID, "joinAddr", *raftJoinAddr)
 			
 			// Dial asynchronously once the local HTTP server has booted
 			go func() {
@@ -144,14 +150,14 @@ func main() {
 				body, _ := json.Marshal(payload)
 				resp, err := http.Post(*raftJoinAddr+"/cluster/join", "application/json", bytes.NewReader(body))
 				if err != nil {
-					log.Printf("Failed to join cluster through %s: %v", *raftJoinAddr, err)
+					slog.Error("Failed to join cluster", "joinAddr", *raftJoinAddr, "error", err)
 					return
 				}
 				defer resp.Body.Close()
 				if resp.StatusCode != 200 {
-					log.Printf("Cluster join rejected by %s: status %d", *raftJoinAddr, resp.StatusCode)
+					slog.Error("Cluster join rejected", "joinAddr", *raftJoinAddr, "status", resp.StatusCode)
 				} else {
-					log.Printf("Successfully joined the distributed LimyeDB cluster through %s!", *raftJoinAddr)
+					slog.Info("Successfully joined the distributed LimyeDB cluster", "joinAddr", *raftJoinAddr)
 				}
 			}()
 		}
@@ -167,31 +173,29 @@ func main() {
 		TLSKey:      *tlsKey,
 	})
 	go func() {
-		log.Printf("Starting REST API server on %s", cfg.Server.RESTAddress)
+		slog.Info("Starting REST API server", "address", cfg.Server.RESTAddress)
 		if err := restServer.Start(); err != nil {
-			log.Printf("REST server error: %v", err)
+			slog.Error("REST server error", "error", err)
 		}
 	}()
 
 	// Start gRPC server
 	grpcServer := grpc.NewServer(&cfg.Server, collMgr, snapMgr)
 	go func() {
-		log.Printf("Starting gRPC API server on %s", cfg.Server.GRPCAddress)
+		slog.Info("Starting gRPC API server", "address", cfg.Server.GRPCAddress)
 		if err := grpcServer.Start(); err != nil {
-			log.Printf("gRPC server error: %v", err)
+			slog.Error("gRPC server error", "error", err)
 		}
 	}()
 
-	log.Printf("LimyeDB is ready to accept connections")
-	log.Printf("REST API: http://localhost%s", cfg.Server.RESTAddress)
-	log.Printf("gRPC API: localhost%s", cfg.Server.GRPCAddress)
+	slog.Info("LimyeDB Ready", "rest", "http://localhost"+cfg.Server.RESTAddress, "grpc", "localhost"+cfg.Server.GRPCAddress)
 
 	// Wait for shutdown signal
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down LimyeDB...")
+	slog.Info("Shutting down LimyeDB...")
 
 	// Graceful shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.WriteTimeout)
@@ -199,17 +203,17 @@ func main() {
 
 	// Stop servers
 	if err := restServer.Stop(ctx); err != nil {
-		log.Printf("REST server shutdown error: %v", err)
+		slog.Error("REST server shutdown error", "error", err)
 	}
 	grpcServer.Stop()
 
 	// Flush and close collection manager
 	if err := collMgr.Flush(); err != nil {
-		log.Printf("Failed to flush collections: %v", err)
+		slog.Error("Failed to flush collections", "error", err)
 	}
 	if err := collMgr.Close(); err != nil {
-		log.Printf("Failed to close collection manager: %v", err)
+		slog.Error("Failed to close collection manager", "error", err)
 	}
 
-	log.Println("LimyeDB shutdown complete")
+	slog.Info("LimyeDB shutdown complete")
 }

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -74,8 +74,8 @@ func (f *FSM) SetRaftNode(rn *RaftNode) {
 func (f *FSM) Apply(logEntry *raft.Log) interface{} {
 	var cmd Command
 	if err := json.Unmarshal(logEntry.Data, &cmd); err != nil {
-		log.Printf("FSM Apply failed to unmarshal command: %v", err)
-		return err
+		slog.Error("FSM Apply failed to unmarshal command", "err", err)
+		return nil
 	}
 
 	switch cmd.Op {

@@ -3,7 +3,7 @@ package rest
 import (
 	"context"
 	"errors"
-	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -203,8 +203,13 @@ func (s *Server) requestLogger() gin.HandlerFunc {
 		latency := time.Since(start)
 		status := c.Writer.Status()
 
-		// Log format: [STATUS] METHOD PATH LATENCY
-		fmt.Printf("[%d] %s %s %v\n", status, c.Request.Method, path, latency)
+		// Output JSON telemetry for Kubernetes metrics extraction
+		slog.Info("HTTP Request Segment",
+			slog.Int("status", status),
+			slog.String("method", c.Request.Method),
+			slog.String("path", path),
+			slog.Duration("latency", latency),
+		)
 	}
 }
 
