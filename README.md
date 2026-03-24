@@ -1,13 +1,13 @@
-# LimyeDB - Enterprise Distributed Vector Database for AI & RAG
+# LimyeDB - Open Source Vector Database for GenAI, RAG & LLMs
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/limyedb/limyedb.svg)](https://pkg.go.dev/github.com/limyedb/limyedb)
 [![Go Report Card](https://goreportcard.com/badge/github.com/limyedb/limyedb)](https://goreportcard.com/report/github.com/limyedb/limyedb)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Docker Pulls](https://img.shields.io/docker/pulls/limyedb/limyedb)](https://hub.docker.com/r/limyedb/limyedb)
 
-**LimyeDB** is a lightning-fast, highly-available open-source **vector database** engineered for the next generation of AI applications. Built entirely in Go, it is designed from the ground up to power **Retrieval-Augmented Generation (RAG)**, Large Language Model (LLM) memory, and advanced semantic search use-cases with sub-millisecond latency.
+**LimyeDB** is a lightning-fast, highly-available **open-source vector database** engineered specifically for the next generation of AI applications. Built entirely from scratch in Go, it is the ultimate semantic storage engine designed to power **Retrieval-Augmented Generation (RAG)**, large language model (LLM) memory arrays, and predictive similarity matching with sub-millisecond retrieval latency.
 
-LimyeDB uniquely combines Graph-Native HNSW traversal with Zero-Allocation memory pools, unlocking massive Queries-Per-Second (QPS) at a fraction of hardware costs. LimyeDB scales transparently from lightweight embedded binaries to globally distributed, fault-tolerant clusters.
+LimyeDB distinguishes itself by natively supporting **Hybrid Search**—combining zero-allocation memory mapped **NVMe HNSW** (Hierarchical Navigable Small World) Dense vector indexing alongside a blisteringly fast local **BM25/SPLADE Inverted Index** for Sparse vectors. It mathematically fuses these Multi-Modal queries using industry-standard **Reciprocal Rank Fusion (RRF)**. LimyeDB scales effortlessly from lightweight embedded binaries to universally distributed, fault-tolerant clusters.
 
 ---
 
@@ -36,20 +36,19 @@ LimyeDB uniquely combines Graph-Native HNSW traversal with Zero-Allocation memor
 
 | Feature | Description |
 |---------|-------------|
-| **HNSW Vector Index** | State-of-the-art Hierarchical Navigable Small World graph for sub-millisecond nearest neighbor search |
-| **Hybrid Search** | Combine dense vectors (HNSW) with sparse vectors (BM25) using Reciprocal Rank Fusion |
-| **Distributed Clustering** | Native Raft consensus + SWIM gossip protocol for high availability |
-| **Multi-Tenancy** | Full tenant isolation with resource quotas and RBAC |
-| **SQL Interface** | Familiar SQL-like query syntax for vector operations |
-| **Real-Time Updates** | WebSocket subscriptions for live data streaming |
-| **Auto-Tuning** | Self-optimizing index parameters based on workload |
-| **Auto-Embedding** | Built-in vectorization with OpenAI, Cohere, HuggingFace |
+| **Hybrid Search via RRF** | Natively fuse dense semantic queries with sparse token frequencies (BM25) via Reciprocal Rank Fusion |
+| **High-Performance HNSW** | O(1) Zero-Allocation Graph-Native memory pools bypassing Go garbage collection for extreme retrieval speeds |
+| **Distributed Clustering** | Native Raft consensus and SWIM gossip protocol for masterless high availability and global persistence |
+| **Multi-Tenancy & RBAC** | Strict granular isolation schemas featuring dynamic JSON Web Token (JWT) Authorization across REST and gRPC pipelines |
+| **Vector SQL Interface** | Powerful and familiar declarative SQL-like query interfaces explicitly controlling embedded semantic properties |
+| **Event-Driven Mutators** | Live WebSocket data-streams reacting to vector insertion and clustering algorithms dynamically |
+| **Real-Time Auto-Tuning** | Adapts index parameters dynamically ensuring top 99P recall guarantees continuously in production |
 
 ### Technical Highlights
 
-- **Zero-Allocation HNSW Engine:** Eliminates GC pauses with O(1) generational memory pools
-- **Advanced AST Payload Filtering:** Execute complex JSON constraints during index traversal
-- **Enterprise Security:** TLS/mTLS, API key authentication, Bearer tokens
+- **Zero-Allocation HNSW Engine:** Eliminates GC pauses with raw memory-mapped (mmap) `[]byte` NVMe bypass mechanisms
+- **Advanced AST Payload Filtering:** Execute complex JSON constraints securely filtering embeddings prior to graph traversal
+- **Enterprise Security:** JWT Bearer tokens alongside mTLS verification protocols for deep cross-cluster defense
 - **Prometheus Metrics:** Native `/metrics` endpoint for monitoring
 - **OpenTelemetry Tracing:** Distributed tracing support
 
@@ -357,20 +356,22 @@ curl -X POST http://localhost:8080/collections/documents/search \
   }'
 ```
 
-#### Hybrid Search (Dense + Sparse)
+#### Semantic Hybrid Search (Multi-Modal Sparse + Dense via RRF)
+
+Accelerate RAG retrieval pipelines by fusing keyword frequency with dense contextual embeddings gracefully:
 
 ```bash
-curl -X POST http://localhost:8080/collections/documents/search/hybrid \
+curl -X POST http://localhost:8080/collections/documents/search  \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{
-    "dense_vector": [0.1, 0.2, 0.3, ...],
-    "sparse_query": "machine learning introduction",
+    "vector": [0.1, 0.2, 0.3, ...],
+    "sparse_query": { 
+         "indices": [101, 403, 11200], 
+         "values": [2.4, 0.8, 4.1] 
+    },
     "limit": 10,
-    "fusion": {
-      "method": "rrf",
-      "k": 60
-    }
+    "with_payload": true
   }'
 ```
 
