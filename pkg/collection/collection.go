@@ -12,6 +12,7 @@ import (
 	"github.com/limyedb/limyedb/pkg/distance"
 	"github.com/limyedb/limyedb/pkg/index/hnsw"
 	"github.com/limyedb/limyedb/pkg/index/payload"
+	"github.com/limyedb/limyedb/pkg/index/sparse"
 	"github.com/limyedb/limyedb/pkg/point"
 	"github.com/limyedb/limyedb/pkg/quantization"
 	"github.com/limyedb/limyedb/pkg/storage/mmap"
@@ -23,8 +24,9 @@ type Collection struct {
 	index  *hnsw.HNSW                // Default/single vector index (backwards compat)
 	indices map[string]*hnsw.HNSW    // Named vector indices
 	payloadIndex *payload.Index
-	distCalc distance.Calculator
-	distCalcs map[string]distance.Calculator // Distance calculators per vector
+	sparseIdx    *sparse.InvertedIndex
+	distCalc     distance.Calculator
+	distCalcs    map[string]distance.Calculator // Distance calculators per vector
 
 	// Metadata
 	createdAt time.Time
@@ -44,6 +46,7 @@ func New(cfg *config.CollectionConfig) (*Collection, error) {
 		config:       cfg,
 		indices:      make(map[string]*hnsw.HNSW),
 		payloadIndex: payload.NewIndex(),
+		sparseIdx:    sparse.NewInvertedIndex(),
 		distCalcs:    make(map[string]distance.Calculator),
 		createdAt:    time.Now(),
 	}
@@ -263,6 +266,10 @@ func (c *Collection) Insert(p *point.Point) error {
 	// Index payload
 	nodeID, _ := c.getNodeID(p.ID)
 	c.payloadIndex.IndexPoint(nodeID, p.Payload)
+	if p.Sparse != nil {
+		vec := &sparse.Vector{Indices: p.Sparse.Indices, Values: p.Sparse.Values}
+		c.sparseIdx.Add(nodeID, vec)
+	}
 
 	c.updatedAt.Store(time.Now())
 	return nil
@@ -326,6 +333,7 @@ func (c *Collection) InsertV2(p *point.PointV2) error {
 				ID:      p.ID,
 				Vector:  vec,
 				Payload: p.Payload,
+				Sparse:  p.Sparse,
 			}
 
 			if err := idx.Insert(legacyPoint); err != nil {
@@ -343,6 +351,7 @@ func (c *Collection) InsertV2(p *point.PointV2) error {
 					ID:      p.ID,
 					Vector:  p.Vector,
 					Payload: p.Payload,
+					Sparse:  p.Sparse,
 				}
 				if err := idx.Insert(legacyPoint); err != nil {
 					if err.Error() != "point with this ID already exists" {
@@ -378,6 +387,7 @@ func (c *Collection) InsertV2(p *point.PointV2) error {
 			ID:      p.ID,
 			Vector:  vec,
 			Payload: p.Payload,
+			Sparse:  p.Sparse,
 		}
 
 		if err := c.index.Insert(legacyPoint); err != nil {
@@ -516,6 +526,44 @@ func (c *Collection) SearchV2WithParams(query point.Vector, vectorName string, p
 		result.Points = append(result.Points, sp)
 	}
 
+	// --- PHASE 7 RRF FUSION ---
+	if params.SparseQuery != nil && c.sparseIdx != nil {
+		sparseVec := &sparse.Vector{Indices: params.SparseQuery.Indices, Values: params.SparseQuery.Values}
+		sparseMatches := c.sparseIdx.Search(sparseVec, params.K)
+		
+		var denseMatches []sparse.ScoredDoc
+		for _, dm := range result.Points {
+			nID, ok := idx.GetNodeID(dm.ID)
+			if ok {
+				denseMatches = append(denseMatches, sparse.ScoredDoc{DocID: nID, Score: dm.Score})
+			}
+		}
+
+		fusedDocs := sparse.FuseResults(denseMatches, sparseMatches, sparse.DefaultHybridConfig(), params.K)
+
+		var fused []ScoredPointV2
+		for _, fd := range fusedDocs {
+			id := idx.GetPointID(fd.DocID)
+			p, err := idx.Get(id)
+			if err != nil {
+				continue
+			}
+			sp := ScoredPointV2{
+				ID:         id,
+				Score:      fd.FinalScore,
+				VectorName: vectorName,
+			}
+			if params.WithVector {
+				sp.Vector = p.Vector
+			}
+			if params.WithPayload {
+				sp.Payload = p.Payload
+			}
+			fused = append(fused, sp)
+		}
+		result.Points = fused
+	}
+
 	return result, nil
 }
 
@@ -539,6 +587,9 @@ func (c *Collection) Upsert(p *point.Point) error {
 
 	// Try to delete existing (ignore error if not found)
 	_ = c.index.Delete(p.ID)
+	if nodeID, ok := c.getNodeID(p.ID); ok {
+		c.sparseIdx.Remove(nodeID)
+	}
 
 	// Insert new
 	if err := c.index.Insert(p); err != nil {
@@ -568,6 +619,9 @@ func (c *Collection) Delete(id string) error {
 	if err := c.index.Delete(id); err != nil {
 		return err
 	}
+	if nodeID, ok := c.getNodeID(id); ok {
+		c.sparseIdx.Remove(nodeID)
+	}
 
 	c.updatedAt.Store(time.Now())
 	return nil
@@ -580,11 +634,12 @@ func (c *Collection) Search(query point.Vector, k int) (*SearchResult, error) {
 
 // SearchParams holds search parameters
 type SearchParams struct {
-	K          int
-	Ef         int
-	Filter     *payload.Filter
-	WithVector bool
+	K           int
+	Ef          int
+	Filter      *payload.Filter
+	WithVector  bool
 	WithPayload bool
+	SparseQuery *point.SparseVector
 }
 
 // SearchResult holds search results
@@ -675,6 +730,43 @@ func (c *Collection) SearchWithParams(query point.Vector, params *SearchParams) 
 		}
 
 		result.Points = append(result.Points, sp)
+	}
+
+	// --- PHASE 7 RRF FUSION ---
+	if params.SparseQuery != nil && c.sparseIdx != nil {
+		sparseVec := &sparse.Vector{Indices: params.SparseQuery.Indices, Values: params.SparseQuery.Values}
+		sparseMatches := c.sparseIdx.Search(sparseVec, params.K)
+		
+		var denseMatches []sparse.ScoredDoc
+		for _, dm := range result.Points {
+			nID, ok := c.getNodeID(dm.ID)
+			if ok {
+				denseMatches = append(denseMatches, sparse.ScoredDoc{DocID: nID, Score: dm.Score})
+			}
+		}
+
+		fusedDocs := sparse.FuseResults(denseMatches, sparseMatches, sparse.DefaultHybridConfig(), params.K)
+
+		var fused []ScoredPoint
+		for _, fd := range fusedDocs {
+			id := c.getPointID(fd.DocID)
+			p, err := c.index.Get(id)
+			if err != nil {
+				continue
+			}
+			sp := ScoredPoint{
+				ID:    id,
+				Score: fd.FinalScore,
+			}
+			if params.WithVector {
+				sp.Vector = p.Vector
+			}
+			if params.WithPayload {
+				sp.Payload = p.Payload
+			}
+			fused = append(fused, sp)
+		}
+		result.Points = fused
 	}
 
 	return result, nil

@@ -27,13 +27,19 @@ func safeIntToUint16(v int) (uint16, error) {
 	return uint16(v), nil
 }
 
-// Point represents a vector with associated metadata
 type Point struct {
-	ID      string                 `json:"id"`
-	Vector  Vector                 `json:"vector"`
+	ID           string                 `json:"id"`
+	Vector       Vector                 `json:"vector"`
 	Payload      map[string]interface{} `json:"payload,omitempty"`
 	NamedVectors map[string]Vector      `json:"named_vectors,omitempty"`
+	Sparse       *SparseVector          `json:"sparse,omitempty"`
 	Version      uint64                 `json:"-"` // Internal version for optimistic locking
+}
+
+// SparseVector is a sparse mapping of token integers to semantic weights
+type SparseVector struct {
+	Indices []uint32  `json:"indices"`
+	Values  []float32 `json:"values"`
 }
 
 // Vector is a dense floating-point vector
@@ -87,6 +93,14 @@ func (p *Point) Clone() *Point {
 			clone.NamedVectors[k] = newVec
 		}
 	}
+	if p.Sparse != nil {
+		clone.Sparse = &SparseVector{
+			Indices: make([]uint32, len(p.Sparse.Indices)),
+			Values:  make([]float32, len(p.Sparse.Values)),
+		}
+		copy(clone.Sparse.Indices, p.Sparse.Indices)
+		copy(clone.Sparse.Values, p.Sparse.Values)
+	}
 	return clone
 }
 
@@ -95,7 +109,7 @@ func (p *Point) Validate() error {
 	if p.ID == "" {
 		return ErrEmptyID
 	}
-	if len(p.Vector) == 0 && len(p.NamedVectors) == 0 {
+	if len(p.Vector) == 0 && len(p.NamedVectors) == 0 && p.Sparse == nil {
 		return ErrEmptyVector
 	}
 	for i, v := range p.Vector {
@@ -214,7 +228,32 @@ func (p *Point) Encode(w io.Writer) error {
 	}
 
 	// Write version
-	return binary.Write(w, binary.LittleEndian, p.Version)
+	if err := binary.Write(w, binary.LittleEndian, p.Version); err != nil {
+		return err
+	}
+
+	// Write SparseVector (appended safely after Version for protocol leniency)
+	hasSparse := p.Sparse != nil
+	if err := binary.Write(w, binary.LittleEndian, hasSparse); err != nil {
+		return err
+	}
+	if hasSparse {
+		sparseLen := uint32(len(p.Sparse.Indices))
+		if err := binary.Write(w, binary.LittleEndian, sparseLen); err != nil {
+			return err
+		}
+		for _, idx := range p.Sparse.Indices {
+			if err := binary.Write(w, binary.LittleEndian, idx); err != nil {
+				return err
+			}
+		}
+		for _, val := range p.Sparse.Values {
+			if err := binary.Write(w, binary.LittleEndian, val); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // Decode deserializes the point from binary format
@@ -300,7 +339,43 @@ func (p *Point) Decode(r io.Reader) error {
 		p.Version = 1
 		return nil
 	}
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Read SparseVector sequentially backwards
+	var hasSparse bool
+	err = binary.Read(r, binary.LittleEndian, &hasSparse)
+	if err == io.EOF {
+		return nil // Legacy points lack sparse blocks
+	}
+	if err != nil {
+		return err
+	}
+
+	if hasSparse {
+		var sparseLen uint32
+		if err := binary.Read(r, binary.LittleEndian, &sparseLen); err != nil {
+			return err
+		}
+		
+		p.Sparse = &SparseVector{
+			Indices: make([]uint32, sparseLen),
+			Values:  make([]float32, sparseLen),
+		}
+		for i := range p.Sparse.Indices {
+			if err := binary.Read(r, binary.LittleEndian, &p.Sparse.Indices[i]); err != nil {
+				return err
+			}
+		}
+		for i := range p.Sparse.Values {
+			if err := binary.Read(r, binary.LittleEndian, &p.Sparse.Values[i]); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 // ScoredPoint represents a point with a similarity/distance score

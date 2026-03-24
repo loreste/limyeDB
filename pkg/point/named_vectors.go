@@ -21,6 +21,7 @@ type PointV2 struct {
 	Vector        Vector                 `json:"vector,omitempty"`         // Default/unnamed vector (backwards compat)
 	Vectors       NamedVectors           `json:"vectors,omitempty"`        // Named vectors
 	Payload       map[string]interface{} `json:"payload,omitempty"`
+	Sparse        *SparseVector          `json:"sparse,omitempty"`         // Hybrid search mapping
 	Version       uint64                 `json:"-"`
 }
 
@@ -143,6 +144,15 @@ func (p *PointV2) Clone() *PointV2 {
 		}
 	}
 
+	if p.Sparse != nil {
+		clone.Sparse = &SparseVector{
+			Indices: make([]uint32, len(p.Sparse.Indices)),
+			Values:  make([]float32, len(p.Sparse.Values)),
+		}
+		copy(clone.Sparse.Indices, p.Sparse.Indices)
+		copy(clone.Sparse.Values, p.Sparse.Values)
+	}
+
 	return clone
 }
 
@@ -153,7 +163,7 @@ func (p *PointV2) Validate() error {
 	}
 
 	// Must have at least one vector
-	if len(p.Vector) == 0 && len(p.Vectors) == 0 {
+	if len(p.Vector) == 0 && len(p.Vectors) == 0 && p.Sparse == nil {
 		return ErrEmptyVector
 	}
 
@@ -216,6 +226,7 @@ func (p *PointV2) ToPoint() *Point {
 		ID:      p.ID,
 		Vector:  vec,
 		Payload: p.Payload,
+		Sparse:  p.Sparse,
 		Version: p.Version,
 	}
 }
@@ -226,6 +237,7 @@ func PointToV2(p *Point) *PointV2 {
 		ID:      p.ID,
 		Vector:  p.Vector,
 		Payload: p.Payload,
+		Sparse:  p.Sparse,
 		Version: p.Version,
 	}
 }

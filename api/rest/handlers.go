@@ -874,12 +874,12 @@ type UpsertPointsV2Request struct {
 	Points []PointV2Input `json:"points" binding:"required"`
 }
 
-// PointV2Input represents a point with named vectors
 type PointV2Input struct {
 	ID      string                 `json:"id" binding:"required"`
 	Vector  []float32              `json:"vector,omitempty"`
 	Vectors map[string][]float32   `json:"vectors,omitempty"`
 	Payload map[string]interface{} `json:"payload,omitempty"`
+	Sparse  *point.SparseVector    `json:"sparse,omitempty"`
 }
 
 func (s *Server) handleUpsertPointsV2(c *gin.Context) {
@@ -905,6 +905,7 @@ func (s *Server) handleUpsertPointsV2(c *gin.Context) {
 			ID:      pi.ID,
 			Vector:  pi.Vector,
 			Payload: pi.Payload,
+			Sparse:  pi.Sparse,
 		}
 
 		if len(pi.Vectors) > 0 {
@@ -927,15 +928,15 @@ func (s *Server) handleUpsertPointsV2(c *gin.Context) {
 	})
 }
 
-// SearchV2Request supports named vectors
 type SearchV2Request struct {
-	Vector      []float32              `json:"vector" binding:"required"`
-	VectorName  string                 `json:"vector_name,omitempty"`
-	Limit       int                    `json:"limit"`
-	Ef          int                    `json:"ef"`
-	Filter      map[string]interface{} `json:"filter,omitempty"`
-	WithVector  bool                   `json:"with_vector"`
-	WithPayload bool                   `json:"with_payload"`
+	Vector       []float32              `json:"vector" binding:"required"`
+	VectorName   string                 `json:"vector_name,omitempty"`
+	Limit        int                    `json:"limit"`
+	Ef           int                    `json:"ef"`
+	Filter       map[string]interface{} `json:"filter,omitempty"`
+	WithVector   bool                   `json:"with_vector"`
+	WithPayload  bool                   `json:"with_payload"`
+	SparseVector *point.SparseVector    `json:"sparse_vector,omitempty"`
 }
 
 func (s *Server) handleSearchV2(c *gin.Context) {
@@ -962,6 +963,7 @@ func (s *Server) handleSearchV2(c *gin.Context) {
 		Ef:          req.Ef,
 		WithVector:  req.WithVector,
 		WithPayload: req.WithPayload,
+		SparseQuery: req.SparseVector,
 	}
 
 	if req.Filter != nil {
