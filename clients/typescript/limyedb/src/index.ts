@@ -8,10 +8,16 @@ export interface CollectionConfig {
   metric?: string;
 }
 
+export interface SparseVector {
+  indices: number[];
+  values: number[];
+}
+
 export interface Point {
   id: string;
-  vector: VectorType;
+  vector?: VectorType;
   payload?: Record<string, any>;
+  sparse?: SparseVector;
 }
 
 export interface Match {
@@ -19,6 +25,7 @@ export interface Match {
   score: number;
   vector?: VectorType;
   payload?: Record<string, any>;
+  sparse?: SparseVector;
 }
 
 export interface ContextExample {
@@ -80,15 +87,16 @@ export class LimyeDBClient {
 
   async search(
     collectionName: string,
-    vector: VectorType,
+    vector?: VectorType,
     limit: number = 10,
-    filter?: Record<string, any>
+    filter?: Record<string, any>,
+    sparseQuery?: SparseVector
   ): Promise<Match[]> {
-    const response = await this.client.post(`/collections/${collectionName}/search`, {
-      vector,
-      limit,
-      filter,
-    });
+    const payload: any = { limit, filter };
+    if (vector) payload.vector = vector;
+    if (sparseQuery) payload.sparse_query = sparseQuery;
+
+    const response = await this.client.post(`/collections/${collectionName}/search`, payload);
     return response.data.result || response.data.points || [];
   }
 

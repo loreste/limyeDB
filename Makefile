@@ -98,7 +98,7 @@ coverage:
 
 proto:
 	@echo "Generating protobuf code..."
-	protoc --go_out=. --go-grpc_out=. $(PROTO_DIR)/*.proto
+	protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative $(PROTO_DIR)/*.proto
 
 fmt:
 	@echo "Formatting code..."

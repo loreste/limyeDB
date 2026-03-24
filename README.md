@@ -38,6 +38,9 @@ LimyeDB distinguishes itself by natively supporting **Hybrid Search**—combinin
 |---------|-------------|
 | **Hybrid Search via RRF** | Natively fuse dense semantic queries with sparse token frequencies (BM25) via Reciprocal Rank Fusion |
 | **High-Performance HNSW** | O(1) Zero-Allocation Graph-Native memory pools bypassing Go garbage collection for extreme retrieval speeds |
+| **Embedder Orchestrator** | Automated direct text-to-vector integration scaling seamlessly across OpenAI, Cohere, and local models natively |
+| **ColBERT MaxSim Engine** | Advanced Late-Interaction similarity algorithms evaluating precise dot-product MultiVector matrices directly |
+| **SQLite Payload Indexing**| Persistent embedded metadata structures mapping Document Nodes directly into disk-backed B-Trees securely |
 | **Distributed Clustering** | Native Raft consensus and SWIM gossip protocol for masterless high availability and global persistence |
 | **Multi-Tenancy & RBAC** | Strict granular isolation schemas featuring dynamic JSON Web Token (JWT) Authorization across REST and gRPC pipelines |
 | **Vector SQL Interface** | Powerful and familiar declarative SQL-like query interfaces explicitly controlling embedded semantic properties |
@@ -47,7 +50,7 @@ LimyeDB distinguishes itself by natively supporting **Hybrid Search**—combinin
 ### Technical Highlights
 
 - **Zero-Allocation HNSW Engine:** Eliminates GC pauses with raw memory-mapped (mmap) `[]byte` NVMe bypass mechanisms
-- **Advanced AST Payload Filtering:** Execute complex JSON constraints securely filtering embeddings prior to graph traversal
+- **Advanced AST Payload Filtering:** Execute complex JSON constraints securely backed natively by embedded SQLite B-Tree metadata mappings.
 - **Enterprise Security:** JWT Bearer tokens alongside mTLS verification protocols for deep cross-cluster defense
 - **Prometheus Metrics:** Native `/metrics` endpoint for monitoring
 - **OpenTelemetry Tracing:** Distributed tracing support
@@ -372,6 +375,47 @@ curl -X POST http://localhost:8080/collections/documents/search  \
     },
     "limit": 10,
     "with_payload": true
+  }'
+```
+
+#### Auto-Embedding Orchestration
+
+Automatically convert raw text contexts into dense semantic matrices natively on the server without client-side parsing pipelines via OpenAI or Cohere:
+
+```bash
+curl -X POST http://localhost:8080/collections/documents/auto-embed \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "provider": "openai",
+    "model": "text-embedding-3-small",
+    "api_key": "YOUR_OPENAI_KEY",
+    "source_fields": ["context", "title"],
+    "points": [
+      {
+        "id": "doc1",
+        "payload": {
+          "title": "Machine Learning",
+          "context": "AI algorithms scaling horizontally."
+        }
+      }
+    ]
+  }'
+```
+
+#### ColBERT Late-Interaction Search (MaxSim)
+
+Evaluate query chunks across entire sequences of documents precisely using native MaxSim Dot-Product evaluations directly inside the HNSW indexes seamlessly parsing `MultiVectors`:
+
+```bash
+curl -X POST http://localhost:8080/collections/documents/search \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "vector": [0.1, ...],
+    "multi_vector": [[0.1, 0.2], [0.3, 0.4]],
+    "vector_name": "colbert",
+    "limit": 10
   }'
 ```
 

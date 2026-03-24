@@ -579,6 +579,22 @@ func (h *HNSW) GetPointID(nodeID uint32) string {
 	return h.nodes[nodeID].ID
 }
 
+// IteratePoints applies a function to all points in the index (used for linear scanning)
+func (h *HNSW) IteratePoints(cb func(*point.Point) bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for _, n := range h.nodes {
+		if n != nil && !n.IsDeleted() {
+			p, err := h.Get(n.ID)
+			if err == nil && p != nil {
+				if !cb(p) {
+					break
+				}
+			}
+		}
+	}
+}
+
 // Iterate iterates over all non-deleted point IDs
 func (h *HNSW) Iterate(fn func(id string) error) error {
 	h.mu.RLock()

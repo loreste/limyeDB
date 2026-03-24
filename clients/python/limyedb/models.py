@@ -24,11 +24,18 @@ class CollectionConfig(BaseModel):
     write_consistency_factor: Optional[int] = Field(default=1, description="Write consistency")
 
 
+class SparseVector(BaseModel):
+    """Sparse vector representation mapping indices to weights."""
+    indices: List[int]
+    values: List[float]
+
+
 class Point(BaseModel):
     """Vector point with optional payload."""
     id: str
     vector: Optional[List[float]] = None
     named_vectors: Optional[Dict[str, List[float]]] = None
+    sparse: Optional[SparseVector] = None
     payload: Optional[Dict[str, Any]] = None
 
 
@@ -50,6 +57,7 @@ class Match(BaseModel):
     score: float
     vector: Optional[List[float]] = None
     named_vectors: Optional[Dict[str, List[float]]] = None
+    sparse: Optional[SparseVector] = None
     payload: Optional[Dict[str, Any]] = None
 
 
@@ -98,8 +106,8 @@ class DiscoverParams(BaseModel):
 
 class HybridSearchParams(BaseModel):
     """Hybrid search parameters."""
-    dense_vector: List[float]
-    sparse_query: str
+    dense_vector: Optional[List[float]] = None
+    sparse_query: Optional[SparseVector] = None
     limit: Optional[int] = 10
     filter: Optional[Dict[str, Any]] = None
     fusion_method: Optional[str] = "rrf"

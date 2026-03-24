@@ -275,6 +275,13 @@ func (s *LimyeDBService) Search(ctx context.Context, req *pb.SearchRequest) (*pb
 		WithPayload: req.WithPayload,
 	}
 
+	if req.SparseVector != nil {
+		params.SparseQuery = &point.SparseVector{
+			Indices: req.SparseVector.Indices,
+			Values:  req.SparseVector.Values,
+		}
+	}
+
 	// Convert gRPC filter to payload filter
 	if req.Filter != nil {
 		params.Filter = protoFilterToPayload(req.Filter)
@@ -565,7 +572,16 @@ func protoToPoint(p *pb.Point) *point.Point {
 		payload = protoPayloadToMap(p.Payload)
 	}
 
-	return point.NewPointWithID(p.Id, vector, payload)
+	pt := point.NewPointWithID(p.Id, vector, payload)
+	
+	if p.Sparse != nil {
+		pt.Sparse = &point.SparseVector{
+			Indices: p.Sparse.Indices,
+			Values:  p.Sparse.Values,
+		}
+	}
+
+	return pt
 }
 
 func pointToProto(p *point.Point, withVector, withPayload bool) *pb.Point {
@@ -577,6 +593,13 @@ func pointToProto(p *point.Point, withVector, withPayload bool) *pb.Point {
 
 	if withPayload {
 		proto.Payload = payloadToProto(p.Payload)
+	}
+
+	if p.Sparse != nil {
+		proto.Sparse = &pb.SparseVector{
+			Indices: p.Sparse.Indices,
+			Values:  p.Sparse.Values,
+		}
 	}
 
 	return proto

@@ -3,10 +3,10 @@ LimyeDB Python Client - Enhanced Edition
 """
 
 import requests
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from urllib.parse import urljoin
 
-from .models import Point, CollectionConfig, Match, DiscoverParams, HNSWConfig, Filter, SearchParams
+from .models import Point, CollectionConfig, Match, DiscoverParams, HNSWConfig, Filter, SearchParams, SparseVector
 
 
 class LimyeDBError(Exception):
@@ -319,8 +319,8 @@ class LimyeDBClient:
     def hybrid_search(
         self,
         collection_name: str,
-        dense_vector: List[float],
-        sparse_query: str,
+        dense_vector: Optional[List[float]] = None,
+        sparse_query: Optional[Union[Dict[str, Any], SparseVector]] = None,
         limit: int = 10,
         filter: Optional[Dict[str, Any]] = None,
         fusion_method: str = "rrf",
@@ -333,7 +333,7 @@ class LimyeDBClient:
         Args:
             collection_name: Collection to search
             dense_vector: Dense embedding vector
-            sparse_query: Text query for BM25 sparse search
+            sparse_query: Sparse representation with indices and values
             limit: Maximum results
             filter: Filter conditions
             fusion_method: Fusion method (rrf, linear)
@@ -343,9 +343,7 @@ class LimyeDBClient:
         Returns:
             List of Match objects
         """
-        payload = {
-            "dense_vector": dense_vector,
-            "sparse_query": sparse_query,
+        payload: Dict[str, Any] = {
             "limit": limit,
             "with_payload": with_payload,
             "fusion": {
@@ -353,6 +351,13 @@ class LimyeDBClient:
                 "k": fusion_k
             }
         }
+        if dense_vector is not None:
+            payload["dense_vector"] = dense_vector
+        if sparse_query is not None:
+            if isinstance(sparse_query, SparseVector):
+                payload["sparse_query"] = sparse_query.model_dump()
+            else:
+                payload["sparse_query"] = sparse_query
         if filter:
             payload["filter"] = filter
 

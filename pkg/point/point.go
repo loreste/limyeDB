@@ -33,6 +33,7 @@ type Point struct {
 	Payload      map[string]interface{} `json:"payload,omitempty"`
 	NamedVectors map[string]Vector      `json:"named_vectors,omitempty"`
 	Sparse       *SparseVector          `json:"sparse,omitempty"`
+	MultiVectors map[string][][]float32 `json:"multi_vectors,omitempty"`
 	Version      uint64                 `json:"-"` // Internal version for optimistic locking
 }
 

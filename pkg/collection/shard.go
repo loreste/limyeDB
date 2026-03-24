@@ -103,7 +103,7 @@ func NewShard(cfg *ShardConfig) (*Shard, error) {
 		State:        ShardStateInitializing,
 		IsPrimary:    true,
 		index:        index,
-		payloadIndex: payload.NewIndex(),
+		payloadIndex: payload.NewIndex(""),
 		config:       cfg.VectorConfig,
 		createdAt:    time.Now(),
 		updatedAt:    time.Now(),

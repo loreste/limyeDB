@@ -101,6 +101,9 @@ func (s *Server) setupRoutes() {
 	// Points V2 - Named vectors support
 	s.router.PUT("/collections/:name/points/v2", s.requirePermission("write"), s.handleUpsertPointsV2)
 
+	// Auto-Embedding V2 Pipeline
+	s.router.POST("/collections/:name/auto-embed", s.requirePermission("write"), s.handleAutoEmbed)
+
 	// Scroll/Pagination API
 	s.router.POST("/collections/:name/points/scroll", s.requirePermission("read"), s.handleScroll)
 

@@ -12,6 +12,7 @@ import (
 	"github.com/limyedb/limyedb/pkg/cluster"
 	"github.com/limyedb/limyedb/pkg/collection"
 	"github.com/limyedb/limyedb/pkg/config"
+	"github.com/limyedb/limyedb/pkg/embedder"
 	"github.com/limyedb/limyedb/pkg/index/payload"
 	"github.com/limyedb/limyedb/pkg/point"
 	"github.com/limyedb/limyedb/pkg/version"
@@ -1533,4 +1534,104 @@ func (s *Server) handleJoinCluster(c *gin.Context) {
 		"raft_addr": req.RaftAddr,
 	})
 }
+
+// Auto-Embed API
+
+type AutoEmbedRequest struct {
+	Provider     string         `json:"provider"`
+	Model        string         `json:"model"`
+	APIKey       string         `json:"api_key"`
+	SourceFields []string       `json:"source_fields"`
+	Points       []PointV2Input `json:"points"`
+}
+
+func (s *Server) handleAutoEmbed(c *gin.Context) {
+	if s.proxyToLeader(c) {
+		return
+	}
+
+	name := c.Param("name")
+	coll, err := s.collections.Get(name)
+	if err != nil {
+		respondError(c, http.StatusNotFound, fmt.Errorf("collection not found: %w", err))
+		return
+	}
+
+	var req AutoEmbedRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	e, err := embedder.New(embedder.Config{
+		Provider: req.Provider,
+		Model:    req.Model,
+		APIKey:   req.APIKey,
+	})
+	if err != nil {
+		respondError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	// Extract text strings
+	texts := make([]string, len(req.Points))
+	for i, p := range req.Points {
+		var combined string
+		for _, field := range req.SourceFields {
+			if val, ok := p.Payload[field]; ok {
+				if str, isStr := val.(string); isStr {
+					combined += str + " "
+				}
+			}
+		}
+		if combined == "" {
+			combined = "unknown context"
+		}
+		texts[i] = combined
+	}
+
+	// Batch remote inference
+	vectors, err := e.EmbedBatch(c.Request.Context(), texts)
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, fmt.Errorf("embedding failed: %w", err))
+		return
+	}
+
+	succeeded := 0
+	failed := 0
+
+	for i, pi := range req.Points {
+		p := &point.PointV2{
+			ID:      pi.ID,
+			Payload: pi.Payload,
+			Sparse:  pi.Sparse,
+		}
+
+		if len(pi.Vector) == 0 {
+			p.Vector = vectors[i]
+		} else {
+			p.Vector = pi.Vector
+		}
+
+		if len(pi.Vectors) > 0 {
+			p.Vectors = make(point.NamedVectors)
+			for vn, v := range pi.Vectors {
+				p.Vectors[vn] = v
+			}
+		}
+
+		if err := coll.InsertV2(p); err != nil {
+			failed++
+		} else {
+			succeeded++
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":   failed == 0,
+		"succeeded": succeeded,
+		"failed":    failed,
+	})
+}
+
 

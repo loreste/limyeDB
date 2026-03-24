@@ -22,6 +22,7 @@ type PointV2 struct {
 	Vectors       NamedVectors           `json:"vectors,omitempty"`        // Named vectors
 	Payload       map[string]interface{} `json:"payload,omitempty"`
 	Sparse        *SparseVector          `json:"sparse,omitempty"`         // Hybrid search mapping
+	MultiVectors  map[string][][]float32 `json:"multi_vectors,omitempty"`  // ColBERT matrices
 	Version       uint64                 `json:"-"`
 }
 

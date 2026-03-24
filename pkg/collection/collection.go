@@ -2,8 +2,10 @@ package collection
 
 import (
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -45,7 +47,7 @@ func New(cfg *config.CollectionConfig) (*Collection, error) {
 	c := &Collection{
 		config:       cfg,
 		indices:      make(map[string]*hnsw.HNSW),
-		payloadIndex: payload.NewIndex(),
+		payloadIndex: payload.NewIndex(filepath.Join("./data", cfg.Name, "payload.db")),
 		sparseIdx:    sparse.NewInvertedIndex(),
 		distCalcs:    make(map[string]distance.Calculator),
 		createdAt:    time.Now(),
@@ -330,10 +332,11 @@ func (c *Collection) InsertV2(p *point.PointV2) error {
 
 			// Create legacy point for HNSW index
 			legacyPoint := &point.Point{
-				ID:      p.ID,
-				Vector:  vec,
-				Payload: p.Payload,
-				Sparse:  p.Sparse,
+				ID:           p.ID,
+				Vector:       vec,
+				Payload:      p.Payload,
+				Sparse:       p.Sparse,
+				MultiVectors: p.MultiVectors,
 			}
 
 			if err := idx.Insert(legacyPoint); err != nil {
@@ -348,15 +351,14 @@ func (c *Collection) InsertV2(p *point.PointV2) error {
 		if len(p.Vector) > 0 {
 			if idx, ok := c.indices["default"]; ok {
 				legacyPoint := &point.Point{
-					ID:      p.ID,
-					Vector:  p.Vector,
-					Payload: p.Payload,
-					Sparse:  p.Sparse,
+					ID:           p.ID,
+					Vector:       p.Vector,
+					Payload:      p.Payload,
+					Sparse:       p.Sparse,
+					MultiVectors: p.MultiVectors,
 				}
-				if err := idx.Insert(legacyPoint); err != nil {
-					if err.Error() != "point with this ID already exists" {
-						return err
-					}
+				if err := idx.Insert(legacyPoint); err != nil && err.Error() != "point with this ID already exists" {
+					return err
 				}
 			}
 		}
@@ -422,6 +424,85 @@ type ScoredPointV2 struct {
 	Vectors    point.NamedVectors     `json:"vectors,omitempty"`
 	Payload    map[string]interface{} `json:"payload,omitempty"`
 	VectorName string                 `json:"vector_name,omitempty"`
+}
+
+// SearchColBERT performs a linear ColBERT late-interaction MaxSim search.
+// It computes the sum of maximum token similarities for the query matrix against all document matrices.
+func (c *Collection) SearchColBERT(query [][]float32, vectorName string, k int) (*SearchResultV2, error) {
+	start := time.Now()
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if vectorName == "" {
+		vectorName = "default"
+	}
+
+	var idx *hnsw.HNSW
+	if c.config.HasNamedVectors() {
+		var ok bool
+		idx, ok = c.indices[vectorName]
+		if !ok {
+			return nil, CollectionError("unknown vector name: " + vectorName)
+		}
+	} else {
+		idx = c.index
+	}
+
+	if idx == nil {
+		return nil, CollectionError("index not initialized")
+	}
+
+	var results []ScoredPointV2
+
+	// Linear scan directly through memory nodes sequentially bypassing graph
+	idx.IteratePoints(func(p *point.Point) bool {
+		docMatrix, exists := p.MultiVectors[vectorName]
+		if !exists || len(docMatrix) == 0 {
+			return true
+		}
+
+		var totalScore float32
+		for _, qToken := range query {
+			var maxScore float32 = -math.MaxFloat32
+			for _, dToken := range docMatrix {
+				// Dot product manually optimized
+				var score float32
+				for i := range qToken {
+					score += qToken[i] * dToken[i]
+				}
+				if score > maxScore {
+					maxScore = score
+				}
+			}
+			totalScore += maxScore
+		}
+
+		results = append(results, ScoredPointV2{
+			ID:         p.ID,
+			Score:      totalScore,
+			Vector:     p.Vector,
+			Vectors:    p.NamedVectors,
+			Payload:    p.Payload,
+			VectorName: vectorName,
+		})
+		
+		return true
+	})
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Score > results[j].Score
+	})
+
+	if len(results) > k {
+		results = results[:k]
+	}
+
+	return &SearchResultV2{
+		Points:     results,
+		VectorName: vectorName,
+		TookMs:     time.Since(start).Milliseconds(),
+	}, nil
 }
 
 // SearchV2WithParams performs search with custom parameters for named vectors
