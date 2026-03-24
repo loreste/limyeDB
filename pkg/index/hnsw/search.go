@@ -77,7 +77,8 @@ func (h *HNSW) SearchWithFilter(query point.Vector, params *SearchParams) ([]Can
 	if h.quantizer != nil {
 		h.mu.RLock()
 		for i := range candidates {
-			exactDist := h.distCalc.Distance(query, h.nodes[candidates[i].ID].Vector)
+			// Rescore with exact distance using virtual mapping natively
+			exactDist := h.distCalc.Distance(query, h.getVector(candidates[i].ID))
 			candidates[i].Distance = exactDist
 		}
 		h.mu.RUnlock()
@@ -116,7 +117,7 @@ func (h *HNSW) searchLayerWithFilter(query point.Vector, entryID uint32, ef int,
 	if h.quantizer != nil && h.nodes[entryID].Quantized != nil {
 		entryDist = h.quantizer.Distance(query, h.nodes[entryID].Quantized)
 	} else {
-		entryDist = h.distCalc.Distance(query, h.nodes[entryID].Vector)
+		entryDist = h.distCalc.Distance(query, h.getVector(entryID))
 	}
 
 	// Check if entry passes filter
@@ -151,7 +152,7 @@ func (h *HNSW) searchLayerWithFilter(query point.Vector, entryID uint32, ef int,
 			if h.quantizer != nil && neighborNode.Quantized != nil {
 				dist = h.quantizer.Distance(query, neighborNode.Quantized)
 			} else {
-				dist = h.distCalc.Distance(query, neighborNode.Vector)
+				dist = h.distCalc.Distance(query, h.getVector(neighborID))
 			}
 
 			// Always add to candidates for exploration
@@ -257,10 +258,11 @@ func (h *HNSW) discoverLayer0(entryID uint32, ef int, params *DiscoverParams) []
 	candidates := &CandidateHeap{}
 	heap.Init(candidates)
 	results := &MaxCandidateHeap{}
+	// Evaluate entry point dynamically natively
 	heap.Init(results)
 
 	entryNode := h.nodes[entryID]
-	entryDist := h.contextDistance(entryNode.Vector, params.Target, params.Context)
+	entryDist := h.contextDistance(h.getVector(entryID), params.Target, params.Context)
 
 	passesFilter := params.Filter == nil || params.Filter(entryNode.ID, entryNode.GetPayload())
 
@@ -287,7 +289,7 @@ func (h *HNSW) discoverLayer0(entryID uint32, ef int, params *DiscoverParams) []
 				continue
 			}
 
-			dist := h.contextDistance(neighborNode.Vector, params.Target, params.Context)
+			dist := h.contextDistance(h.getVector(neighborID), params.Target, params.Context)
 
 			if results.Len() < searchEf || dist < (*results)[0].Distance {
 				heap.Push(candidates, Candidate{ID: neighborID, Distance: dist})
@@ -359,7 +361,8 @@ func (h *HNSW) rangeSearchLayer0(query point.Vector, entryID uint32, radius floa
 			continue
 		}
 
-		dist := h.distCalc.Distance(query, node.Vector)
+		// Process dynamically mapped bounds natively 
+		dist := h.distCalc.Distance(query, h.getVector(currID))
 		if dist <= radius {
 			results = append(results, Candidate{ID: currID, Distance: dist})
 		}

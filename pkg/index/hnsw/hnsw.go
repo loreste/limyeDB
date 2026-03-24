@@ -71,6 +71,7 @@ type HNSW struct {
 
 	quantizer     quantization.Quantizer
 	graphMmap     *mmap.GraphMmap // On-disk graph pager
+	vectorMmap    *mmap.Storage   // On-disk vectors pager
 }
 
 // Config holds HNSW configuration
@@ -83,6 +84,7 @@ type Config struct {
 	Dimension      int
 	Quantizer      quantization.Quantizer
 	GraphMmap      *mmap.GraphMmap
+	VectorMmap     *mmap.Storage
 }
 
 // DefaultConfig returns default HNSW configuration
@@ -120,6 +122,7 @@ func New(cfg *Config) (*HNSW, error) {
 		distCalc:       distance.New(cfg.Metric),
 		quantizer:      cfg.Quantizer,
 		graphMmap:      cfg.GraphMmap,
+		vectorMmap:     cfg.VectorMmap,
 		rng:            rand.New(rand.NewSource(secureRandomSeed())), // #nosec G404 - uses crypto seed, math/rand is fine for HNSW
 		visitedPool:    pool.NewVisitedListPool(cfg.MaxElements),
 		candidatePool:  pool.NewCandidatePool(1000),
@@ -149,8 +152,20 @@ func (h *HNSW) Insert(p *point.Point) error {
 	level := h.randomLevel()
 
 	// Create new node
+	var offset int64
+	var vec point.Vector = p.Vector
+
+	if h.vectorMmap != nil {
+		offset, _ = h.vectorMmap.Allocate()
+		_ = h.vectorMmap.WriteVector(offset, p.Vector)
+		vec = nil // Free RAM mapping
+	}
+
 	useMmap := h.graphMmap != nil
-	node := NewNode(p.ID, p.Vector, level, h.M, useMmap)
+	node := NewNode(p.ID, vec, level, h.M, useMmap)
+	node.VectorOffset = offset
+
+	// Pre-compute quantized vector if enabled
 	if h.quantizer != nil {
 		if qData, err := h.quantizer.Encode(p.Vector); err == nil {
 			node.Quantized = qData
@@ -230,7 +245,7 @@ func (h *HNSW) greedySearchLayer(query point.Vector, entryID uint32, layer int) 
 	if h.quantizer != nil && h.nodes[currentID].Quantized != nil {
 		currentDist = h.quantizer.Distance(query, h.nodes[currentID].Quantized)
 	} else {
-		currentDist = h.distCalc.Distance(query, h.nodes[currentID].Vector)
+		currentDist = h.distCalc.Distance(query, h.getVector(currentID))
 	}
 
 	for {
@@ -246,7 +261,7 @@ func (h *HNSW) greedySearchLayer(query point.Vector, entryID uint32, layer int) 
 			if h.quantizer != nil && h.nodes[neighborID].Quantized != nil {
 				dist = h.quantizer.Distance(query, h.nodes[neighborID].Quantized)
 			} else {
-				dist = h.distCalc.Distance(query, h.nodes[neighborID].Vector)
+				dist = h.distCalc.Distance(query, h.getVector(neighborID))
 			}
 			
 			if dist < currentDist {
@@ -284,7 +299,7 @@ func (h *HNSW) searchLayer(query point.Vector, entryID uint32, ef int, layer int
 	if h.quantizer != nil && h.nodes[entryID].Quantized != nil {
 		entryDist = h.quantizer.Distance(query, h.nodes[entryID].Quantized)
 	} else {
-		entryDist = h.distCalc.Distance(query, h.nodes[entryID].Vector)
+		entryDist = h.distCalc.Distance(query, h.getVector(entryID))
 	}
 
 	heap.Push(candidates, Candidate{ID: entryID, Distance: entryDist})
@@ -314,7 +329,7 @@ func (h *HNSW) searchLayer(query point.Vector, entryID uint32, ef int, layer int
 			if h.quantizer != nil && h.nodes[neighborID].Quantized != nil {
 				dist = h.quantizer.Distance(query, h.nodes[neighborID].Quantized)
 			} else {
-				dist = h.distCalc.Distance(query, h.nodes[neighborID].Vector)
+				dist = h.distCalc.Distance(query, h.getVector(neighborID))
 			}
 
 			// Add to results if better than worst or we don't have enough
@@ -408,13 +423,14 @@ func (h *HNSW) addConnection(fromID, toID uint32, layer, maxConn int) {
 	}
 
 	// Need to prune: find worst connection and replace if new is better
-	query := h.nodes[toID].Vector
-	newDist := h.distCalc.Distance(h.nodes[fromID].Vector, query)
+	// Simple optimization: select closest nodes
+	query := h.getVector(toID)
+	newDist := h.distCalc.Distance(h.getVector(fromID), query)
 
 	worstIdx := -1
 	worstDist := newDist
 	for i, connID := range conns {
-		dist := h.distCalc.Distance(h.nodes[fromID].Vector, h.nodes[connID].Vector)
+		dist := h.distCalc.Distance(h.getVector(fromID), h.getVector(connID))
 		if dist > worstDist {
 			worstDist = dist
 			worstIdx = i
@@ -471,9 +487,9 @@ func (h *HNSW) SearchWithEf(query point.Vector, k int, ef int) ([]Candidate, err
 
 	// Stage 2: Rescoring for Quantized precision
 	if h.quantizer != nil {
-		h.mu.RLock() // Lock for node.Vector retrieval
+		h.mu.RLock() // Lock for node retrieval
 		for i := range candidates {
-			exactDist := h.distCalc.Distance(query, h.nodes[candidates[i].ID].Vector)
+			exactDist := h.distCalc.Distance(query, h.getVector(candidates[i].ID))
 			candidates[i].Distance = exactDist
 		}
 		h.mu.RUnlock()
@@ -525,7 +541,7 @@ func (h *HNSW) Get(id string) (*point.Point, error) {
 
 	return &point.Point{
 		ID:      node.ID,
-		Vector:  node.Vector,
+		Vector:  h.getVector(nodeID),
 		Payload: node.GetPayload(),
 	}, nil
 }
@@ -585,17 +601,33 @@ func (h *HNSW) GetAllPoints() []*point.Point {
 	defer h.mu.RUnlock()
 
 	points := make([]*point.Point, 0, len(h.nodes))
-	for _, node := range h.nodes {
+	for i, node := range h.nodes {
 		if node.IsDeleted() {
 			continue
 		}
 		points = append(points, &point.Point{
 			ID:      node.ID,
-			Vector:  node.Vector,
+			Vector:  h.getVector(uint32(i)),
 			Payload: node.GetPayload(),
 		})
 	}
 	return points
+}
+
+// getVector extracts the node vector from either RAM or Mmap Storage dynamically 
+func (h *HNSW) getVector(id uint32) point.Vector {
+	node := h.nodes[id]
+	if node.Vector != nil {
+		return node.Vector
+	}
+	if h.vectorMmap != nil {
+		// Reads from the dynamic OS virtual page securely mapped over RAM
+		vec, err := h.vectorMmap.ReadVector(node.VectorOffset)
+		if err == nil {
+			return vec
+		}
+	}
+	return nil
 }
 
 // Errors

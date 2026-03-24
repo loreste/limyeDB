@@ -95,7 +95,7 @@ class LimyeDBContext(VectorStore):
             payload = match.payload or {}
             content = payload.pop("page_content", "")
             doc = Document(page_content=content, metadata=payload)
-            results.append((doc, match.distance))
+            results.append((doc, match.score))
             
         return results
 

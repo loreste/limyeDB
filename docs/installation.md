@@ -25,8 +25,8 @@ If you require custom forks or architecture optimizations (e.g., Apple Silicon M
 git clone https://github.com/loreste/limyeDB.git
 cd limyeDB
 
-# Build the generic CLI
-go build -o limyedb ./cmd/limyedb
+# Build the generic CLI with native version injection
+go build -ldflags="-X 'github.com/limyedb/limyedb/pkg/version.Version=v0.2.0' -X 'github.com/limyedb/limyedb/pkg/version.Commit=$(git rev-parse HEAD)' -X 'github.com/limyedb/limyedb/pkg/version.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)'" -o limyedb ./cmd/limyedb
 ./limyedb --port 8080 --metrics --grpc-port 6334
 ```
 
@@ -46,12 +46,14 @@ resources:
 
 *Note: LimyeDB nodes automatically discover each other in K8s using our built-in Consul/K8s DNS resolver on port 7946.*
 
-## 4. Production Security (API & TLS)
+## 4. Production Security (API, JWT & TLS)
 
-You can secure the instance instantly using runtime flags:
+LimyeDB Phase 2 introduced Granular RBAC. You can secure the instance instantly using runtime flags and JSON Web Tokens:
 ```bash
 ./limyedb \
-    --api-key="super_secret_token" \
+    --auth-token="<GLOBAL_ADMIN_JWT_OR_STATIC_SECRET>" \
     --tls-cert="/etc/ssl/limyedb.crt" \
     --tls-key="/etc/ssl/limyedb.key"
 ```
+
+*Note: For multi-tenant clusters, requests must pass an `Authorization: Bearer <TOKEN>` header where the JWT contains a `limyedb_permissions` claim mapping strings like `READ_ONLY` or `COLLECTION_ADMIN`.*

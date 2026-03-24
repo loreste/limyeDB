@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"time"
+
+	"github.com/limyedb/limyedb/pkg/quantization"
 )
 
 // Config holds the main configuration for LimyeDB
@@ -123,10 +125,11 @@ func (c *Config) Save(path string) error {
 
 // VectorConfig holds configuration for a single vector type
 type VectorConfig struct {
-	Dimension int        `json:"dimension"`
-	Metric    MetricType `json:"metric"`
-	HNSW      HNSWConfig `json:"hnsw"`
-	OnDisk    bool       `json:"on_disk"`
+	Dimension    int                  `json:"dimension"`
+	Metric       MetricType           `json:"metric"`
+	HNSW         HNSWConfig           `json:"hnsw"`
+	OnDisk       bool                 `json:"on_disk"`
+	Quantization *quantization.Config `json:"quantization,omitempty"`
 }
 
 // CollectionConfig holds per-collection configuration
@@ -134,9 +137,10 @@ type CollectionConfig struct {
 	Name           string       `json:"name"`
 	Dimension      int          `json:"dimension"`                  // Default vector dimension (backwards compat)
 	Metric         MetricType   `json:"metric"`                     // Default vector metric (backwards compat)
-	HNSW           HNSWConfig   `json:"hnsw"`                       // Default HNSW config (backwards compat)
-	OnDisk         bool         `json:"on_disk"`
-	PayloadSchema  interface{}  `json:"payload_schema,omitempty"`
+	HNSW           HNSWConfig           `json:"hnsw"`                       // Default HNSW config (backwards compat)
+	OnDisk         bool                 `json:"on_disk"`
+	PayloadSchema  interface{}          `json:"payload_schema,omitempty"`
+	Quantization   *quantization.Config `json:"quantization,omitempty"`
 
 	// Named vectors support - each key is a vector name with its own config
 	Vectors        map[string]VectorConfig `json:"vectors,omitempty"`

@@ -2,8 +2,6 @@ package point
 
 import (
 	"testing"
-
-	"github.com/limyedb/limyedb/pkg/config"
 )
 
 func TestMultiVector(t *testing.T) {
@@ -141,12 +139,12 @@ func TestMultiVectorConfig(t *testing.T) {
 	cfg.AddVector(VectorConfig{
 		Name:      "dense",
 		Dimension: 128,
-		Metric:    config.MetricCosine,
+		Metric:    "cosine",
 	})
 	cfg.AddVector(VectorConfig{
 		Name:      "sparse",
 		Dimension: 64,
-		Metric:    config.MetricDotProduct,
+		Metric:    "dot",
 	})
 	cfg.DefaultVector = "dense"
 

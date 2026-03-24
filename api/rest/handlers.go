@@ -14,6 +14,7 @@ import (
 	"github.com/limyedb/limyedb/pkg/config"
 	"github.com/limyedb/limyedb/pkg/index/payload"
 	"github.com/limyedb/limyedb/pkg/point"
+	"github.com/limyedb/limyedb/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -23,7 +24,7 @@ import (
 func (s *Server) handleHealth(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "healthy",
-		"version": "0.1.0",
+		"version": version.Version,
 	})
 }
 
@@ -88,6 +89,11 @@ func (s *Server) handleCreateCollection(c *gin.Context) {
 		return
 	}
 
+	if !s.checkPermission(c, req.Name, "write") {
+		respondError(c, http.StatusForbidden, errors.New("insufficient permissions to create collection"))
+		return
+	}
+
 	if req.Metric == "" {
 		req.Metric = config.MetricCosine
 	}
@@ -146,8 +152,16 @@ func (s *Server) handleCreateCollection(c *gin.Context) {
 
 func (s *Server) handleListCollections(c *gin.Context) {
 	infos := s.collections.ListInfo()
+	
+	filtered := make([]*collection.Info, 0, len(infos))
+	for _, info := range infos {
+		if s.checkPermission(c, info.Name, "read") {
+			filtered = append(filtered, info)
+		}
+	}
+	
 	c.JSON(http.StatusOK, gin.H{
-		"collections": infos,
+		"collections": filtered,
 	})
 }
 
@@ -422,7 +436,7 @@ func (s *Server) handleSearch(c *gin.Context) {
 
 // parseFilter recursively converts a nested map to a payload.Filter AST
 func parseFilter(m map[string]interface{}) *payload.Filter {
-	if m == nil || len(m) == 0 {
+	if len(m) == 0 {
 		return nil
 	}
 
@@ -796,6 +810,11 @@ func (s *Server) handleCreateCollectionV2(c *gin.Context) {
 	var req CreateCollectionV2Request
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respondError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	if !s.checkPermission(c, req.Name, "write") {
+		respondError(c, http.StatusForbidden, errors.New("insufficient permissions to create collection"))
 		return
 	}
 

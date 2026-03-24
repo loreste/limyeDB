@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/limyedb/limyedb/pkg/version"
 )
 
 var (
@@ -55,6 +57,8 @@ func main() {
 		err = cmdBackup(client, args)
 	case "restore":
 		err = cmdRestore(client, args)
+	case "version":
+		err = cmdVersion()
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", cmd)
 		printUsage()
@@ -87,6 +91,7 @@ Commands:
   health                       Check server health
   backup <output>              Create a backup
   restore <input>              Restore from backup
+  version                      Print CLI version
 
 Examples:
   limyedb-cli import documents data.json
@@ -398,5 +403,10 @@ func cmdRestore(client *Client, args []string) error {
 	}
 
 	fmt.Printf("Snapshot '%s' restored successfully\n", snapshotID)
+	return nil
+}
+
+func cmdVersion() error {
+	fmt.Printf("LimyeDB CLI version %s\n", version.String())
 	return nil
 }

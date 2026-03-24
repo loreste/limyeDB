@@ -239,6 +239,7 @@ message SearchRequest {
   bool with_payload = 7;
   int32 ef = 8;
   float score_threshold = 9;
+  string vector_name = 10; // Targets specific Multi-Modal sub-graphs
 }
 
 message SearchResponse {
@@ -253,6 +254,7 @@ message SearchBatchRequest {
   Filter filter = 4;
   bool with_vector = 5;
   bool with_payload = 6;
+  string vector_name = 7;
 }
 
 message SearchBatchResponse {

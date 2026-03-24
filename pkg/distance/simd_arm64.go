@@ -1,4 +1,4 @@
-//go:build amd64
+//go:build arm64
 
 // Package distance provides SIMD-optimized distance calculations.
 package distance
@@ -20,7 +20,7 @@ func CosineDistanceSIMD(a, b []float32) float32 {
 
 	// Use SIMD for vectors >= 8 elements
 	if hasSIMD && len(a) >= 8 {
-		return cosineDistanceAVX(a, b)
+		return cosineDistanceNEON(a, b)
 	}
 
 	return cosineDistanceScalar(a, b)
@@ -33,7 +33,7 @@ func EuclideanDistanceSIMD(a, b []float32) float32 {
 	}
 
 	if hasSIMD && len(a) >= 8 {
-		return euclideanDistanceAVX(a, b)
+		return euclideanDistanceNEON(a, b)
 	}
 
 	return euclideanDistanceScalar(a, b)
@@ -46,20 +46,20 @@ func DotProductSIMD(a, b []float32) float32 {
 	}
 
 	if hasSIMD && len(a) >= 8 {
-		return dotProductAVX(a, b)
+		return dotProductNEON(a, b)
 	}
 
 	return dotProductScalar(a, b)
 }
 
 //go:noescape
-func cosineDistanceAVX(a, b []float32) float32
+func cosineDistanceNEON(a, b []float32) float32
 
 //go:noescape
-func euclideanDistanceAVX(a, b []float32) float32
+func euclideanDistanceNEON(a, b []float32) float32
 
 //go:noescape
-func dotProductAVX(a, b []float32) float32
+func dotProductNEON(a, b []float32) float32
 
 // Scalar fallback implementations
 

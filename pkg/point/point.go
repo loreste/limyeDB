@@ -31,8 +31,9 @@ func safeIntToUint16(v int) (uint16, error) {
 type Point struct {
 	ID      string                 `json:"id"`
 	Vector  Vector                 `json:"vector"`
-	Payload map[string]interface{} `json:"payload,omitempty"`
-	Version uint64                 `json:"-"` // Internal version for optimistic locking
+	Payload      map[string]interface{} `json:"payload,omitempty"`
+	NamedVectors map[string]Vector      `json:"named_vectors,omitempty"`
+	Version      uint64                 `json:"-"` // Internal version for optimistic locking
 }
 
 // Vector is a dense floating-point vector
@@ -78,6 +79,14 @@ func (p *Point) Clone() *Point {
 			clone.Payload[k] = v
 		}
 	}
+	if p.NamedVectors != nil {
+		clone.NamedVectors = make(map[string]Vector)
+		for k, v := range p.NamedVectors {
+			newVec := make(Vector, len(v))
+			copy(newVec, v)
+			clone.NamedVectors[k] = newVec
+		}
+	}
 	return clone
 }
 
@@ -86,12 +95,19 @@ func (p *Point) Validate() error {
 	if p.ID == "" {
 		return ErrEmptyID
 	}
-	if len(p.Vector) == 0 {
+	if len(p.Vector) == 0 && len(p.NamedVectors) == 0 {
 		return ErrEmptyVector
 	}
 	for i, v := range p.Vector {
 		if math.IsNaN(float64(v)) || math.IsInf(float64(v), 0) {
 			return &InvalidVectorError{Index: i, Value: v}
+		}
+	}
+	for _, vec := range p.NamedVectors {
+		for i, v := range vec {
+			if math.IsNaN(float64(v)) || math.IsInf(float64(v), 0) {
+				return &InvalidVectorError{Index: i, Value: v}
+			}
 		}
 	}
 	return nil
@@ -171,6 +187,32 @@ func (p *Point) Encode(w io.Writer) error {
 		return err
 	}
 
+	// Write NamedVectors
+	numNamed := uint16(len(p.NamedVectors))
+	if err := binary.Write(w, binary.LittleEndian, numNamed); err != nil {
+		return err
+	}
+	for name, vec := range p.NamedVectors {
+		nameBytes := []byte(name)
+		nameLen := uint16(len(nameBytes))
+		if err := binary.Write(w, binary.LittleEndian, nameLen); err != nil {
+			return err
+		}
+		if _, err := w.Write(nameBytes); err != nil {
+			return err
+		}
+
+		vLen := uint32(len(vec))
+		if err := binary.Write(w, binary.LittleEndian, vLen); err != nil {
+			return err
+		}
+		for _, v := range vec {
+			if err := binary.Write(w, binary.LittleEndian, v); err != nil {
+				return err
+			}
+		}
+	}
+
 	// Write version
 	return binary.Write(w, binary.LittleEndian, p.Version)
 }
@@ -215,8 +257,50 @@ func (p *Point) Decode(r io.Reader) error {
 		}
 	}
 
+	// Read NamedVectors
+	var numNamed uint16
+	if err := binary.Read(r, binary.LittleEndian, &numNamed); err != nil {
+		if err == io.EOF {
+			// Backwards compatibility for points without NamedVectors (legacy)
+			p.Version = 1
+			return nil
+		}
+		return err
+	}
+	if numNamed > 0 {
+		p.NamedVectors = make(map[string]Vector)
+		for i := uint16(0); i < numNamed; i++ {
+			var nLen uint16
+			if err := binary.Read(r, binary.LittleEndian, &nLen); err != nil {
+				return err
+			}
+			nBytes := make([]byte, nLen)
+			if _, err := io.ReadFull(r, nBytes); err != nil {
+				return err
+			}
+			name := string(nBytes)
+
+			var vLen uint32
+			if err := binary.Read(r, binary.LittleEndian, &vLen); err != nil {
+				return err
+			}
+			vec := make(Vector, vLen)
+			for j := range vec {
+				if err := binary.Read(r, binary.LittleEndian, &vec[j]); err != nil {
+					return err
+				}
+			}
+			p.NamedVectors[name] = vec
+		}
+	}
+
 	// Read version
-	return binary.Read(r, binary.LittleEndian, &p.Version)
+	err := binary.Read(r, binary.LittleEndian, &p.Version)
+	if err == io.EOF {
+		p.Version = 1
+		return nil
+	}
+	return err
 }
 
 // ScoredPoint represents a point with a similarity/distance score

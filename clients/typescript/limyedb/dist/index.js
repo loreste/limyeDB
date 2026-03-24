@@ -7,13 +7,17 @@ exports.LimyeDBClient = void 0;
 const axios_1 = __importDefault(require("axios"));
 class LimyeDBClient {
     client;
-    constructor(host = 'http://localhost:8080') {
+    constructor(host = 'http://localhost:8080', authToken) {
+        const headers = {
+            'Content-Type': 'application/json',
+        };
+        if (authToken) {
+            headers['Authorization'] = `Bearer ${authToken}`;
+        }
         this.client = axios_1.default.create({
             baseURL: host,
             timeout: 30000,
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers,
         });
     }
     async createCollection(config) {

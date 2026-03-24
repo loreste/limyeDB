@@ -14,6 +14,7 @@ import (
 	"github.com/limyedb/limyedb/pkg/index/hnsw"
 	"github.com/limyedb/limyedb/pkg/index/payload"
 	"github.com/limyedb/limyedb/pkg/point"
+	"github.com/limyedb/limyedb/pkg/storage/mmap"
 )
 
 // ShardState represents the state of a shard
@@ -76,6 +77,19 @@ func NewShard(cfg *ShardConfig) (*Shard, error) {
 	}
 	if hnswCfg.MaxElements == 0 {
 		hnswCfg.MaxElements = 100000
+	}
+
+	if cfg.VectorConfig.OnDisk {
+		os.MkdirAll(cfg.DataDir, 0755)
+		mmapCfg := mmap.DefaultConfig()
+		mmapCfg.Path = filepath.Join(cfg.DataDir, "vectors.mmap")
+		mmapCfg.Dimension = cfg.VectorConfig.Dimension
+		
+		store, err := mmap.Open(mmapCfg)
+		if err != nil {
+			return nil, err
+		}
+		hnswCfg.VectorMmap = store
 	}
 
 	index, err := hnsw.New(hnswCfg)

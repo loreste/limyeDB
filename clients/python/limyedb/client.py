@@ -43,6 +43,7 @@ class LimyeDBClient:
     def __init__(
         self,
         host: str = "http://localhost:8080",
+        auth_token: Optional[str] = None,
         api_key: Optional[str] = None,
         timeout: int = 30
     ):
@@ -51,16 +52,19 @@ class LimyeDBClient:
 
         Args:
             host: LimyeDB server URL
-            api_key: API key for authentication (optional)
+            auth_token: JWT Authorization token
+            api_key: Legacy API key for authentication (optional)
             timeout: Request timeout in seconds
         """
         self.host = host.rstrip('/')
+        self.auth_token = auth_token
         self.api_key = api_key
         self.timeout = timeout
         self.session = requests.Session()
 
-        if api_key:
-            self.session.headers["Authorization"] = f"Bearer {api_key}"
+        token = auth_token or api_key
+        if token:
+            self.session.headers["Authorization"] = f"Bearer {token}"
         self.session.headers["Content-Type"] = "application/json"
 
     def _request(self, method: str, path: str, json: dict = None) -> dict:
@@ -228,7 +232,8 @@ class LimyeDBClient:
     def search(
         self,
         collection_name: str,
-        vector: List[float],
+        vector: Optional[List[float]] = None,
+        query_name: Optional[str] = None,
         limit: int = 10,
         filter: Optional[Dict[str, Any]] = None,
         ef: int = 100,
@@ -242,6 +247,7 @@ class LimyeDBClient:
         Args:
             collection_name: Collection to search
             vector: Query vector
+            query_name: Specific named_vector matrix space
             limit: Maximum number of results
             filter: Filter conditions
             ef: HNSW ef_search parameter
@@ -252,13 +258,16 @@ class LimyeDBClient:
         Returns:
             List of Match objects with id, score, payload, vector
         """
-        payload = {
-            "vector": vector,
+        payload: Dict[str, Any] = {
             "limit": limit,
             "ef": ef,
             "with_payload": with_payload,
             "with_vector": with_vector
         }
+        if vector:
+            payload["vector"] = vector
+        if query_name:
+            payload["query_name"] = query_name
         if filter:
             payload["filter"] = filter
         if score_threshold is not None:
@@ -290,7 +299,7 @@ class LimyeDBClient:
         """
         searches = []
         for vec in vectors:
-            search = {
+            search: Dict[str, Any] = {
                 "vector": vec,
                 "limit": limit,
                 "with_payload": with_payload
@@ -387,7 +396,7 @@ class LimyeDBClient:
         Returns:
             Dict with 'points' and 'next_offset'
         """
-        payload = {
+        payload: Dict[str, Any] = {
             "limit": limit,
             "with_payload": with_payload,
             "with_vector": with_vector

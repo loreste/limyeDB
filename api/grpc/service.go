@@ -5,6 +5,7 @@ import (
 	"io"
 	"math"
 
+	"github.com/limyedb/limyedb/pkg/auth"
 	"github.com/limyedb/limyedb/pkg/collection"
 	"github.com/limyedb/limyedb/pkg/config"
 	"github.com/limyedb/limyedb/pkg/index/payload"
@@ -33,6 +34,27 @@ type LimyeDBService struct {
 	pb.UnimplementedLimyeDBServer
 }
 
+// checkPermission verifies if the current request context has adequate JWT roles.
+func checkPermission(ctx context.Context, collection string, action string) bool {
+	claimsRaw := ctx.Value("token_claims")
+	if claimsRaw == nil {
+		// No auth token configured / passed successfully (meaning auth is disabled)
+		return true 
+	}
+	
+	claims, ok := claimsRaw.(*auth.TokenClaims)
+	if !ok {
+		return false
+	}
+	
+	switch action {
+	case "read": return claims.CanRead(collection)
+	case "write": return claims.CanWrite(collection)
+	case "admin": return claims.CanAdmin(collection)
+	case "global_admin": return claims.Permissions.GlobalAdmin
+	}
+	return false
+}
 
 // NewLimyeDBService creates a new LimyeDB service
 func NewLimyeDBService(collections *collection.Manager, snapshots *snapshot.Manager) *LimyeDBService {
@@ -45,6 +67,10 @@ func NewLimyeDBService(collections *collection.Manager, snapshots *snapshot.Mana
 // Collection operations
 
 func (s *LimyeDBService) CreateCollection(ctx context.Context, req *pb.CreateCollectionRequest) (*pb.CreateCollectionResponse, error) {
+	if !checkPermission(ctx, req.Config.Name, "write") {
+		return nil, status.Errorf(codes.PermissionDenied, "insufficient permissions to create collection")
+	}
+
 	cfg := &config.CollectionConfig{
 		Name:      req.Config.Name,
 		Dimension: int(req.Config.Dimension),
@@ -72,6 +98,10 @@ func (s *LimyeDBService) CreateCollection(ctx context.Context, req *pb.CreateCol
 }
 
 func (s *LimyeDBService) GetCollection(ctx context.Context, req *pb.GetCollectionRequest) (*pb.GetCollectionResponse, error) {
+	if !checkPermission(ctx, req.Name, "read") {
+		return nil, status.Errorf(codes.PermissionDenied, "insufficient permissions to access collection")
+	}
+
 	coll, err := s.collections.Get(req.Name)
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "collection not found: %v", err)
@@ -84,9 +114,11 @@ func (s *LimyeDBService) GetCollection(ctx context.Context, req *pb.GetCollectio
 
 func (s *LimyeDBService) ListCollections(ctx context.Context, req *pb.ListCollectionsRequest) (*pb.ListCollectionsResponse, error) {
 	infos := s.collections.ListInfo()
-	protoInfos := make([]*pb.CollectionInfo, len(infos))
-	for i, info := range infos {
-		protoInfos[i] = collectionInfoToProto(info)
+	protoInfos := make([]*pb.CollectionInfo, 0, len(infos))
+	for _, info := range infos {
+		if checkPermission(ctx, info.Name, "read") {
+			protoInfos = append(protoInfos, collectionInfoToProto(info))
+		}
 	}
 
 	return &pb.ListCollectionsResponse{
@@ -95,6 +127,10 @@ func (s *LimyeDBService) ListCollections(ctx context.Context, req *pb.ListCollec
 }
 
 func (s *LimyeDBService) DeleteCollection(ctx context.Context, req *pb.DeleteCollectionRequest) (*pb.DeleteCollectionResponse, error) {
+	if !checkPermission(ctx, req.Name, "admin") {
+		return nil, status.Errorf(codes.PermissionDenied, "insufficient permissions to delete collection")
+	}
+
 	if err := s.collections.Delete(req.Name); err != nil {
 		return nil, status.Errorf(codes.NotFound, "collection not found: %v", err)
 	}
@@ -105,6 +141,10 @@ func (s *LimyeDBService) DeleteCollection(ctx context.Context, req *pb.DeleteCol
 // pb.Point operations
 
 func (s *LimyeDBService) UpsertPoints(ctx context.Context, req *pb.UpsertPointsRequest) (*pb.UpsertPointsResponse, error) {
+	if !checkPermission(ctx, req.Collection, "write") {
+		return nil, status.Errorf(codes.PermissionDenied, "insufficient permissions to upsert points")
+	}
+
 	coll, err := s.collections.Get(req.Collection)
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "collection not found: %v", err)
@@ -133,6 +173,10 @@ func (s *LimyeDBService) UpsertPoints(ctx context.Context, req *pb.UpsertPointsR
 }
 
 func (s *LimyeDBService) GetPoints(ctx context.Context, req *pb.GetPointsRequest) (*pb.GetPointsResponse, error) {
+	if !checkPermission(ctx, req.Collection, "read") {
+		return nil, status.Errorf(codes.PermissionDenied, "insufficient permissions to access collection")
+	}
+
 	coll, err := s.collections.Get(req.Collection)
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "collection not found: %v", err)
@@ -151,6 +195,10 @@ func (s *LimyeDBService) GetPoints(ctx context.Context, req *pb.GetPointsRequest
 }
 
 func (s *LimyeDBService) DeletePoints(ctx context.Context, req *pb.DeletePointsRequest) (*pb.DeletePointsResponse, error) {
+	if !checkPermission(ctx, req.Collection, "write") {
+		return nil, status.Errorf(codes.PermissionDenied, "insufficient permissions to delete points")
+	}
+
 	coll, err := s.collections.Get(req.Collection)
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "collection not found: %v", err)
@@ -206,6 +254,10 @@ func (s *LimyeDBService) StreamUpsertPoints(stream pb.LimyeDB_StreamUpsertPoints
 // Search operations
 
 func (s *LimyeDBService) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchResponse, error) {
+	if !checkPermission(ctx, req.Collection, "read") {
+		return nil, status.Errorf(codes.PermissionDenied, "insufficient permissions to search collection")
+	}
+
 	coll, err := s.collections.Get(req.Collection)
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "collection not found: %v", err)
@@ -228,7 +280,7 @@ func (s *LimyeDBService) Search(ctx context.Context, req *pb.SearchRequest) (*pb
 		params.Filter = protoFilterToPayload(req.Filter)
 	}
 
-	result, err := coll.SearchWithParams(req.Vector.Data, params)
+	result, err := coll.SearchV2WithParams(req.Vector.Data, req.VectorName, params)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "search failed: %v", err)
 	}
@@ -240,7 +292,15 @@ func (s *LimyeDBService) Search(ctx context.Context, req *pb.SearchRequest) (*pb
 			Score: sp.Score,
 		}
 		if req.WithVector {
-			scoredPoints[i].Vector = &pb.Vector{Data: sp.Vector}
+			var vData []float32
+			if req.VectorName != "" && req.VectorName != "default" {
+				if vec, ok := sp.Vectors[req.VectorName]; ok {
+					vData = vec
+				}
+			} else {
+				vData = sp.Vector
+			}
+			scoredPoints[i].Vector = &pb.Vector{Data: vData}
 		}
 		if req.WithPayload {
 			scoredPoints[i].Payload = payloadToProto(sp.Payload)
@@ -254,6 +314,10 @@ func (s *LimyeDBService) Search(ctx context.Context, req *pb.SearchRequest) (*pb
 }
 
 func (s *LimyeDBService) SearchBatch(ctx context.Context, req *pb.SearchBatchRequest) (*pb.SearchBatchResponse, error) {
+	if !checkPermission(ctx, req.Collection, "read") {
+		return nil, status.Errorf(codes.PermissionDenied, "insufficient permissions to search collection")
+	}
+
 	coll, err := s.collections.Get(req.Collection)
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "collection not found: %v", err)
@@ -279,7 +343,7 @@ func (s *LimyeDBService) SearchBatch(ctx context.Context, req *pb.SearchBatchReq
 			Filter:      filter,
 		}
 
-		result, err := coll.SearchWithParams(v.Data, params)
+		result, err := coll.SearchV2WithParams(v.Data, req.VectorName, params)
 		if err != nil {
 			continue
 		}
@@ -289,6 +353,20 @@ func (s *LimyeDBService) SearchBatch(ctx context.Context, req *pb.SearchBatchReq
 			scoredPoints[j] = &pb.ScoredPoint{
 				Id:    sp.ID,
 				Score: sp.Score,
+			}
+			if req.WithVector {
+				var vData []float32
+				if req.VectorName != "" && req.VectorName != "default" {
+					if vec, ok := sp.Vectors[req.VectorName]; ok {
+						vData = vec
+					}
+				} else {
+					vData = sp.Vector
+				}
+				scoredPoints[j].Vector = &pb.Vector{Data: vData}
+			}
+			if req.WithPayload {
+				scoredPoints[j].Payload = payloadToProto(sp.Payload)
 			}
 		}
 
@@ -302,6 +380,10 @@ func (s *LimyeDBService) SearchBatch(ctx context.Context, req *pb.SearchBatchReq
 }
 
 func (s *LimyeDBService) Recommend(ctx context.Context, req *pb.RecommendRequest) (*pb.RecommendResponse, error) {
+	if !checkPermission(ctx, req.Collection, "read") {
+		return nil, status.Errorf(codes.PermissionDenied, "insufficient permissions to access collection")
+	}
+
 	coll, err := s.collections.Get(req.Collection)
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "collection not found: %v", err)
@@ -336,6 +418,10 @@ func (s *LimyeDBService) Recommend(ctx context.Context, req *pb.RecommendRequest
 }
 
 func (s *LimyeDBService) Discover(ctx context.Context, req *pb.DiscoverRequest) (*pb.DiscoverResponse, error) {
+	if !checkPermission(ctx, req.Collection, "read") {
+		return nil, status.Errorf(codes.PermissionDenied, "insufficient permissions to access collection")
+	}
+
 	coll, err := s.collections.Get(req.Collection)
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "collection not found: %v", err)

@@ -7,21 +7,24 @@ type CollectionConfig struct {
 }
 
 type Point struct {
-	ID      string                 `json:"id"`
-	Vector  []float32              `json:"vector"`
-	Payload map[string]interface{} `json:"payload,omitempty"`
+	ID           string                 `json:"id"`
+	Vector       []float32              `json:"vector,omitempty"`
+	NamedVectors map[string][]float32   `json:"named_vectors,omitempty"`
+	Payload      map[string]interface{} `json:"payload,omitempty"`
 }
 
 type Match struct {
-	ID      string                 `json:"id"`
-	Score   float32                `json:"score"`
-	Vector  []float32              `json:"vector,omitempty"`
-	Payload map[string]interface{} `json:"payload,omitempty"`
+	ID           string                 `json:"id"`
+	Score        float32                `json:"score"`
+	Vector       []float32              `json:"vector,omitempty"`
+	NamedVectors map[string][]float32   `json:"named_vectors,omitempty"`
+	Payload      map[string]interface{} `json:"payload,omitempty"`
 }
 
 type ContextExample struct {
-	ID     string    `json:"id,omitempty"`
-	Vector []float32 `json:"vector,omitempty"`
+	ID           string               `json:"id,omitempty"`
+	Vector       []float32            `json:"vector,omitempty"`
+	NamedVectors map[string][]float32 `json:"named_vectors,omitempty"`
 }
 
 type ContextPair struct {

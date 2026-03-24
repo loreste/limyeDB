@@ -5,9 +5,11 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/limyedb/limyedb/pkg/auth"
 	"github.com/limyedb/limyedb/pkg/cluster"
 	"github.com/limyedb/limyedb/pkg/collection"
 	"github.com/limyedb/limyedb/pkg/config"
@@ -82,66 +84,66 @@ func (s *Server) setupRoutes() {
 	// Collections - Legacy (single vector)
 	s.router.POST("/collections", s.handleCreateCollection)
 	s.router.GET("/collections", s.handleListCollections)
-	s.router.GET("/collections/:name", s.handleGetCollection)
-	s.router.DELETE("/collections/:name", s.handleDeleteCollection)
-	s.router.PATCH("/collections/:name", s.handleUpdateCollection)
+	s.router.GET("/collections/:name", s.requirePermission("read"), s.handleGetCollection)
+	s.router.DELETE("/collections/:name", s.requirePermission("admin"), s.handleDeleteCollection)
+	s.router.PATCH("/collections/:name", s.requirePermission("admin"), s.handleUpdateCollection)
 
 	// Collections V2 - Named vectors support
 	s.router.POST("/collections/v2", s.handleCreateCollectionV2)
 
 	// Points - Legacy (single vector)
-	s.router.PUT("/collections/:name/points", s.handleUpsertPoints)
-	s.router.GET("/collections/:name/points/:id", s.handleGetPoint)
-	s.router.DELETE("/collections/:name/points/:id", s.handleDeletePoint)
-	s.router.POST("/collections/:name/points/batch", s.handleBatchUpsert)
-	s.router.POST("/collections/:name/points/delete", s.handleBatchDelete)
+	s.router.PUT("/collections/:name/points", s.requirePermission("write"), s.handleUpsertPoints)
+	s.router.GET("/collections/:name/points/:id", s.requirePermission("read"), s.handleGetPoint)
+	s.router.DELETE("/collections/:name/points/:id", s.requirePermission("write"), s.handleDeletePoint)
+	s.router.POST("/collections/:name/points/batch", s.requirePermission("write"), s.handleBatchUpsert)
+	s.router.POST("/collections/:name/points/delete", s.requirePermission("write"), s.handleBatchDelete)
 
 	// Points V2 - Named vectors support
-	s.router.PUT("/collections/:name/points/v2", s.handleUpsertPointsV2)
+	s.router.PUT("/collections/:name/points/v2", s.requirePermission("write"), s.handleUpsertPointsV2)
 
 	// Scroll/Pagination API
-	s.router.POST("/collections/:name/points/scroll", s.handleScroll)
+	s.router.POST("/collections/:name/points/scroll", s.requirePermission("read"), s.handleScroll)
 
 	// Search - Legacy (single vector)
-	s.router.POST("/collections/:name/search", s.handleSearch)
-	s.router.POST("/collections/:name/recommend", s.handleRecommend)
+	s.router.POST("/collections/:name/search", s.requirePermission("read"), s.handleSearch)
+	s.router.POST("/collections/:name/recommend", s.requirePermission("read"), s.handleRecommend)
 
 	// Search V2 - Named vectors support
-	s.router.POST("/collections/:name/search/v2", s.handleSearchV2)
-	s.router.POST("/collections/:name/recommend/v2", s.handleRecommendV2)
+	s.router.POST("/collections/:name/search/v2", s.requirePermission("read"), s.handleSearchV2)
+	s.router.POST("/collections/:name/recommend/v2", s.requirePermission("read"), s.handleRecommendV2)
 
 	// Discovery/Context Search API
-	s.router.POST("/collections/:name/discover", s.handleDiscover)
+	s.router.POST("/collections/:name/discover", s.requirePermission("read"), s.handleDiscover)
 
 	// Group Search API
-	s.router.POST("/collections/:name/search/groups", s.handleGroupSearch)
+	s.router.POST("/collections/:name/search/groups", s.requirePermission("read"), s.handleGroupSearch)
 
 	// Cluster Operations
 	s.router.POST("/cluster/join", s.handleJoinCluster)
 
 	// Faceted Search API
-	s.router.POST("/collections/:name/facet", s.handleFacet)
-	s.router.POST("/collections/:name/facets", s.handleMultiFacet)
+	s.router.POST("/collections/:name/facet", s.requirePermission("read"), s.handleFacet)
+	s.router.POST("/collections/:name/facets", s.requirePermission("read"), s.handleMultiFacet)
 
 	// Query Explain/Planning API
-	s.router.POST("/collections/:name/explain", s.handleExplain)
+	s.router.POST("/collections/:name/explain", s.requirePermission("read"), s.handleExplain)
 
 	// Payload Index Configuration API
-	s.router.POST("/collections/:name/payload-indexes", s.handleCreatePayloadIndex)
-	s.router.GET("/collections/:name/payload-indexes", s.handleListPayloadIndexes)
-	s.router.DELETE("/collections/:name/payload-indexes/:field", s.handleDeletePayloadIndex)
+	s.router.POST("/collections/:name/payload-indexes", s.requirePermission("admin"), s.handleCreatePayloadIndex)
+	s.router.GET("/collections/:name/payload-indexes", s.requirePermission("read"), s.handleListPayloadIndexes)
+	s.router.DELETE("/collections/:name/payload-indexes/:field", s.requirePermission("admin"), s.handleDeletePayloadIndex)
 
 	// Collection Aliases API
-	s.router.POST("/aliases", s.handleCreateAlias)
-	s.router.GET("/aliases", s.handleListAliases)
-	s.router.DELETE("/aliases/:alias", s.handleDeleteAlias)
-	s.router.PUT("/aliases/:alias", s.handleSwitchAlias)
+	s.router.POST("/aliases", s.requirePermission("admin"), s.handleCreateAlias)
+	s.router.GET("/aliases", s.requirePermission("read"), s.handleListAliases)
+	s.router.DELETE("/aliases/:alias", s.requirePermission("admin"), s.handleDeleteAlias)
+	s.router.PUT("/aliases/:alias", s.requirePermission("admin"), s.handleSwitchAlias)
 
 	// Snapshots
-	s.router.POST("/snapshots", s.handleCreateSnapshot)
-	s.router.GET("/snapshots", s.handleListSnapshots)
-	s.router.POST("/snapshots/:id/restore", s.handleRestoreSnapshot)
-	s.router.DELETE("/snapshots/:id", s.handleDeleteSnapshot)
+	s.router.POST("/snapshots", s.requirePermission("admin"), s.handleCreateSnapshot)
+	s.router.GET("/snapshots", s.requirePermission("admin"), s.handleListSnapshots)
+	s.router.POST("/snapshots/:id/restore", s.requirePermission("admin"), s.handleRestoreSnapshot)
+	s.router.DELETE("/snapshots/:id", s.requirePermission("admin"), s.handleDeleteSnapshot)
 
 	// Cluster HTTP Streaming / WebSockets
 	s.router.GET("/stream", s.handleWebSocket)
@@ -156,18 +158,39 @@ func (s *Server) setupMiddleware() {
 
 	// Enterprise Zero-Trust Token Bearer Interceptor
 	if s.opts.AuthToken != "" {
+		tokenManager := auth.NewTokenManager(s.opts.AuthToken)
 		s.router.Use(func(c *gin.Context) {
-			if c.Request.URL.Path == "/health" {
+			if c.Request.URL.Path == "/health" || c.Request.URL.Path == "/readiness" {
 				c.Next()
 				return
 			}
-			auth := c.GetHeader("Authorization")
-			expected := "Bearer " + s.opts.AuthToken
-			if auth != expected {
-				respondError(c, http.StatusUnauthorized, errors.New("unauthorized: missing or invalid bearer token"))
+			
+			authHeader := c.GetHeader("Authorization")
+			parts := strings.SplitN(authHeader, " ", 2)
+			
+			if len(parts) != 2 || parts[0] != "Bearer" {
+				respondError(c, http.StatusUnauthorized, errors.New("unauthorized: missing or invalid bearer format"))
 				c.Abort()
 				return
 			}
+
+			// Validate granular JWT natively
+			claims, err := tokenManager.Validate(parts[1])
+			if err != nil {
+				// Fallback to static global API key for backward-compatibility or explicit Root overlays
+				if authHeader == "Bearer "+s.opts.AuthToken {
+					claims = &auth.TokenClaims{
+						Permissions: auth.Permissions{GlobalAdmin: true},
+					}
+				} else {
+					respondError(c, http.StatusUnauthorized, errors.New("unauthorized: invalid token claims"))
+					c.Abort()
+					return
+				}
+			}
+
+			// Scope request context dynamically
+			c.Set("token_claims", claims)
 			c.Next()
 		})
 	}
@@ -198,6 +221,53 @@ func (s *Server) Stop(ctx context.Context) error {
 		return nil
 	}
 	return s.httpServer.Shutdown(ctx)
+}
+
+// checkPermission verifies if the current request context has adequate JWT roles.
+func (s *Server) checkPermission(c *gin.Context, collection string, action string) bool {
+	claimsRaw, exists := c.Get("token_claims")
+	if !exists {
+		// No auth token configured / passed successfully (meaning auth is disabled)
+		return true 
+	}
+	
+	claims, ok := claimsRaw.(*auth.TokenClaims)
+	if !ok {
+		return false
+	}
+	
+	switch action {
+	case "read": return claims.CanRead(collection)
+	case "write": return claims.CanWrite(collection)
+	case "admin": return claims.CanAdmin(collection)
+	case "global_admin": return claims.Permissions.GlobalAdmin
+	}
+	return false
+}
+
+// requirePermission dynamically halts Gin routers checking the active JWT
+func (s *Server) requirePermission(action string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		name := c.Param("name")
+		
+		// Unnamed global routes map entirely to global admins unconditionally!
+		if name == "" {
+			if !s.checkPermission(c, "", "global_admin") {
+				respondError(c, http.StatusForbidden, errors.New("forbidden: Global Admin required"))
+				c.Abort()
+				return
+			}
+			c.Next()
+			return
+		}
+		
+		if !s.checkPermission(c, name, action) {
+			respondError(c, http.StatusForbidden, errors.New("forbidden: insufficient scoped privileges against collection"))
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
 }
 
 // Middleware

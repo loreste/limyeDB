@@ -3,8 +3,6 @@ package point
 import (
 	"encoding/json"
 	"errors"
-
-	"github.com/limyedb/limyedb/pkg/config"
 )
 
 // MultiVector represents a point with multiple named vectors
@@ -121,10 +119,10 @@ func DecodeMultiVector(data []byte) (*MultiVector, error) {
 
 // VectorConfig holds configuration for a named vector
 type VectorConfig struct {
-	Name       string            `json:"name"`
-	Dimension  int               `json:"dimension"`
-	Metric     config.MetricType `json:"metric"`
-	OnDisk     bool              `json:"on_disk"`
+	Name       string `json:"name"`
+	Dimension  int    `json:"dimension"`
+	Metric     string `json:"metric"`
+	OnDisk     bool   `json:"on_disk"`
 
 	// Quantization settings per vector
 	Quantization string `json:"quantization,omitempty"` // "none", "scalar", "binary", "pq"

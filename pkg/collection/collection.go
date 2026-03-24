@@ -2,6 +2,8 @@ package collection
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -11,6 +13,8 @@ import (
 	"github.com/limyedb/limyedb/pkg/index/hnsw"
 	"github.com/limyedb/limyedb/pkg/index/payload"
 	"github.com/limyedb/limyedb/pkg/point"
+	"github.com/limyedb/limyedb/pkg/quantization"
+	"github.com/limyedb/limyedb/pkg/storage/mmap"
 )
 
 // Collection represents a vector collection
@@ -60,6 +64,14 @@ func New(cfg *config.CollectionConfig) (*Collection, error) {
 				Metric:         metric,
 				Dimension:      vc.Dimension,
 			}
+			
+			if vc.Quantization != nil {
+				q, err := quantization.New(vc.Quantization, vc.Dimension)
+				if err != nil {
+					return nil, err
+				}
+				hnswCfg.Quantizer = q
+			}
 			// Apply defaults
 			if hnswCfg.M == 0 {
 				hnswCfg.M = 16
@@ -72,6 +84,26 @@ func New(cfg *config.CollectionConfig) (*Collection, error) {
 			}
 			if hnswCfg.MaxElements == 0 {
 				hnswCfg.MaxElements = 100000
+			}
+
+			if vc.OnDisk {
+				dirPath := filepath.Join("./data", cfg.Name, name)
+				os.MkdirAll(dirPath, 0755)
+				mmapCfg := mmap.DefaultConfig()
+				mmapCfg.Path = filepath.Join(dirPath, "vectors.mmap")
+				mmapCfg.Dimension = vc.Dimension
+				
+				store, err := mmap.Open(mmapCfg)
+				if err != nil {
+					return nil, err
+				}
+				hnswCfg.VectorMmap = store
+
+				graphMmap, err := mmap.NewGraphMmap(filepath.Join(dirPath, "graph.hnsw"), hnswCfg.M)
+				if err != nil {
+					return nil, err
+				}
+				hnswCfg.GraphMmap = graphMmap
 			}
 
 			index, err := hnsw.New(hnswCfg)
@@ -90,6 +122,34 @@ func New(cfg *config.CollectionConfig) (*Collection, error) {
 			MaxElements:    cfg.HNSW.MaxElements,
 			Metric:         cfg.Metric,
 			Dimension:      cfg.Dimension,
+		}
+		
+		if cfg.Quantization != nil {
+			q, err := quantization.New(cfg.Quantization, cfg.Dimension)
+			if err != nil {
+				return nil, err
+			}
+			hnswCfg.Quantizer = q
+		}
+
+		if cfg.OnDisk {
+			dirPath := filepath.Join("./data", cfg.Name, "default")
+			os.MkdirAll(dirPath, 0755)
+			mmapCfg := mmap.DefaultConfig()
+			mmapCfg.Path = filepath.Join(dirPath, "vectors.mmap")
+			mmapCfg.Dimension = cfg.Dimension
+			
+			store, err := mmap.Open(mmapCfg)
+			if err != nil {
+				return nil, err
+			}
+			hnswCfg.VectorMmap = store
+
+			graphMmap, err := mmap.NewGraphMmap(filepath.Join(dirPath, "graph.hnsw"), hnswCfg.M)
+			if err != nil {
+				return nil, err
+			}
+			hnswCfg.GraphMmap = graphMmap
 		}
 
 		index, err := hnsw.New(hnswCfg)
@@ -154,18 +214,50 @@ func (c *Collection) Insert(p *point.Point) error {
 		return err
 	}
 
-	if len(p.Vector) != c.config.Dimension {
-		return ErrDimensionMismatch
+	// Default vector (legacy)
+	if c.index != nil && len(p.Vector) > 0 {
+		if len(p.Vector) != c.config.Dimension {
+			return ErrDimensionMismatch
+		}
+		if c.config.Metric == config.MetricCosine {
+			p.Normalize()
+		}
+		if err := c.index.Insert(p); err != nil {
+			return err
+		}
 	}
 
-	// Normalize for cosine similarity
-	if c.config.Metric == config.MetricCosine {
-		p.Normalize()
-	}
+	// Named vectors (Multi-Modal maps)
+	if c.config.HasNamedVectors() && len(p.NamedVectors) > 0 {
+		for name, vec := range p.NamedVectors {
+			idx, ok := c.indices[name]
+			if !ok {
+				continue // Gracefully skip vectors not belonging to this active tracking graph
+			}
 
-	// Insert into HNSW index
-	if err := c.index.Insert(p); err != nil {
-		return err
+			vc := c.config.GetVectorConfig(name)
+			if vc == nil {
+				continue
+			}
+
+			if len(vec) != vc.Dimension {
+				return ErrDimensionMismatch
+			}
+
+			if vc.Metric == config.MetricCosine {
+				vec.Normalize()
+			}
+
+			// Create a pseudo-point assigning solely the explicit target dimension vector locally
+			pseudoPoint := &point.Point{
+				ID:      p.ID,
+				Vector:  vec,
+				Payload: p.Payload,
+			}
+			if err := idx.Insert(pseudoPoint); err != nil {
+				return err
+			}
+		}
 	}
 
 	// Index payload

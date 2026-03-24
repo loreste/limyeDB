@@ -12,46 +12,13 @@ type Cosine struct{}
 // Distance calculates 1 - cosine_similarity between two vectors
 // Returns a value in [0, 2], where 0 means identical and 2 means opposite
 func (c *Cosine) Distance(a, b point.Vector) float32 {
-	if len(a) != len(b) {
-		return 2.0 // Maximum distance for mismatched dimensions
-	}
-	if len(a) == 0 {
-		return 0.0
-	}
-
-	similarity := c.Similarity(a, b)
-	return 1.0 - similarity
+	return CosineDistanceSIMD(a, b)
 }
 
 // Similarity calculates the cosine similarity between two vectors
 // Returns a value in [-1, 1], where 1 means identical direction
 func (c *Cosine) Similarity(a, b point.Vector) float32 {
-	if len(a) != len(b) || len(a) == 0 {
-		return 0.0
-	}
-
-	var dot, normA, normB float32
-
-	// Process in chunks of 4 for better CPU cache utilization
-	i := 0
-	for ; i <= len(a)-4; i += 4 {
-		dot += a[i]*b[i] + a[i+1]*b[i+1] + a[i+2]*b[i+2] + a[i+3]*b[i+3]
-		normA += a[i]*a[i] + a[i+1]*a[i+1] + a[i+2]*a[i+2] + a[i+3]*a[i+3]
-		normB += b[i]*b[i] + b[i+1]*b[i+1] + b[i+2]*b[i+2] + b[i+3]*b[i+3]
-	}
-
-	// Handle remaining elements
-	for ; i < len(a); i++ {
-		dot += a[i] * b[i]
-		normA += a[i] * a[i]
-		normB += b[i] * b[i]
-	}
-
-	if normA == 0 || normB == 0 {
-		return 0.0
-	}
-
-	return dot / float32(math.Sqrt(float64(normA)*float64(normB)))
+	return 1.0 - CosineDistanceSIMD(a, b)
 }
 
 // SimilarityNormalized calculates cosine similarity for pre-normalized vectors

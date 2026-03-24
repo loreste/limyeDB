@@ -1,5 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 
+export type VectorType = number[] | { [key: string]: number[] };
+
 export interface CollectionConfig {
   name: string;
   dimension: number;
@@ -8,20 +10,20 @@ export interface CollectionConfig {
 
 export interface Point {
   id: string;
-  vector: number[];
+  vector: VectorType;
   payload?: Record<string, any>;
 }
 
 export interface Match {
   id: string;
   score: number;
-  vector?: number[];
+  vector?: VectorType;
   payload?: Record<string, any>;
 }
 
 export interface ContextExample {
   id?: string;
-  vector?: number[];
+  vector?: VectorType;
 }
 
 export interface ContextPair {
@@ -30,7 +32,7 @@ export interface ContextPair {
 }
 
 export interface DiscoverParams {
-  target?: number[];
+  target?: VectorType;
   context?: ContextPair;
   limit?: number;
   ef?: number;
@@ -40,13 +42,18 @@ export interface DiscoverParams {
 export class LimyeDBClient {
   private client: AxiosInstance;
 
-  constructor(host: string = 'http://localhost:8080') {
+  constructor(host: string = 'http://localhost:8080', authToken?: string) {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+
     this.client = axios.create({
       baseURL: host,
       timeout: 30000,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
     });
   }
 
@@ -73,7 +80,7 @@ export class LimyeDBClient {
 
   async search(
     collectionName: string,
-    vector: number[],
+    vector: VectorType,
     limit: number = 10,
     filter?: Record<string, any>
   ): Promise<Match[]> {
@@ -95,7 +102,7 @@ export class LimyeDBClient {
 
   async groupSearch(
     collectionName: string,
-    vector: number[],
+    vector: VectorType,
     groupBy: string,
     groupSize: number = 3,
     limit: number = 10,

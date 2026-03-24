@@ -19,6 +19,7 @@ import (
 	"github.com/limyedb/limyedb/pkg/collection"
 	"github.com/limyedb/limyedb/pkg/config"
 	"github.com/limyedb/limyedb/pkg/storage/snapshot"
+	"github.com/limyedb/limyedb/pkg/version"
 )
 
 const (
@@ -31,7 +32,6 @@ const (
                    |___/
 High-Performance Vector Database
 `
-	version = "0.1.0"
 )
 
 func main() {
@@ -56,7 +56,7 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("LimyeDB version %s\n", version)
+		fmt.Printf("LimyeDB version %s\n", version.String())
 		return
 	}
 
@@ -64,7 +64,7 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
 
-	slog.Info(fmt.Sprintf("\n%s\nVersion: %s", banner, version))
+	slog.Info(fmt.Sprintf("\n%s\nVersion: %s", banner, version.Version))
 
 	// Load configuration
 	var cfg *config.Config
@@ -180,7 +180,7 @@ func main() {
 	}()
 
 	// Start gRPC server
-	grpcServer := grpc.NewServer(&cfg.Server, collMgr, snapMgr)
+	grpcServer := grpc.NewServer(&cfg.Server, collMgr, snapMgr, *authToken)
 	go func() {
 		slog.Info("Starting gRPC API server", "address", cfg.Server.GRPCAddress)
 		if err := grpcServer.Start(); err != nil {

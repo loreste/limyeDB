@@ -27,13 +27,15 @@ class CollectionConfig(BaseModel):
 class Point(BaseModel):
     """Vector point with optional payload."""
     id: str
-    vector: List[float]
+    vector: Optional[List[float]] = None
+    named_vectors: Optional[Dict[str, List[float]]] = None
     payload: Optional[Dict[str, Any]] = None
 
 
 class SearchParams(BaseModel):
     """Search parameters."""
-    vector: List[float]
+    vector: Optional[List[float]] = None
+    query_name: Optional[str] = None
     limit: Optional[int] = 10
     ef: Optional[int] = 100
     filter: Optional[Dict[str, Any]] = None
@@ -47,6 +49,7 @@ class Match(BaseModel):
     id: str
     score: float
     vector: Optional[List[float]] = None
+    named_vectors: Optional[Dict[str, List[float]]] = None
     payload: Optional[Dict[str, Any]] = None
 
 
@@ -73,6 +76,7 @@ class ContextExample(BaseModel):
     """Context example for discovery."""
     id: Optional[str] = None
     vector: Optional[List[float]] = None
+    named_vectors: Optional[Dict[str, List[float]]] = None
 
 
 class ContextPair(BaseModel):

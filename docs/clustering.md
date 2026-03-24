@@ -8,16 +8,16 @@ Under the hood, LimyeDB nodes form a Replicated State Machine (FSM).
 - **Leader Node**: Only one node serves as the Leader. All cluster writes (Create Collection, Upsert Points) stream exclusively through the Leader.
 - **Follower Nodes**: Adhere to the Heartbeats broadcasted by the Leader. LimyeDB followers automatically intercept write payload requests locally and seamlessly proxy (Reverse Proxy) them to the active Leader.
 
-### Node Bootstrapping
+### Node Bootstrapping (Kubernetes Auto-Discovery)
 
-LimyeDB automatically leverages HTTP HashiCorp Consul APIs for remote peer discovery. Simply set up a Consul KV or point directly to seed IPs.
+LimyeDB automatically leverages native Kubernetes DNS headless services for remote peer discovery, dropping the legacy requirement for Consul KV or external orchestrators.
 
 ```bash
-# Node 1 (Bootstrap Node)
-./limyedb --bootstrap --bind-addr=192.168.1.10:7946
+# Node 1 (Bootstrap Node starting the RAFT ring)
+./limyedb --bootstrap --bind-addr=0.0.0.0:7946
 
-# Node 2 (Follower)
-./limyedb --seed-nodes=192.168.1.10:7946 --bind-addr=192.168.1.11:7946
+# Node 2 (Follower routing dynamically via K8s DNS)
+./limyedb --seed-nodes=limyedb-0.limyedb-headless.default.svc.cluster.local:7946 --bind-addr=0.0.0.0:7946
 ```
 
 ## Fault Tolerance & Log Compaction

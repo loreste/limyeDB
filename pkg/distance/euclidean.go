@@ -11,38 +11,14 @@ type Euclidean struct{}
 
 // Distance calculates the Euclidean distance between two vectors
 func (e *Euclidean) Distance(a, b point.Vector) float32 {
-	return float32(math.Sqrt(float64(e.DistanceSquared(a, b))))
+	return EuclideanDistanceSIMD(a, b)
 }
 
 // DistanceSquared calculates the squared Euclidean distance
 // This is more efficient when you only need to compare distances
 func (e *Euclidean) DistanceSquared(a, b point.Vector) float32 {
-	if len(a) != len(b) {
-		return float32(math.MaxFloat32)
-	}
-	if len(a) == 0 {
-		return 0.0
-	}
-
-	var sum float32
-
-	// Process in chunks of 4 for better CPU cache utilization
-	i := 0
-	for ; i <= len(a)-4; i += 4 {
-		d0 := a[i] - b[i]
-		d1 := a[i+1] - b[i+1]
-		d2 := a[i+2] - b[i+2]
-		d3 := a[i+3] - b[i+3]
-		sum += d0*d0 + d1*d1 + d2*d2 + d3*d3
-	}
-
-	// Handle remaining elements
-	for ; i < len(a); i++ {
-		d := a[i] - b[i]
-		sum += d * d
-	}
-
-	return sum
+	dist := EuclideanDistanceSIMD(a, b)
+	return dist * dist
 }
 
 // Name returns the name of this distance metric
