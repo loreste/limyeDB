@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LimyeDB Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+        .header {
+            background: #1e293b;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #38bdf8;
+        }
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #22c55e;
+        }
+        .status-dot.error {
+            background: #ef4444;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: #1e293b;
+            border-radius: 8px;
+            padding: 1.5rem;
+            border: 1px solid #334155;
+        }
+        .stat-label {
+            font-size: 0.875rem;
+            color: #94a3b8;
+            margin-bottom: 0.5rem;
+        }
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #38bdf8;
+        }
+        .section {
+            background: #1e293b;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid #334155;
+        }
+        .section-title {
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+            color: #f1f5f9;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #334155;
+        }
+        th {
+            color: #94a3b8;
+            font-weight: 500;
+        }
+        tr:hover {
+            background: #334155;
+        }
+        .btn {
+            background: #38bdf8;
+            color: #0f172a;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        .btn:hover {
+            background: #7dd3fc;
+        }
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+        .btn-danger:hover {
+            background: #f87171;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal.active {
+            display: flex;
+        }
+        .modal-content {
+            background: #1e293b;
+            padding: 2rem;
+            border-radius: 8px;
+            width: 100%;
+            max-width: 500px;
+            border: 1px solid #334155;
+        }
+        .modal-title {
+            font-size: 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #94a3b8;
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #334155;
+            border-radius: 4px;
+            background: #0f172a;
+            color: #e2e8f0;
+            font-size: 1rem;
+        }
+        .form-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+            margin-top: 1.5rem;
+        }
+        .search-box {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .search-box input {
+            flex: 1;
+            padding: 0.75rem;
+            border: 1px solid #334155;
+            border-radius: 4px;
+            background: #0f172a;
+            color: #e2e8f0;
+        }
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 0.5rem;
+        }
+        .tab {
+            padding: 0.5rem 1rem;
+            background: transparent;
+            border: none;
+            color: #94a3b8;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .tab.active {
+            background: #334155;
+            color: #f1f5f9;
+        }
+        .cluster-node {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: #0f172a;
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+        }
+        .node-status {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        .node-status.leader {
+            background: #22c55e;
+        }
+        .node-status.follower {
+            background: #38bdf8;
+        }
+        .node-info {
+            flex: 1;
+        }
+        .node-name {
+            font-weight: 500;
+        }
+        .node-addr {
+            font-size: 0.875rem;
+            color: #94a3b8;
+        }
+        .badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            background: #334155;
+        }
+        .badge.leader {
+            background: #22c55e;
+            color: #0f172a;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="logo">LimyeDB Admin</div>
+        <div class="status">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">Connecting...</span>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="stats" id="stats">
+            <div class="stat-card">
+                <div class="stat-label">Collections</div>
+                <div class="stat-value" id="statCollections">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total Vectors</div>
+                <div class="stat-value" id="statVectors">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Cluster Nodes</div>
+                <div class="stat-value" id="statNodes">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Memory Usage</div>
+                <div class="stat-value" id="statMemory">-</div>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('collections')">Collections</button>
+            <button class="tab" onclick="showTab('cluster')">Cluster</button>
+            <button class="tab" onclick="showTab('search')">Search</button>
+            <button class="tab" onclick="showTab('settings')">Settings</button>
+        </div>
+
+        <div id="collectionsTab" class="section">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h2 class="section-title" style="margin: 0;">Collections</h2>
+                <button class="btn" onclick="showCreateModal()">Create Collection</button>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Dimension</th>
+                        <th>Metric</th>
+                        <th>Points</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="collectionsTable">
+                </tbody>
+            </table>
+        </div>
+
+        <div id="clusterTab" class="section" style="display: none;">
+            <h2 class="section-title">Cluster Nodes</h2>
+            <div id="clusterNodes"></div>
+        </div>
+
+        <div id="searchTab" class="section" style="display: none;">
+            <h2 class="section-title">Vector Search</h2>
+            <div class="form-group">
+                <label>Collection</label>
+                <select id="searchCollection"></select>
+            </div>
+            <div class="form-group">
+                <label>Vector (comma-separated)</label>
+                <input type="text" id="searchVector" placeholder="0.1, 0.2, 0.3, ...">
+            </div>
+            <div class="form-group">
+                <label>Limit</label>
+                <input type="number" id="searchLimit" value="10">
+            </div>
+            <button class="btn" onclick="executeSearch()">Search</button>
+            <div id="searchResults" style="margin-top: 1rem;"></div>
+        </div>
+
+        <div id="settingsTab" class="section" style="display: none;">
+            <h2 class="section-title">Settings</h2>
+            <div class="form-group">
+                <label>API Endpoint</label>
+                <input type="text" id="apiEndpoint" value="http://localhost:8080">
+            </div>
+            <div class="form-group">
+                <label>API Key</label>
+                <input type="password" id="apiKey" placeholder="Enter API key">
+            </div>
+            <button class="btn" onclick="saveSettings()">Save Settings</button>
+        </div>
+    </div>
+
+    <div class="modal" id="createModal">
+        <div class="modal-content">
+            <h3 class="modal-title">Create Collection</h3>
+            <div class="form-group">
+                <label>Name</label>
+                <input type="text" id="createName" placeholder="my_collection">
+            </div>
+            <div class="form-group">
+                <label>Dimension</label>
+                <input type="number" id="createDimension" value="1536">
+            </div>
+            <div class="form-group">
+                <label>Metric</label>
+                <select id="createMetric">
+                    <option value="cosine">Cosine</option>
+                    <option value="euclidean">Euclidean</option>
+                    <option value="dot_product">Dot Product</option>
+                </select>
+            </div>
+            <div class="form-actions">
+                <button class="btn" style="background: #334155; color: #e2e8f0;" onclick="hideCreateModal()">Cancel</button>
+                <button class="btn" onclick="createCollection()">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let apiEndpoint = localStorage.getItem('apiEndpoint') || 'http://localhost:8080';
+        let apiKey = localStorage.getItem('apiKey') || '';
+
+        document.getElementById('apiEndpoint').value = apiEndpoint;
+        document.getElementById('apiKey').value = apiKey;
+
+        async function fetchAPI(path, options = {}) {
+            const headers = {
+                'Content-Type': 'application/json',
+                ...options.headers
+            };
+            if (apiKey) {
+                headers['Authorization'] = `Bearer ${apiKey}`;
+            }
+            const response = await fetch(apiEndpoint + path, { ...options, headers });
+            return response.json();
+        }
+
+        async function loadData() {
+            try {
+                const health = await fetchAPI('/health');
+                document.getElementById('statusDot').classList.remove('error');
+                document.getElementById('statusText').textContent = `${health.status} - v${health.version}`;
+
+                const collections = await fetchAPI('/collections');
+                let totalVectors = 0;
+                document.getElementById('statCollections').textContent = collections.collections?.length || 0;
+
+                const tbody = document.getElementById('collectionsTable');
+                tbody.innerHTML = '';
+                (collections.collections || []).forEach(c => {
+                    totalVectors += c.points_count || 0;
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>${c.name}</td>
+                            <td>${c.dimension}</td>
+                            <td>${c.metric}</td>
+                            <td>${c.points_count || 0}</td>
+                            <td><span class="badge">${c.status || 'green'}</span></td>
+                            <td>
+                                <button class="btn btn-danger" onclick="deleteCollection('${c.name}')">Delete</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                document.getElementById('statVectors').textContent = totalVectors.toLocaleString();
+
+                // Update search collection dropdown
+                const searchSelect = document.getElementById('searchCollection');
+                searchSelect.innerHTML = (collections.collections || []).map(c =>
+                    `<option value="${c.name}">${c.name}</option>`
+                ).join('');
+
+            } catch (error) {
+                document.getElementById('statusDot').classList.add('error');
+                document.getElementById('statusText').textContent = 'Disconnected';
+            }
+        }
+
+        function showTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
+            document.querySelector(`.tab:nth-child(${['collections', 'cluster', 'search', 'settings'].indexOf(tab) + 1})`).classList.add('active');
+            document.getElementById(tab + 'Tab').style.display = 'block';
+        }
+
+        function showCreateModal() {
+            document.getElementById('createModal').classList.add('active');
+        }
+
+        function hideCreateModal() {
+            document.getElementById('createModal').classList.remove('active');
+        }
+
+        async function createCollection() {
+            const name = document.getElementById('createName').value;
+            const dimension = parseInt(document.getElementById('createDimension').value);
+            const metric = document.getElementById('createMetric').value;
+
+            await fetchAPI('/collections', {
+                method: 'POST',
+                body: JSON.stringify({ name, dimension, metric })
+            });
+
+            hideCreateModal();
+            loadData();
+        }
+
+        async function deleteCollection(name) {
+            if (!confirm(`Delete collection "${name}"?`)) return;
+            await fetchAPI(`/collections/${name}`, { method: 'DELETE' });
+            loadData();
+        }
+
+        async function executeSearch() {
+            const collection = document.getElementById('searchCollection').value;
+            const vectorStr = document.getElementById('searchVector').value;
+            const limit = parseInt(document.getElementById('searchLimit').value);
+
+            const vector = vectorStr.split(',').map(v => parseFloat(v.trim()));
+
+            const result = await fetchAPI(`/collections/${collection}/search`, {
+                method: 'POST',
+                body: JSON.stringify({ vector, limit })
+            });
+
+            const resultsDiv = document.getElementById('searchResults');
+            resultsDiv.innerHTML = '<h4>Results:</h4>' + (result.result || []).map(r => `
+                <div style="background: #0f172a; padding: 1rem; margin: 0.5rem 0; border-radius: 4px;">
+                    <strong>ID:</strong> ${r.id} | <strong>Score:</strong> ${r.score.toFixed(4)}
+                    ${r.payload ? `<pre style="margin-top: 0.5rem; font-size: 0.875rem;">${JSON.stringify(r.payload, null, 2)}</pre>` : ''}
+                </div>
+            `).join('');
+        }
+
+        function saveSettings() {
+            apiEndpoint = document.getElementById('apiEndpoint').value;
+            apiKey = document.getElementById('apiKey').value;
+            localStorage.setItem('apiEndpoint', apiEndpoint);
+            localStorage.setItem('apiKey', apiKey);
+            loadData();
+        }
+
+        // Initial load and refresh every 5 seconds
+        loadData();
+        setInterval(loadData, 5000);
+    </script>
+</body>
+</html>

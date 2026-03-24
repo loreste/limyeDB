@@ -1,4 +1,4 @@
-.PHONY: build run test bench clean proto fmt lint docker docker-cluster helm
+.PHONY: build run test bench clean proto fmt lint docker docker-cluster helm git-commit git-push
 
 # Binary name
 BINARY=limyedb
@@ -233,3 +233,18 @@ help:
 	@echo "  proto         - Generate protobuf code"
 	@echo "  clean         - Clean build artifacts"
 	@echo "  release       - Create release artifacts"
+	@echo ""
+	@echo "Git targets:"
+	@echo "  git-commit    - Stage and commit all changes"
+	@echo "  git-push      - Push to origin main"
+
+# Git targets
+git-commit:
+	@echo "Staging all changes..."
+	git add -A
+	@echo "Committing..."
+	git commit -m "Add comprehensive features: SDKs, observability, caching, rate limiting, webhooks, backup, admin UI, SIMD, quantization, multi-model"
+
+git-push: git-commit
+	@echo "Pushing to origin..."
+	git push origin main

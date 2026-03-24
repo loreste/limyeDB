@@ -1,0 +1,649 @@
+openapi: 3.0.3
+info:
+  title: LimyeDB API
+  description: |
+    LimyeDB is an enterprise distributed vector database for AI and RAG applications.
+
+    ## Features
+    - HNSW vector indexing with sub-millisecond search
+    - Hybrid search (dense + sparse vectors)
+    - Multi-tenancy with RBAC
+    - Native clustering with Raft consensus
+    - Real-time WebSocket subscriptions
+
+    ## Authentication
+    All endpoints require Bearer token authentication:
+    ```
+    Authorization: Bearer <your-api-key>
+    ```
+  version: 1.0.0
+  license:
+    name: GPL-3.0
+    url: https://www.gnu.org/licenses/gpl-3.0.html
+  contact:
+    name: LimyeDB Support
+    url: https://github.com/loreste/limyeDB
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+  - url: https://api.limyedb.io
+    description: Production server
+
+tags:
+  - name: Collections
+    description: Collection management operations
+  - name: Points
+    description: Vector point operations
+  - name: Search
+    description: Search and query operations
+  - name: Cluster
+    description: Cluster management
+  - name: Snapshots
+    description: Backup and restore operations
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Check if the server is healthy
+      tags: [Health]
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  version:
+                    type: string
+                    example: "1.0.0"
+
+  /collections:
+    get:
+      summary: List collections
+      description: Get a list of all collections
+      tags: [Collections]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of collections
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  collections:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CollectionInfo'
+    post:
+      summary: Create collection
+      description: Create a new vector collection
+      tags: [Collections]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCollectionRequest'
+      responses:
+        '201':
+          description: Collection created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionInfo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Collection already exists
+
+  /collections/{name}:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Collection name
+    get:
+      summary: Get collection
+      description: Get information about a collection
+      tags: [Collections]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Collection info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionInfo'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      summary: Delete collection
+      description: Delete a collection and all its data
+      tags: [Collections]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Collection deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /collections/{name}/points:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      summary: Upsert points
+      description: Insert or update points in a collection
+      tags: [Points]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertPointsRequest'
+      responses:
+        '200':
+          description: Points upserted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  succeeded:
+                    type: integer
+                  failed:
+                    type: integer
+
+  /collections/{name}/points/{id}:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Get point
+      description: Get a point by ID
+      tags: [Points]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: with_vector
+          in: query
+          schema:
+            type: boolean
+            default: true
+        - name: with_payload
+          in: query
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Point data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Point'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      summary: Delete point
+      description: Delete a point by ID
+      tags: [Points]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Point deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /collections/{name}/search:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: Search vectors
+      description: Search for similar vectors using k-NN
+      tags: [Search]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+
+  /collections/{name}/search/hybrid:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: Hybrid search
+      description: Search using both dense and sparse vectors with fusion
+      tags: [Search]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HybridSearchRequest'
+      responses:
+        '200':
+          description: Hybrid search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+
+  /collections/{name}/points/scroll:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: Scroll points
+      description: Paginate through points in a collection
+      tags: [Points]
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScrollRequest'
+      responses:
+        '200':
+          description: Scrolled points
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScrollResponse'
+
+  /snapshots:
+    get:
+      summary: List snapshots
+      description: Get all available snapshots
+      tags: [Snapshots]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of snapshots
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  snapshots:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Snapshot'
+    post:
+      summary: Create snapshot
+      description: Create a new snapshot of all collections
+      tags: [Snapshots]
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Snapshot created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Snapshot'
+
+  /cluster/status:
+    get:
+      summary: Cluster status
+      description: Get cluster status and node information
+      tags: [Cluster]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Cluster status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterStatus'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    CreateCollectionRequest:
+      type: object
+      required:
+        - name
+        - dimension
+      properties:
+        name:
+          type: string
+          example: documents
+        dimension:
+          type: integer
+          minimum: 1
+          maximum: 65536
+          example: 1536
+        metric:
+          type: string
+          enum: [cosine, euclidean, dot_product]
+          default: cosine
+        hnsw:
+          $ref: '#/components/schemas/HNSWConfig'
+        on_disk:
+          type: boolean
+          default: false
+
+    HNSWConfig:
+      type: object
+      properties:
+        m:
+          type: integer
+          default: 16
+          description: Max connections per node
+        ef_construction:
+          type: integer
+          default: 200
+          description: Index build quality
+        ef_search:
+          type: integer
+          default: 100
+          description: Search quality
+
+    CollectionInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        dimension:
+          type: integer
+        metric:
+          type: string
+        points_count:
+          type: integer
+        status:
+          type: string
+          enum: [green, yellow, red]
+
+    Point:
+      type: object
+      required:
+        - id
+        - vector
+      properties:
+        id:
+          type: string
+        vector:
+          type: array
+          items:
+            type: number
+            format: float
+        payload:
+          type: object
+          additionalProperties: true
+
+    UpsertPointsRequest:
+      type: object
+      required:
+        - points
+      properties:
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/Point'
+        wait:
+          type: boolean
+          default: true
+
+    SearchRequest:
+      type: object
+      required:
+        - vector
+      properties:
+        vector:
+          type: array
+          items:
+            type: number
+            format: float
+        limit:
+          type: integer
+          default: 10
+        filter:
+          $ref: '#/components/schemas/Filter'
+        with_payload:
+          type: boolean
+          default: true
+        with_vector:
+          type: boolean
+          default: false
+        ef:
+          type: integer
+          description: Search quality parameter
+
+    HybridSearchRequest:
+      type: object
+      required:
+        - dense_vector
+        - sparse_query
+      properties:
+        dense_vector:
+          type: array
+          items:
+            type: number
+            format: float
+        sparse_query:
+          type: string
+        limit:
+          type: integer
+          default: 10
+        filter:
+          $ref: '#/components/schemas/Filter'
+        fusion:
+          type: object
+          properties:
+            method:
+              type: string
+              enum: [rrf, linear]
+              default: rrf
+            k:
+              type: integer
+              default: 60
+
+    Filter:
+      type: object
+      properties:
+        must:
+          type: array
+          items:
+            $ref: '#/components/schemas/Condition'
+        must_not:
+          type: array
+          items:
+            $ref: '#/components/schemas/Condition'
+        should:
+          type: array
+          items:
+            $ref: '#/components/schemas/Condition'
+
+    Condition:
+      type: object
+      properties:
+        key:
+          type: string
+        match:
+          type: object
+          properties:
+            value:
+              oneOf:
+                - type: string
+                - type: number
+                - type: boolean
+        range:
+          type: object
+          properties:
+            gt:
+              type: number
+            gte:
+              type: number
+            lt:
+              type: number
+            lte:
+              type: number
+
+    SearchResponse:
+      type: object
+      properties:
+        result:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchResult'
+        took_ms:
+          type: number
+
+    SearchResult:
+      type: object
+      properties:
+        id:
+          type: string
+        score:
+          type: number
+          format: float
+        vector:
+          type: array
+          items:
+            type: number
+            format: float
+        payload:
+          type: object
+
+    ScrollRequest:
+      type: object
+      properties:
+        offset:
+          type: string
+        limit:
+          type: integer
+          default: 100
+        filter:
+          $ref: '#/components/schemas/Filter'
+        with_payload:
+          type: boolean
+          default: true
+        with_vector:
+          type: boolean
+          default: false
+
+    ScrollResponse:
+      type: object
+      properties:
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/Point'
+        next_offset:
+          type: string
+
+    Snapshot:
+      type: object
+      properties:
+        id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        size_bytes:
+          type: integer
+        collections:
+          type: array
+          items:
+            type: string
+
+    ClusterStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unavailable]
+        leader:
+          type: string
+        nodes:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              address:
+                type: string
+              state:
+                type: string
+              is_leader:
+                type: boolean
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string

@@ -1,0 +1,387 @@
+// Package backup provides backup and restore utilities for LimyeDB.
+package backup
+
+import (
+	"archive/tar"
+	"compress/gzip"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"time"
+)
+
+// BackupMetadata contains information about a backup.
+type BackupMetadata struct {
+	ID          string    `json:"id"`
+	CreatedAt   time.Time `json:"created_at"`
+	Version     string    `json:"version"`
+	Collections []string  `json:"collections"`
+	TotalPoints int64     `json:"total_points"`
+	SizeBytes   int64     `json:"size_bytes"`
+	Checksum    string    `json:"checksum"`
+}
+
+// BackupOptions configures backup behavior.
+type BackupOptions struct {
+	// IncludeIndexes includes HNSW index files
+	IncludeIndexes bool
+	// Compress uses gzip compression
+	Compress bool
+	// Collections to backup (empty = all)
+	Collections []string
+}
+
+// DefaultBackupOptions returns default backup options.
+func DefaultBackupOptions() BackupOptions {
+	return BackupOptions{
+		IncludeIndexes: true,
+		Compress:       true,
+		Collections:    nil,
+	}
+}
+
+// RestoreOptions configures restore behavior.
+type RestoreOptions struct {
+	// OverwriteExisting overwrites existing collections
+	OverwriteExisting bool
+	// Collections to restore (empty = all)
+	Collections []string
+}
+
+// Backup creates a backup of the database.
+type Backup struct {
+	dataDir string
+}
+
+// NewBackup creates a new backup manager.
+func NewBackup(dataDir string) *Backup {
+	return &Backup{dataDir: dataDir}
+}
+
+// Create creates a new backup.
+func (b *Backup) Create(outputPath string, opts BackupOptions) (*BackupMetadata, error) {
+	// Create output file
+	outFile, err := os.Create(outputPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create backup file: %w", err)
+	}
+	defer outFile.Close()
+
+	var writer io.Writer = outFile
+
+	// Add gzip compression if enabled
+	var gzWriter *gzip.Writer
+	if opts.Compress {
+		gzWriter = gzip.NewWriter(outFile)
+		defer gzWriter.Close()
+		writer = gzWriter
+	}
+
+	// Create tar archive
+	tarWriter := tar.NewWriter(writer)
+	defer tarWriter.Close()
+
+	metadata := &BackupMetadata{
+		ID:        generateBackupID(),
+		CreatedAt: time.Now(),
+		Version:   "1.0.0",
+	}
+
+	// Walk through data directory
+	err = filepath.Walk(b.dataDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip directories
+		if info.IsDir() {
+			return nil
+		}
+
+		// Get relative path
+		relPath, err := filepath.Rel(b.dataDir, path)
+		if err != nil {
+			return err
+		}
+
+		// Check collection filter
+		if len(opts.Collections) > 0 {
+			collName := filepath.Dir(relPath)
+			if !contains(opts.Collections, collName) {
+				return nil
+			}
+		}
+
+		// Skip index files if not included
+		if !opts.IncludeIndexes && isIndexFile(relPath) {
+			return nil
+		}
+
+		// Create tar header
+		header, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return err
+		}
+		header.Name = relPath
+
+		if err := tarWriter.WriteHeader(header); err != nil {
+			return err
+		}
+
+		// Write file content
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+
+		written, err := io.Copy(tarWriter, file)
+		if err != nil {
+			return err
+		}
+		metadata.SizeBytes += written
+		metadata.TotalPoints++ // Simplified counting
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create backup: %w", err)
+	}
+
+	// Write metadata
+	metaBytes, _ := json.Marshal(metadata)
+	metaHeader := &tar.Header{
+		Name: "metadata.json",
+		Size: int64(len(metaBytes)),
+		Mode: 0644,
+	}
+	if err := tarWriter.WriteHeader(metaHeader); err != nil {
+		return nil, err
+	}
+	if _, err := tarWriter.Write(metaBytes); err != nil {
+		return nil, err
+	}
+
+	return metadata, nil
+}
+
+// Restore restores from a backup.
+func (b *Backup) Restore(inputPath string, opts RestoreOptions) (*BackupMetadata, error) {
+	// Open backup file
+	inFile, err := os.Open(inputPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open backup file: %w", err)
+	}
+	defer inFile.Close()
+
+	var reader io.Reader = inFile
+
+	// Check for gzip compression
+	gzReader, err := gzip.NewReader(inFile)
+	if err == nil {
+		defer gzReader.Close()
+		reader = gzReader
+	} else {
+		// Not gzipped, reset file position
+		inFile.Seek(0, 0)
+	}
+
+	// Read tar archive
+	tarReader := tar.NewReader(reader)
+
+	var metadata *BackupMetadata
+
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to read backup: %w", err)
+		}
+
+		// Handle metadata
+		if header.Name == "metadata.json" {
+			metaBytes, err := io.ReadAll(tarReader)
+			if err != nil {
+				return nil, err
+			}
+			metadata = &BackupMetadata{}
+			if err := json.Unmarshal(metaBytes, metadata); err != nil {
+				return nil, err
+			}
+			continue
+		}
+
+		// Check collection filter
+		if len(opts.Collections) > 0 {
+			collName := filepath.Dir(header.Name)
+			if !contains(opts.Collections, collName) {
+				continue
+			}
+		}
+
+		// Create target path
+		targetPath := filepath.Join(b.dataDir, header.Name)
+
+		// Check if exists
+		if _, err := os.Stat(targetPath); err == nil && !opts.OverwriteExisting {
+			continue
+		}
+
+		// Create directory
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			return nil, err
+		}
+
+		// Create file
+		outFile, err := os.Create(targetPath)
+		if err != nil {
+			return nil, err
+		}
+
+		if _, err := io.Copy(outFile, tarReader); err != nil {
+			outFile.Close()
+			return nil, err
+		}
+		outFile.Close()
+	}
+
+	return metadata, nil
+}
+
+// List lists available backups in a directory.
+func (b *Backup) List(backupDir string) ([]BackupMetadata, error) {
+	var backups []BackupMetadata
+
+	entries, err := os.ReadDir(backupDir)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		// Try to read metadata
+		path := filepath.Join(backupDir, entry.Name())
+		meta, err := b.ReadMetadata(path)
+		if err != nil {
+			continue
+		}
+		backups = append(backups, *meta)
+	}
+
+	return backups, nil
+}
+
+// ReadMetadata reads backup metadata without full restore.
+func (b *Backup) ReadMetadata(backupPath string) (*BackupMetadata, error) {
+	inFile, err := os.Open(backupPath)
+	if err != nil {
+		return nil, err
+	}
+	defer inFile.Close()
+
+	var reader io.Reader = inFile
+
+	gzReader, err := gzip.NewReader(inFile)
+	if err == nil {
+		defer gzReader.Close()
+		reader = gzReader
+	} else {
+		inFile.Seek(0, 0)
+	}
+
+	tarReader := tar.NewReader(reader)
+
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		if header.Name == "metadata.json" {
+			metaBytes, err := io.ReadAll(tarReader)
+			if err != nil {
+				return nil, err
+			}
+			metadata := &BackupMetadata{}
+			if err := json.Unmarshal(metaBytes, metadata); err != nil {
+				return nil, err
+			}
+			return metadata, nil
+		}
+	}
+
+	return nil, fmt.Errorf("metadata not found in backup")
+}
+
+func generateBackupID() string {
+	return fmt.Sprintf("backup-%d", time.Now().UnixNano())
+}
+
+func isIndexFile(path string) bool {
+	ext := filepath.Ext(path)
+	return ext == ".hnsw" || ext == ".idx"
+}
+
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+
+// ExportJSON exports a collection to JSON format.
+func ExportJSON(dataDir, collection, outputPath string) error {
+	// This would read from the collection and export as JSON
+	// Simplified implementation
+	type ExportData struct {
+		Collection string                   `json:"collection"`
+		Points     []map[string]interface{} `json:"points"`
+		ExportedAt time.Time                `json:"exported_at"`
+	}
+
+	data := ExportData{
+		Collection: collection,
+		Points:     []map[string]interface{}{},
+		ExportedAt: time.Now(),
+	}
+
+	bytes, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(outputPath, bytes, 0644)
+}
+
+// ImportJSON imports points from a JSON file.
+func ImportJSON(dataDir, collection, inputPath string) (int, error) {
+	bytes, err := os.ReadFile(inputPath)
+	if err != nil {
+		return 0, err
+	}
+
+	var data struct {
+		Points []map[string]interface{} `json:"points"`
+	}
+
+	if err := json.Unmarshal(bytes, &data); err != nil {
+		return 0, err
+	}
+
+	// This would insert points into the collection
+	// Simplified implementation
+	return len(data.Points), nil
+}

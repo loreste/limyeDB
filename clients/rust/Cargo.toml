@@ -1,0 +1,27 @@
+[package]
+name = "limyedb"
+version = "1.0.0"
+edition = "2021"
+description = "Official Rust client for LimyeDB - Enterprise Distributed Vector Database"
+license = "GPL-3.0"
+repository = "https://github.com/loreste/limyeDB"
+documentation = "https://docs.rs/limyedb"
+readme = "README.md"
+keywords = ["vector-database", "ai", "embeddings", "similarity-search", "rag"]
+categories = ["database", "api-bindings"]
+
+[dependencies]
+reqwest = { version = "0.11", features = ["json"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+thiserror = "1.0"
+async-trait = "0.1"
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[features]
+default = ["rustls"]
+rustls = ["reqwest/rustls-tls"]
+native-tls = ["reqwest/native-tls"]
