@@ -18,11 +18,8 @@ func CosineDistanceSIMD(a, b []float32) float32 {
 		return 1.0
 	}
 
-	// Use SIMD for vectors >= 8 elements
-	if hasSIMD && len(a) >= 8 {
-		return cosineDistanceNEON(a, b)
-	}
-
+	// TODO: Debug ARM64 NEON cosine assembly - currently returns NaN
+	// For now, use the scalar implementation which is correct
 	return cosineDistanceScalar(a, b)
 }
 
@@ -32,10 +29,8 @@ func EuclideanDistanceSIMD(a, b []float32) float32 {
 		return 0.0
 	}
 
-	if hasSIMD && len(a) >= 8 {
-		return euclideanDistanceNEON(a, b)
-	}
-
+	// TODO: Debug ARM64 NEON Euclidean assembly - currently returns NaN
+	// For now, use the scalar implementation which is correct
 	return euclideanDistanceScalar(a, b)
 }
 
@@ -45,10 +40,8 @@ func DotProductSIMD(a, b []float32) float32 {
 		return 0.0
 	}
 
-	if hasSIMD && len(a) >= 8 {
-		return dotProductNEON(a, b)
-	}
-
+	// TODO: Debug ARM64 NEON dot product assembly
+	// For now, use the scalar implementation which is correct
 	return dotProductScalar(a, b)
 }
 

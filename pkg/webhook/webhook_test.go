@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -129,11 +130,14 @@ func TestManager_EventFiltering(t *testing.T) {
 }
 
 func TestManager_HMAC(t *testing.T) {
+	var mu sync.Mutex
 	var receivedSignature string
 	var receivedBody []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
 		receivedSignature = r.Header.Get("X-LimyeDB-Signature")
 		receivedBody, _ = io.ReadAll(r.Body)
+		mu.Unlock()
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -162,12 +166,18 @@ func TestManager_HMAC(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Verify signature
+	mu.Lock()
+	body := make([]byte, len(receivedBody))
+	copy(body, receivedBody)
+	sig := receivedSignature
+	mu.Unlock()
+
 	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(receivedBody)
+	mac.Write(body)
 	expectedSig := "sha256=" + hex.EncodeToString(mac.Sum(nil))
 
-	if receivedSignature != expectedSig {
-		t.Errorf("signature mismatch: expected %s, got %s", expectedSig, receivedSignature)
+	if sig != expectedSig {
+		t.Errorf("signature mismatch: expected %s, got %s", expectedSig, sig)
 	}
 }
 
@@ -216,10 +226,13 @@ func TestManager_Retry(t *testing.T) {
 }
 
 func TestManager_Payload(t *testing.T) {
+	var mu sync.Mutex
 	var receivedPayload Event
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
 		json.Unmarshal(body, &receivedPayload)
+		mu.Unlock()
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -248,8 +261,12 @@ func TestManager_Payload(t *testing.T) {
 
 	time.Sleep(200 * time.Millisecond)
 
-	if receivedPayload.Type != EventCollectionCreate {
-		t.Errorf("expected event type %s, got %s", EventCollectionCreate, receivedPayload.Type)
+	mu.Lock()
+	eventType := receivedPayload.Type
+	mu.Unlock()
+
+	if eventType != EventCollectionCreate {
+		t.Errorf("expected event type %s, got %s", EventCollectionCreate, eventType)
 	}
 }
 
@@ -323,12 +340,15 @@ func TestManager_CollectionFilter(t *testing.T) {
 }
 
 func TestManager_EmitHelpers(t *testing.T) {
+	var mu sync.Mutex
 	var receivedEvents []Event
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var event Event
 		body, _ := io.ReadAll(r.Body)
 		json.Unmarshal(body, &event)
+		mu.Lock()
 		receivedEvents = append(receivedEvents, event)
+		mu.Unlock()
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -351,8 +371,12 @@ func TestManager_EmitHelpers(t *testing.T) {
 
 	time.Sleep(300 * time.Millisecond)
 
-	if len(receivedEvents) < 4 {
-		t.Errorf("expected 4 events, got %d", len(receivedEvents))
+	mu.Lock()
+	numEvents := len(receivedEvents)
+	mu.Unlock()
+
+	if numEvents < 4 {
+		t.Errorf("expected 4 events, got %d", numEvents)
 	}
 }
 

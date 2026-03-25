@@ -10,10 +10,11 @@ import (
 
 // SearchParams holds search parameters
 type SearchParams struct {
-	K        int     // Number of results to return
-	Ef       int     // Search quality parameter
-	Radius   float32 // Optional: maximum distance (for range search)
-	Filter   func(id string, payload map[string]interface{}) bool
+	K                    int     // Number of results to return
+	Ef                   int     // Search quality parameter
+	Radius               float32 // Optional: maximum distance (for range search)
+	Filter               func(id string, payload map[string]interface{}) bool
+	EstimatedSelectivity float64 // Optional: estimated fraction of points passing filter (0-1)
 }
 
 // DefaultSearchParams returns default search parameters
@@ -96,6 +97,45 @@ func (h *HNSW) SearchWithFilter(query point.Vector, params *SearchParams) ([]Can
 	return candidates, nil
 }
 
+// calculateAdaptiveEf determines the search ef based on estimated filter selectivity
+// Lower selectivity (more restrictive filter) requires higher ef to find enough candidates
+func calculateAdaptiveEf(ef int, estimatedSelectivity float64) int {
+	if estimatedSelectivity <= 0 || estimatedSelectivity > 1.0 {
+		// Default: assume 50% selectivity
+		estimatedSelectivity = 0.5
+	}
+
+	// Adaptive multiplier based on selectivity
+	// High selectivity (>80%): minimal over-fetch (1.5x)
+	// Medium selectivity (20-80%): moderate over-fetch (2-3x)
+	// Low selectivity (<20%): aggressive over-fetch (3-10x)
+	var multiplier float64
+	switch {
+	case estimatedSelectivity >= 0.8:
+		multiplier = 1.5
+	case estimatedSelectivity >= 0.5:
+		multiplier = 2.0
+	case estimatedSelectivity >= 0.2:
+		multiplier = 3.0
+	case estimatedSelectivity >= 0.1:
+		multiplier = 5.0
+	case estimatedSelectivity >= 0.05:
+		multiplier = 7.0
+	default:
+		multiplier = 10.0
+	}
+
+	adaptiveEf := int(float64(ef) * multiplier)
+
+	// Cap at reasonable maximum to prevent runaway searches
+	maxEf := ef * 15
+	if adaptiveEf > maxEf {
+		adaptiveEf = maxEf
+	}
+
+	return adaptiveEf
+}
+
 // searchLayerWithFilter searches with post-filtering
 func (h *HNSW) searchLayerWithFilter(query point.Vector, entryID uint32, ef int, layer int, params *SearchParams) []Candidate {
 	h.mu.RLock()
@@ -105,8 +145,13 @@ func (h *HNSW) searchLayerWithFilter(query point.Vector, entryID uint32, ef int,
 	defer h.visitedPool.Put(visited)
 	visited.Add(entryID)
 
-	// Use larger ef when filtering since we may reject many candidates
-	searchEf := ef * 3 // Over-fetch for filtering
+	// Adaptive ef based on estimated filter selectivity
+	// Use provided estimate or default to 33% selectivity (3x multiplier)
+	selectivity := params.EstimatedSelectivity
+	if selectivity <= 0 {
+		selectivity = 0.33
+	}
+	searchEf := calculateAdaptiveEf(ef, selectivity)
 
 	candidates := &CandidateHeap{}
 	heap.Init(candidates)

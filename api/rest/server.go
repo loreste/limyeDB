@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -21,6 +22,7 @@ import (
 type Server struct {
 	router      *gin.Engine
 	httpServer  *http.Server
+	httpMu      sync.RWMutex // Protects httpServer access
 	config      *config.ServerConfig
 	collections *collection.Manager
 	snapshots   *snapshot.Manager
@@ -207,26 +209,34 @@ func (s *Server) setupMiddleware() {
 
 // Start starts the HTTP server
 func (s *Server) Start() error {
-	s.httpServer = &http.Server{
+	server := &http.Server{
 		Addr:         s.opts.Addr,
 		Handler:      s.router,
 		ReadTimeout:  s.config.ReadTimeout,
 		WriteTimeout: s.config.WriteTimeout,
 	}
 
+	s.httpMu.Lock()
+	s.httpServer = server
+	s.httpMu.Unlock()
+
 	if s.opts != nil && s.opts.TLSCert != "" && s.opts.TLSKey != "" {
-		return s.httpServer.ListenAndServeTLS(s.opts.TLSCert, s.opts.TLSKey)
+		return server.ListenAndServeTLS(s.opts.TLSCert, s.opts.TLSKey)
 	}
 
-	return s.httpServer.ListenAndServe()
+	return server.ListenAndServe()
 }
 
 // Stop gracefully stops the HTTP server
 func (s *Server) Stop(ctx context.Context) error {
-	if s.httpServer == nil {
+	s.httpMu.RLock()
+	server := s.httpServer
+	s.httpMu.RUnlock()
+
+	if server == nil {
 		return nil
 	}
-	return s.httpServer.Shutdown(ctx)
+	return server.Shutdown(ctx)
 }
 
 // checkPermission verifies if the current request context has adequate JWT roles.
