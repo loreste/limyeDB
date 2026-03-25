@@ -131,6 +131,9 @@ func (s *Server) setupRoutes() {
 	// Query Explain/Planning API
 	s.router.POST("/collections/:name/explain", s.requirePermission("read"), s.handleExplain)
 
+	// CDC Webhooks API
+	s.router.POST("/collections/:name/webhooks", s.requirePermission("admin"), s.handleCreateWebhook)
+
 	// Payload Index Configuration API
 	s.router.POST("/collections/:name/payload-indexes", s.requirePermission("admin"), s.handleCreatePayloadIndex)
 	s.router.GET("/collections/:name/payload-indexes", s.requirePermission("read"), s.handleListPayloadIndexes)

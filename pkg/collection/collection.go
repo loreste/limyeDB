@@ -15,6 +15,7 @@ import (
 	"github.com/limyedb/limyedb/pkg/index/hnsw"
 	"github.com/limyedb/limyedb/pkg/index/payload"
 	"github.com/limyedb/limyedb/pkg/index/sparse"
+	"github.com/limyedb/limyedb/pkg/cdc"
 	"github.com/limyedb/limyedb/pkg/point"
 	"github.com/limyedb/limyedb/pkg/quantization"
 	"github.com/limyedb/limyedb/pkg/storage/mmap"
@@ -680,6 +681,13 @@ func (c *Collection) Upsert(p *point.Point) error {
 	nodeID, _ := c.getNodeID(p.ID)
 	c.payloadIndex.IndexPoint(nodeID, p.Payload)
 
+	cdc.GetDispatcher().Publish(cdc.Event{
+		Collection: c.config.Name,
+		Type:       cdc.EventInsert,
+		PointID:    p.ID,
+		Timestamp:  time.Now().UnixMilli(),
+	})
+
 	c.updatedAt.Store(time.Now())
 	return nil
 }
@@ -703,6 +711,13 @@ func (c *Collection) Delete(id string) error {
 	if nodeID, ok := c.getNodeID(id); ok {
 		c.sparseIdx.Remove(nodeID)
 	}
+
+	cdc.GetDispatcher().Publish(cdc.Event{
+		Collection: c.config.Name,
+		Type:       cdc.EventDelete,
+		PointID:    id,
+		Timestamp:  time.Now().UnixMilli(),
+	})
 
 	c.updatedAt.Store(time.Now())
 	return nil

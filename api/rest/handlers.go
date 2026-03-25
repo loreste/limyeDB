@@ -14,6 +14,7 @@ import (
 	"github.com/limyedb/limyedb/pkg/config"
 	"github.com/limyedb/limyedb/pkg/embedder"
 	"github.com/limyedb/limyedb/pkg/index/payload"
+	"github.com/limyedb/limyedb/pkg/cdc"
 	"github.com/limyedb/limyedb/pkg/point"
 	"github.com/limyedb/limyedb/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
@@ -1631,6 +1632,26 @@ func (s *Server) handleAutoEmbed(c *gin.Context) {
 		"success":   failed == 0,
 		"succeeded": succeeded,
 		"failed":    failed,
+	})
+}
+
+// ============================================================================
+// Change Data Capture API
+// ============================================================================
+
+func (s *Server) handleCreateWebhook(c *gin.Context) {
+	var req cdc.WebhookSubscription
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	collectionName := c.Param("name")
+	cdc.GetDispatcher().Subscribe(collectionName, req)
+
+	respondSuccess(c, gin.H{
+		"message":    "webhook subscribed successfully",
+		"collection": collectionName,
 	})
 }
 

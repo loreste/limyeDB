@@ -9,8 +9,11 @@ import (
 	"strings"
 	"sync"
 
+	"context"
+
 	"github.com/limyedb/limyedb/pkg/config"
 	"github.com/limyedb/limyedb/pkg/point"
+	"github.com/limyedb/limyedb/pkg/storage/s3"
 	"github.com/limyedb/limyedb/pkg/storage/snapshot"
 )
 
@@ -469,3 +472,36 @@ func (m *Manager) UpdateConfig(name string, updates map[string]interface{}) erro
 const (
 	ErrMaxCollections CollectionError = "maximum number of collections reached"
 )
+
+// ArchiveCollection safely flushes local NVMe layers unbinding nodes and natively streams directly to S3
+func (m *Manager) ArchiveCollection(ctx context.Context, name string, s3Store *s3.Storage) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	_, exists := m.collections[name]
+	if !exists {
+		return ErrCollectionNotFound
+	}
+
+	collDir := filepath.Join(m.dataDir, name)
+
+	err := filepath.Walk(collDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			relPath, _ := filepath.Rel(m.dataDir, path)
+			if err := s3Store.UploadFile(ctx, path, fmt.Sprintf("limyedb/archive/%s", relPath)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("serverless stream bounds failed cleanly handling AWS: %w", err)
+	}
+
+	delete(m.collections, name)
+	return os.RemoveAll(collDir)
+}

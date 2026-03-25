@@ -123,16 +123,18 @@ func TestBinaryQuantizer(t *testing.T) {
 }
 
 func TestProductQuantizer(t *testing.T) {
-	dim := 128
-	segments := 8
+	dimension := 128
+	segments := 16
 	centroids := 256
 
-	q := NewProductQuantizer(dim, segments, centroids)
-
+	q := NewProductQuantizer(dimension, segments, centroids)
+	if q == nil {
+		t.Fatalf("failed to create quantizer")
+	}
 	// Generate training vectors
 	vectors := make([]point.Vector, 1000)
 	for i := range vectors {
-		vectors[i] = make(point.Vector, dim)
+		vectors[i] = make(point.Vector, dimension)
 		for j := range vectors[i] {
 			vectors[i][j] = rand.Float32()*2 - 1
 		}
@@ -160,12 +162,12 @@ func TestProductQuantizer(t *testing.T) {
 		t.Fatalf("Decode failed: %v", err)
 	}
 
-	if len(decoded) != dim {
-		t.Errorf("Expected dimension %d, got %d", dim, len(decoded))
+	if len(decoded) != dimension {
+		t.Errorf("Expected dimension %d, got %d", dimension, len(decoded))
 	}
 
 	// Compression ratio should be dimension*4 / segments
-	expectedRatio := float32(dim*4) / float32(segments)
+	expectedRatio := float32(dimension*4) / float32(segments)
 	if math.Abs(float64(q.CompressionRatio()-expectedRatio)) > 0.1 {
 		t.Errorf("Expected compression ratio ~%f, got %f", expectedRatio, q.CompressionRatio())
 	}
@@ -270,13 +272,16 @@ func BenchmarkBinaryDistance(b *testing.B) {
 	}
 }
 
-func BenchmarkPQBatchDistance(b *testing.B) {
-	dim := 128
-	q := NewProductQuantizer(dim, 8, 256)
-
+func BenchmarkProductQuantizer(b *testing.B) {
+	dimension := 128
+	
+	q := NewProductQuantizer(dimension, 16, 256)
+	if q == nil {
+		b.Fatalf("failed to create quantizer")
+	}
 	vectors := make([]point.Vector, 1000)
 	for i := range vectors {
-		vectors[i] = make(point.Vector, dim)
+		vectors[i] = make(point.Vector, dimension)
 		for j := range vectors[i] {
 			vectors[i][j] = rand.Float32()*2 - 1
 		}
