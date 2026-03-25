@@ -46,9 +46,9 @@ func startNode(t *testing.T, id, restPort, raftPort, dataDir string, bootstrap b
 	}
 
 	cmd := exec.Command("/tmp/limyedb_raft_test_bin", args...)
-	// Decouple stdout/stderr to prevent go test I/O wait timeout panics on Linux
-	cmd.Stdout = nil
-	cmd.Stderr = nil
+	// Temporarily capture stdout/stderr to diagnose Node crashes during execution tracking
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("Failed to start node %s: %v", id, err)
