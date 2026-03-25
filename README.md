@@ -44,14 +44,20 @@ LimyeDB distinguishes itself by natively supporting **Hybrid Search**—combinin
 | **Distributed Clustering** | Native Raft consensus and SWIM gossip protocol for masterless high availability and global persistence |
 | **Multi-Tenancy & RBAC** | Strict granular isolation schemas featuring dynamic JSON Web Token (JWT) Authorization across REST and gRPC pipelines |
 | **Vector SQL Interface** | Powerful and familiar declarative SQL-like query interfaces explicitly controlling embedded semantic properties |
+| **Product & Binary Quantization** | Sub-space clustering and Hamming distance arrays reducing RAM bloat mathematically by over 32x natively |
+| **Serverless S3 Tiering** | Offload memory-mapped clustered vectors intelligently separating persistent storage from internal compute |
+| **CDC Mutation Webhooks** | Dispatcher pipeline publishing raw Insert/Delete events cleanly across decoupled HTTP REST topologies |
+| **DiskANN Vamana Topologies** | Establish highly-connected pure SSD single-layer routing graphs dropping HNSW hierarchical scaling limits perfectly |
 | **Event-Driven Mutators** | Live WebSocket data-streams reacting to vector insertion and clustering algorithms dynamically |
 | **Real-Time Auto-Tuning** | Adapts index parameters dynamically ensuring top 99P recall guarantees continuously in production |
 
 ### Technical Highlights
 
-- **Zero-Allocation HNSW Engine:** Eliminates GC pauses with raw memory-mapped (mmap) `[]byte` NVMe bypass mechanisms
+- **Zero-Allocation HNSW Engine & DiskANN:** Eliminates GC pauses with raw memory-mapped NVMe bypass mechanisms and pure multi-terabyte SSD graphs natively handling billions of items.
 - **Advanced AST Payload Filtering:** Execute complex JSON constraints securely backed natively by embedded SQLite B-Tree metadata mappings.
-- **Enterprise Security:** JWT Bearer tokens alongside mTLS verification protocols for deep cross-cluster defense
+- **Generative Quantization Protocols:** Compresses multi-modal vector inputs structurally utilizing Subspace Product clustering and 1-bit BQ.
+- **Enterprise Security:** JWT Bearer tokens alongside mTLS verification protocols for deep cross-cluster defense.
+- **Serverless AWS SDK Integration:** Flush compute layers cleanly into Cold Storage AWS Object architectures completely asynchronously.
 - **Prometheus Metrics:** Native `/metrics` endpoint for monitoring
 - **OpenTelemetry Tracing:** Distributed tracing support
 
