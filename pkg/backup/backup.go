@@ -191,7 +191,9 @@ func (b *Backup) Restore(inputPath string, opts RestoreOptions) (*BackupMetadata
 		reader = gzReader
 	} else {
 		// Not gzipped, reset file position
-		inFile.Seek(0, 0)
+		if _, err := inFile.Seek(0, 0); err != nil {
+			return nil, fmt.Errorf("failed to reset file position: %w", err)
+		}
 	}
 
 	// Read tar archive
@@ -258,10 +260,12 @@ func (b *Backup) Restore(inputPath string, opts RestoreOptions) (*BackupMetadata
 
 		// Use LimitReader to prevent decompression bombs (G110)
 		if _, err := io.Copy(outFile, io.LimitReader(tarReader, maxFileSize)); err != nil {
-			outFile.Close()
+			_ = outFile.Close() // Best effort close on copy error
 			return nil, err
 		}
-		outFile.Close()
+		if err := outFile.Close(); err != nil {
+			return nil, fmt.Errorf("failed to close restored file: %w", err)
+		}
 	}
 
 	return metadata, nil
@@ -308,7 +312,9 @@ func (b *Backup) ReadMetadata(backupPath string) (*BackupMetadata, error) {
 		defer gzReader.Close()
 		reader = gzReader
 	} else {
-		inFile.Seek(0, 0)
+		if _, err := inFile.Seek(0, 0); err != nil {
+			return nil, fmt.Errorf("failed to reset file position: %w", err)
+		}
 	}
 
 	tarReader := tar.NewReader(reader)

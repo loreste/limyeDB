@@ -1,0 +1,2 @@
+go test fuzz v1
+string("SELECT 0 FROM 0 WHERE 0000000000000= \"")

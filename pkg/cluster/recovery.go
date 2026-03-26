@@ -316,7 +316,7 @@ func (rm *RecoveryManager) requestDataStream(ctx context.Context, node *Node, sh
 		Type:    MsgTypeStreamData,
 		Payload: reqData,
 	}); err != nil {
-		stream.Close()
+		_ = stream.Close() // Best effort close on send error
 		return nil, err
 	}
 

@@ -163,7 +163,7 @@ func cmdImport(client *Client, args []string) error {
 		if err != nil {
 			return fmt.Errorf("failed to import batch: %w", err)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close() // Error intentionally ignored for HTTP response body
 
 		if resp.StatusCode >= 400 {
 			return fmt.Errorf("server returned status %d", resp.StatusCode)
@@ -210,10 +210,10 @@ func cmdExport(client *Client, args []string) error {
 			NextOffset string                   `json:"next_offset"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			resp.Body.Close()
+			_ = resp.Body.Close() // Error intentionally ignored for HTTP response body
 			return fmt.Errorf("failed to decode response: %w", err)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close() // Error intentionally ignored for HTTP response body
 
 		allPoints = append(allPoints, result.Points...)
 		fmt.Printf("\rExported %d points...", len(allPoints))
@@ -275,7 +275,9 @@ func cmdCreate(client *Client, args []string) error {
 
 	name := args[0]
 	var dimension int
-	fmt.Sscanf(args[1], "%d", &dimension)
+	if _, err := fmt.Sscanf(args[1], "%d", &dimension); err != nil {
+		return fmt.Errorf("invalid dimension: %w", err)
+	}
 
 	payload := map[string]interface{}{
 		"name":      name,

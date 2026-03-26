@@ -176,10 +176,12 @@ func (f *FSM) Restore(rc io.ReadCloser) error {
 	defer os.Remove(filepath.Join(f.snapMgr.Dir(), tempID+".snap.meta"))
 
 	if _, err := io.Copy(file, rc); err != nil {
-		file.Close()
+		_ = file.Close() // Best effort close on copy error
 		return err
 	}
-	file.Close()
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("failed to close snapshot file: %w", err)
+	}
 
 	// Rehydrate LimyeDB structures securely
 	if err := f.manager.RestoreSnapshot(f.snapMgr, tempID); err != nil {
@@ -197,14 +199,14 @@ type fsmSnapshot struct {
 func (s *fsmSnapshot) Persist(sink raft.SnapshotSink) error {
 	file, err := os.Open(s.snap.Path)
 	if err != nil {
-		sink.Cancel()
+		_ = sink.Cancel() // Best effort cancel on open error
 		return err
 	}
 	defer file.Close()
 
 	// Stream internal representation cleanly out to the underlying TCP Raft clusters
 	if _, err := io.Copy(sink, file); err != nil {
-		sink.Cancel()
+		_ = sink.Cancel() // Best effort cancel on copy error
 		return err
 	}
 

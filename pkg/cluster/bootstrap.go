@@ -197,11 +197,11 @@ func (b *Bootstrapper) Start(ctx context.Context) error {
 func (b *Bootstrapper) Stop() error {
 	close(b.stopCh)
 
-	b.saveState()
-	b.gossiper.Leave()
-	b.gossiper.Stop()
-	b.transport.Stop()
-	b.coordinator.Stop()
+	_ = b.saveState()         // Best effort during shutdown
+	_ = b.gossiper.Leave()    // Best effort during shutdown
+	_ = b.gossiper.Stop()     // Best effort during shutdown
+	_ = b.transport.Stop()    // Best effort during shutdown
+	_ = b.coordinator.Stop()  // Best effort during shutdown
 
 	return nil
 }

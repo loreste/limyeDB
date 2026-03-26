@@ -200,24 +200,24 @@ func (t *HTTPTransport) Stream(ctx context.Context, nodeAddr string) (Stream, er
 
 	req, err := http.NewRequestWithContext(ctx, "GET", "/cluster/stream", nil)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close() // Best effort close on error
 		return nil, err
 	}
 	req.Header.Set("Connection", "Upgrade")
 	req.Header.Set("Upgrade", "limyedb-stream")
 
 	if err := req.Write(conn); err != nil {
-		conn.Close()
+		_ = conn.Close() // Best effort close on error
 		return nil, err
 	}
 
 	resp, err := http.ReadResponse(bufio.NewReader(conn), req)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close() // Best effort close on error
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusSwitchingProtocols {
-		conn.Close()
+		_ = conn.Close() // Best effort close on error
 		return nil, fmt.Errorf("unexpected streaming status: %d", resp.StatusCode)
 	}
 
@@ -268,7 +268,7 @@ func (t *HTTPTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 
 	responseData, _ := json.Marshal(response)
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(responseData)
+	_, _ = w.Write(responseData) // Error intentionally ignored for HTTP response writer
 }
 
 func (t *HTTPTransport) handleStream(w http.ResponseWriter, r *http.Request) {
@@ -295,7 +295,7 @@ func (t *HTTPTransport) handleStream(w http.ResponseWriter, r *http.Request) {
 		"Upgrade: limyedb-stream\r\n\r\n"
 	
 	if _, err := conn.Write([]byte(response)); err != nil {
-		conn.Close()
+		_ = conn.Close() // Best effort close on write error
 		return
 	}
 
@@ -314,7 +314,7 @@ func (t *HTTPTransport) handleStream(w http.ResponseWriter, r *http.Request) {
 			t.mu.RUnlock()
 			if handler != nil {
 				if response := handler(&msg); response != nil {
-					encoder.Encode(response)
+					_ = encoder.Encode(response) // Best effort encode in streaming loop
 				}
 			}
 		}
@@ -387,7 +387,7 @@ func (t *TCPTransport) handleConn(conn net.Conn) {
 		if handler != nil {
 			response := handler(&msg)
 			if response != nil {
-				encoder.Encode(response)
+				_ = encoder.Encode(response) // Best effort encode in streaming loop
 			}
 		}
 	}
@@ -397,12 +397,12 @@ func (t *TCPTransport) Stop() error {
 	close(t.stopCh)
 
 	if t.listener != nil {
-		t.listener.Close()
+		_ = t.listener.Close() // Best effort close during shutdown
 	}
 
 	t.mu.Lock()
 	for _, conn := range t.conns {
-		conn.Close()
+		_ = conn.Close() // Best effort close during shutdown
 	}
 	t.conns = make(map[string]net.Conn)
 	t.mu.Unlock()
