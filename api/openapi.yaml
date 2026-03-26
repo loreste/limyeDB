@@ -1,0 +1,1284 @@
+openapi: 3.1.0
+info:
+  title: LimyeDB Vector Database API
+  description: |
+    LimyeDB is a high-performance vector database for AI applications.
+    This API provides endpoints for managing collections, points (vectors),
+    and performing similarity searches.
+  version: 1.0.0
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+  contact:
+    name: LimyeDB Support
+    url: https://github.com/limyedb/limyedb
+
+servers:
+  - url: http://localhost:6333
+    description: Local development server
+  - url: https://api.limyedb.io
+    description: Production server
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Collections
+    description: Collection management operations
+  - name: Points
+    description: Point (vector) CRUD operations
+  - name: Search
+    description: Vector similarity search operations
+  - name: Snapshots
+    description: Snapshot management operations
+  - name: Aliases
+    description: Collection alias management
+  - name: Cluster
+    description: Cluster management operations
+  - name: CDC
+    description: Change Data Capture webhook subscriptions
+
+security:
+  - BearerAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Returns the health status of the server
+      tags: [Health]
+      security: []
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  version:
+                    type: string
+                    example: 1.0.0
+
+  /readiness:
+    get:
+      summary: Readiness check
+      description: Returns whether the server is ready to accept requests
+      tags: [Health]
+      security: []
+      responses:
+        '200':
+          description: Server is ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ready:
+                    type: boolean
+                    example: true
+
+  /collections:
+    get:
+      summary: List all collections
+      description: Returns a list of all collections with their metadata
+      tags: [Collections]
+      responses:
+        '200':
+          description: List of collections
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  collections:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CollectionInfo'
+    post:
+      summary: Create a new collection
+      description: Creates a new vector collection with the specified configuration
+      tags: [Collections]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCollectionRequest'
+      responses:
+        '201':
+          description: Collection created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Collection already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /collections/{name}:
+    parameters:
+      - $ref: '#/components/parameters/CollectionName'
+    get:
+      summary: Get collection info
+      description: Returns detailed information about a specific collection
+      tags: [Collections]
+      responses:
+        '200':
+          description: Collection information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Update collection configuration
+      description: Updates the configuration of an existing collection
+      tags: [Collections]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Collection updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      summary: Delete a collection
+      description: Permanently deletes a collection and all its data
+      tags: [Collections]
+      responses:
+        '200':
+          description: Collection deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /collections/v2:
+    post:
+      summary: Create collection with named vectors
+      description: Creates a collection supporting multiple named vector spaces
+      tags: [Collections]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCollectionV2Request'
+      responses:
+        '201':
+          description: Collection created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Collection already exists
+
+  /collections/{name}/points:
+    parameters:
+      - $ref: '#/components/parameters/CollectionName'
+    put:
+      summary: Upsert points
+      description: Insert or update points (vectors) in a collection
+      tags: [Points]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertPointsRequest'
+      responses:
+        '200':
+          description: Points upserted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      succeeded:
+                        type: integer
+                      failed:
+                        type: integer
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /collections/{name}/points/{id}:
+    parameters:
+      - $ref: '#/components/parameters/CollectionName'
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Point ID
+    get:
+      summary: Get a point
+      description: Retrieves a specific point by ID
+      tags: [Points]
+      responses:
+        '200':
+          description: Point data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      summary: Delete a point
+      description: Deletes a specific point by ID
+      tags: [Points]
+      responses:
+        '200':
+          description: Point deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /collections/{name}/points/v2:
+    parameters:
+      - $ref: '#/components/parameters/CollectionName'
+    put:
+      summary: Upsert points with named vectors
+      description: Insert or update points supporting named vectors and sparse vectors
+      tags: [Points]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertPointsV2Request'
+      responses:
+        '200':
+          description: Points upserted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /collections/{name}/points/batch:
+    parameters:
+      - $ref: '#/components/parameters/CollectionName'
+    post:
+      summary: Batch upsert points
+      description: Insert or update multiple points in a single request
+      tags: [Points]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertPointsRequest'
+      responses:
+        '200':
+          description: Points upserted
+
+  /collections/{name}/points/delete:
+    parameters:
+      - $ref: '#/components/parameters/CollectionName'
+    post:
+      summary: Batch delete points
+      description: Delete multiple points by their IDs
+      tags: [Points]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchDeleteRequest'
+      responses:
+        '200':
+          description: Points deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      deleted:
+                        type: integer
+                      total:
+                        type: integer
+
+  /collections/{name}/points/scroll:
+    parameters:
+      - $ref: '#/components/parameters/CollectionName'
+    post:
+      summary: Scroll through points
+      description: Paginate through all points in a collection
+      tags: [Points]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScrollRequest'
+      responses:
+        '200':
+          description: Scroll results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  points:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PointOutput'
+                  next_offset:
+                    type: string
+                  took_ms:
+                    type: number
+
+  /collections/{name}/search:
+    parameters:
+      - $ref: '#/components/parameters/CollectionName'
+    post:
+      summary: Vector similarity search
+      description: Search for similar vectors using ANN (Approximate Nearest Neighbor)
+      tags: [Search]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /collections/{name}/search/v2:
+    parameters:
+      - $ref: '#/components/parameters/CollectionName'
+    post:
+      summary: Search with named vectors
+      description: Search supporting named vectors and sparse vectors
+      tags: [Search]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchV2Request'
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+
+  /collections/{name}/search/groups:
+    parameters:
+      - $ref: '#/components/parameters/CollectionName'
+    post:
+      summary: Grouped search
+      description: Search with results grouped by a payload field
+      tags: [Search]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupSearchRequest'
+      responses:
+        '200':
+          description: Grouped search results
+
+  /collections/{name}/recommend:
+    parameters:
+      - $ref: '#/components/parameters/CollectionName'
+    post:
+      summary: Recommend similar points
+      description: Get recommendations based on positive example points
+      tags: [Search]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecommendRequest'
+      responses:
+        '200':
+          description: Recommendation results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+
+  /collections/{name}/recommend/v2:
+    parameters:
+      - $ref: '#/components/parameters/CollectionName'
+    post:
+      summary: Recommend with positive/negative examples
+      description: Get recommendations using both positive and negative examples
+      tags: [Search]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecommendV2Request'
+      responses:
+        '200':
+          description: Recommendation results
+
+  /collections/{name}/discover:
+    parameters:
+      - $ref: '#/components/parameters/CollectionName'
+    post:
+      summary: Discovery search
+      description: Context-based discovery search with positive/negative examples
+      tags: [Search]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiscoverRequest'
+      responses:
+        '200':
+          description: Discovery results
+
+  /collections/{name}/facet:
+    parameters:
+      - $ref: '#/components/parameters/CollectionName'
+    post:
+      summary: Faceted search
+      description: Get facet counts for a payload field
+      tags: [Search]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FacetRequest'
+      responses:
+        '200':
+          description: Facet results
+
+  /collections/{name}/facets:
+    parameters:
+      - $ref: '#/components/parameters/CollectionName'
+    post:
+      summary: Multi-faceted search
+      description: Get facet counts for multiple fields at once
+      tags: [Search]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MultiFacetRequest'
+      responses:
+        '200':
+          description: Multi-facet results
+
+  /collections/{name}/explain:
+    parameters:
+      - $ref: '#/components/parameters/CollectionName'
+    post:
+      summary: Explain query plan
+      description: Get the query execution plan for analysis
+      tags: [Search]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExplainRequest'
+      responses:
+        '200':
+          description: Query plan
+
+  /collections/{name}/auto-embed:
+    parameters:
+      - $ref: '#/components/parameters/CollectionName'
+    post:
+      summary: Auto-embed and upsert
+      description: Automatically generate embeddings from text fields and upsert points
+      tags: [Points]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutoEmbedRequest'
+      responses:
+        '200':
+          description: Points embedded and upserted
+
+  /collections/{name}/payload-indexes:
+    parameters:
+      - $ref: '#/components/parameters/CollectionName'
+    get:
+      summary: List payload indexes
+      description: List all payload indexes for a collection
+      tags: [Collections]
+      responses:
+        '200':
+          description: List of indexes
+    post:
+      summary: Create payload index
+      description: Create an index on a payload field for faster filtering
+      tags: [Collections]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePayloadIndexRequest'
+      responses:
+        '201':
+          description: Index created
+
+  /collections/{name}/payload-indexes/{field}:
+    parameters:
+      - $ref: '#/components/parameters/CollectionName'
+      - name: field
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      summary: Delete payload index
+      description: Delete an index on a payload field
+      tags: [Collections]
+      responses:
+        '200':
+          description: Index deleted
+
+  /collections/{name}/webhooks:
+    parameters:
+      - $ref: '#/components/parameters/CollectionName'
+    post:
+      summary: Subscribe to CDC webhooks
+      description: Subscribe to change data capture events for a collection
+      tags: [CDC]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookSubscription'
+      responses:
+        '200':
+          description: Webhook subscribed
+
+  /aliases:
+    get:
+      summary: List all aliases
+      description: Returns all collection aliases
+      tags: [Aliases]
+      responses:
+        '200':
+          description: List of aliases
+    post:
+      summary: Create an alias
+      description: Create a new alias pointing to a collection
+      tags: [Aliases]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAliasRequest'
+      responses:
+        '201':
+          description: Alias created
+
+  /aliases/{alias}:
+    parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      summary: Switch alias target
+      description: Point an existing alias to a different collection
+      tags: [Aliases]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [collection_name]
+              properties:
+                collection_name:
+                  type: string
+      responses:
+        '200':
+          description: Alias switched
+    delete:
+      summary: Delete an alias
+      description: Delete a collection alias
+      tags: [Aliases]
+      responses:
+        '200':
+          description: Alias deleted
+
+  /snapshots:
+    get:
+      summary: List snapshots
+      description: List all available snapshots
+      tags: [Snapshots]
+      responses:
+        '200':
+          description: List of snapshots
+    post:
+      summary: Create a snapshot
+      description: Create a new backup snapshot of all collections
+      tags: [Snapshots]
+      responses:
+        '201':
+          description: Snapshot created
+
+  /snapshots/{id}/restore:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: Restore from snapshot
+      description: Restore all collections from a snapshot
+      tags: [Snapshots]
+      responses:
+        '200':
+          description: Snapshot restored
+
+  /snapshots/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      summary: Delete a snapshot
+      description: Permanently delete a snapshot
+      tags: [Snapshots]
+      responses:
+        '200':
+          description: Snapshot deleted
+
+  /cluster/join:
+    post:
+      summary: Join cluster
+      description: Add a node to the Raft cluster
+      tags: [Cluster]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinClusterRequest'
+      responses:
+        '200':
+          description: Node joined
+
+  /stream:
+    get:
+      summary: WebSocket stream
+      description: Connect to real-time event stream via WebSocket
+      tags: [CDC]
+      responses:
+        '101':
+          description: Switching protocols to WebSocket
+
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      description: Returns Prometheus-formatted metrics
+      tags: [Health]
+      responses:
+        '200':
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token with collection-level permissions
+
+  parameters:
+    CollectionName:
+      name: name
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: ^[a-zA-Z0-9][a-zA-Z0-9_-]*$
+      description: Collection name
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Forbidden - insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        details:
+          type: string
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+
+    CollectionInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        dimension:
+          type: integer
+        metric:
+          type: string
+          enum: [cosine, euclidean, dot, manhattan]
+        point_count:
+          type: integer
+        on_disk:
+          type: boolean
+
+    CreateCollectionRequest:
+      type: object
+      required: [name, dimension]
+      properties:
+        name:
+          type: string
+          pattern: ^[a-zA-Z0-9][a-zA-Z0-9_-]*$
+        dimension:
+          type: integer
+          minimum: 1
+          maximum: 65536
+        metric:
+          type: string
+          enum: [cosine, euclidean, dot, manhattan]
+          default: cosine
+        on_disk:
+          type: boolean
+          default: false
+        hnsw:
+          $ref: '#/components/schemas/HNSWParams'
+
+    CreateCollectionV2Request:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        vectors:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/VectorConfig'
+        on_disk:
+          type: boolean
+
+    VectorConfig:
+      type: object
+      required: [dimension]
+      properties:
+        dimension:
+          type: integer
+          minimum: 1
+          maximum: 65536
+        metric:
+          type: string
+          enum: [cosine, euclidean, dot, manhattan]
+        hnsw:
+          $ref: '#/components/schemas/HNSWParams'
+
+    HNSWParams:
+      type: object
+      properties:
+        m:
+          type: integer
+          description: Number of bi-directional links per element
+          default: 16
+        ef_construction:
+          type: integer
+          description: Size of dynamic candidate list during construction
+          default: 200
+        ef_search:
+          type: integer
+          description: Size of dynamic candidate list during search
+          default: 100
+
+    PointInput:
+      type: object
+      required: [id, vector]
+      properties:
+        id:
+          type: string
+        vector:
+          type: array
+          items:
+            type: number
+            format: float
+        payload:
+          type: object
+          additionalProperties: true
+
+    PointV2Input:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+        vector:
+          type: array
+          items:
+            type: number
+            format: float
+        vectors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: number
+              format: float
+        payload:
+          type: object
+          additionalProperties: true
+        sparse:
+          $ref: '#/components/schemas/SparseVector'
+
+    SparseVector:
+      type: object
+      properties:
+        indices:
+          type: array
+          items:
+            type: integer
+        values:
+          type: array
+          items:
+            type: number
+            format: float
+
+    PointOutput:
+      type: object
+      properties:
+        id:
+          type: string
+        score:
+          type: number
+          format: float
+        vector:
+          type: array
+          items:
+            type: number
+            format: float
+        payload:
+          type: object
+
+    UpsertPointsRequest:
+      type: object
+      required: [points]
+      properties:
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/PointInput'
+
+    UpsertPointsV2Request:
+      type: object
+      required: [points]
+      properties:
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/PointV2Input'
+
+    BatchDeleteRequest:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          items:
+            type: string
+
+    ScrollRequest:
+      type: object
+      properties:
+        offset:
+          type: string
+        limit:
+          type: integer
+          default: 10
+        filter:
+          $ref: '#/components/schemas/Filter'
+        with_vector:
+          type: boolean
+        with_payload:
+          type: boolean
+
+    SearchRequest:
+      type: object
+      required: [vector]
+      properties:
+        vector:
+          type: array
+          items:
+            type: number
+            format: float
+        limit:
+          type: integer
+          default: 10
+        offset:
+          type: integer
+        ef:
+          type: integer
+          description: HNSW ef parameter for this search
+        filter:
+          $ref: '#/components/schemas/Filter'
+        with_vector:
+          type: boolean
+        with_payload:
+          type: boolean
+
+    SearchV2Request:
+      type: object
+      required: [vector]
+      properties:
+        vector:
+          type: array
+          items:
+            type: number
+            format: float
+        vector_name:
+          type: string
+        limit:
+          type: integer
+        ef:
+          type: integer
+        filter:
+          $ref: '#/components/schemas/Filter'
+        with_vector:
+          type: boolean
+        with_payload:
+          type: boolean
+        sparse_vector:
+          $ref: '#/components/schemas/SparseVector'
+
+    SearchResponse:
+      type: object
+      properties:
+        result:
+          type: array
+          items:
+            $ref: '#/components/schemas/PointOutput'
+        took_ms:
+          type: number
+
+    RecommendRequest:
+      type: object
+      required: [positive]
+      properties:
+        positive:
+          type: array
+          items:
+            type: string
+        negative:
+          type: array
+          items:
+            type: string
+        limit:
+          type: integer
+          default: 10
+
+    RecommendV2Request:
+      type: object
+      required: [positive]
+      properties:
+        positive:
+          type: array
+          items:
+            type: string
+        negative:
+          type: array
+          items:
+            type: string
+        limit:
+          type: integer
+        ef:
+          type: integer
+        filter:
+          $ref: '#/components/schemas/Filter'
+        vector_name:
+          type: string
+        with_vector:
+          type: boolean
+        with_payload:
+          type: boolean
+
+    DiscoverRequest:
+      type: object
+      properties:
+        target:
+          type: array
+          items:
+            type: number
+            format: float
+        context:
+          type: object
+          properties:
+            positive:
+              type: array
+              items:
+                $ref: '#/components/schemas/ContextExample'
+            negative:
+              type: array
+              items:
+                $ref: '#/components/schemas/ContextExample'
+        limit:
+          type: integer
+        ef:
+          type: integer
+        filter:
+          $ref: '#/components/schemas/Filter'
+        vector_name:
+          type: string
+        with_vector:
+          type: boolean
+        with_payload:
+          type: boolean
+
+    ContextExample:
+      type: object
+      properties:
+        id:
+          type: string
+        vector:
+          type: array
+          items:
+            type: number
+            format: float
+
+    GroupSearchRequest:
+      type: object
+      required: [vector, group_by]
+      properties:
+        vector:
+          type: array
+          items:
+            type: number
+            format: float
+        group_by:
+          type: string
+        group_size:
+          type: integer
+        limit:
+          type: integer
+        filter:
+          $ref: '#/components/schemas/Filter'
+        vector_name:
+          type: string
+        with_vector:
+          type: boolean
+
+    FacetRequest:
+      type: object
+      required: [field]
+      properties:
+        field:
+          type: string
+        limit:
+          type: integer
+        filter:
+          $ref: '#/components/schemas/Filter'
+        min_count:
+          type: integer
+        order_by:
+          type: string
+        descending:
+          type: boolean
+
+    MultiFacetRequest:
+      type: object
+      required: [facets]
+      properties:
+        facets:
+          type: array
+          items:
+            $ref: '#/components/schemas/FacetRequest'
+        filter:
+          $ref: '#/components/schemas/Filter'
+
+    ExplainRequest:
+      type: object
+      properties:
+        vector:
+          type: array
+          items:
+            type: number
+            format: float
+        limit:
+          type: integer
+        ef:
+          type: integer
+        filter:
+          $ref: '#/components/schemas/Filter'
+        vector_name:
+          type: string
+        analyze:
+          type: boolean
+
+    Filter:
+      type: object
+      description: |
+        Filter conditions supporting operators:
+        - $eq, $ne: equality
+        - $gt, $gte, $lt, $lte: comparisons
+        - $in, $nin: set membership
+        - $contains, $startsWith, $endsWith: string operations
+        - $and, $or, $not: logical operators
+      additionalProperties: true
+
+    CreatePayloadIndexRequest:
+      type: object
+      required: [field_name, field_type]
+      properties:
+        field_name:
+          type: string
+        field_type:
+          type: string
+          enum: [keyword, integer, float, bool, geo, datetime, text]
+        index_type:
+          type: string
+        options:
+          type: object
+
+    AutoEmbedRequest:
+      type: object
+      required: [provider, points]
+      properties:
+        provider:
+          type: string
+          enum: [openai, cohere]
+        model:
+          type: string
+        api_key:
+          type: string
+        source_fields:
+          type: array
+          items:
+            type: string
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/PointV2Input'
+
+    WebhookSubscription:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+
+    CreateAliasRequest:
+      type: object
+      required: [alias, collection_name]
+      properties:
+        alias:
+          type: string
+        collection_name:
+          type: string
+
+    JoinClusterRequest:
+      type: object
+      required: [node_id, raft_addr]
+      properties:
+        node_id:
+          type: string
+        raft_addr:
+          type: string

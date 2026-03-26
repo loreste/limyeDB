@@ -486,10 +486,12 @@ func (p *SQLParser) parseSingleCondition(cond string) (*FilterExpr, error) {
 func (p *SQLParser) parseValue(s string) (interface{}, error) {
 	s = strings.TrimSpace(s)
 
-	// Quoted string
-	if (strings.HasPrefix(s, "'") && strings.HasSuffix(s, "'")) ||
-		(strings.HasPrefix(s, "\"") && strings.HasSuffix(s, "\"")) {
-		return s[1 : len(s)-1], nil
+	// Quoted string (must be at least 2 chars for valid quotes)
+	if len(s) >= 2 {
+		if (strings.HasPrefix(s, "'") && strings.HasSuffix(s, "'")) ||
+			(strings.HasPrefix(s, "\"") && strings.HasSuffix(s, "\"")) {
+			return s[1 : len(s)-1], nil
+		}
 	}
 
 	// NULL

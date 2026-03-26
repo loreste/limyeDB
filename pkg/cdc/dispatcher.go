@@ -97,20 +97,30 @@ func (d *Dispatcher) worker() {
 
 		payload, err := json.Marshal(event)
 		if err != nil {
+			log.Printf("CDC failed to marshal event for %s: %v", event.Collection, err)
 			continue
 		}
 
 		for _, hook := range hooks {
 			h := hook // Capture correctly explicitly across channels natively
 			go func(sub WebhookSubscription, body []byte) {
-				req, _ := http.NewRequest("POST", sub.URL, bytes.NewBuffer(body))
+				req, err := http.NewRequest("POST", sub.URL, bytes.NewBuffer(body))
+				if err != nil {
+					log.Printf("CDC failed to create request for %s: %v", sub.URL, err)
+					return
+				}
 				req.Header.Set("Content-Type", "application/json")
 				for k, v := range sub.Headers {
 					req.Header.Set(k, v)
 				}
 				resp, err := d.client.Do(req)
-				if err == nil {
-					resp.Body.Close()
+				if err != nil {
+					log.Printf("CDC webhook delivery failed for %s: %v", sub.URL, err)
+					return
+				}
+				defer resp.Body.Close()
+				if resp.StatusCode >= 400 {
+					log.Printf("CDC webhook %s returned status %d", sub.URL, resp.StatusCode)
 				}
 			}(h, payload)
 		}

@@ -1,0 +1,141 @@
+# golangci-lint configuration for LimyeDB
+# Security-focused linter configuration
+
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+output:
+  formats:
+    - format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+  sort-results: true
+
+linters:
+  disable-all: true
+  enable:
+    # Security
+    - gosec          # Security vulnerabilities
+    - bodyclose      # HTTP response body close
+
+    # Error handling
+    - errcheck       # Unchecked errors
+    - errorlint      # Error wrapping issues
+
+    # Static analysis
+    - staticcheck    # Advanced static analysis
+    - govet          # Suspicious constructs
+
+    # Code quality
+    - ineffassign    # Detects unused assignments
+    - unused         # Unused code
+    - gofmt          # Formatting
+    - goimports      # Import ordering
+    - misspell       # Spelling mistakes
+
+    # Bug detection
+    - exportloopref  # Loop variable capture
+    - nilerr         # Returning nil after checking err != nil
+    - nilnil         # Returning (nil, nil) in functions
+
+linters-settings:
+  gosec:
+    severity: medium
+    confidence: medium
+    excludes:
+      - G104  # Audit errors not checked (too noisy for some patterns)
+    config:
+      global:
+        audit: enabled
+
+  errcheck:
+    check-type-assertions: true
+    check-blank: false
+    exclude-functions:
+      - io.Copy
+      - io.WriteTo
+      - (io.Closer).Close
+      - (*os.File).Close
+      - (net.Conn).Close
+      - (*bufio.Writer).Flush
+
+  errorlint:
+    errorf: true
+    asserts: true
+    comparison: true
+
+  staticcheck:
+    checks:
+      - all
+      - "-SA9003"  # Empty branch (sometimes intentional)
+
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment  # Too noisy, optimize when needed
+
+  goimports:
+    local-prefixes: github.com/limyedb/limyedb
+
+  misspell:
+    locale: US
+
+issues:
+  exclude-use-default: false
+
+  exclude-rules:
+    # Exclude test files from certain linters
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+        - bodyclose
+
+    # Exclude generated protobuf files
+    - path: \.pb\.go$
+      linters:
+        - all
+
+    # Exclude generated mock files
+    - path: mock_.*\.go$
+      linters:
+        - all
+
+    # Exclude vendor directory
+    - path: vendor/
+      linters:
+        - all
+
+    # Allow fmt.Printf in main packages (CLI output)
+    - path: cmd/
+      linters:
+        - forbidigo
+
+    # G304: File path from variable (we validate paths internally)
+    - linters:
+        - gosec
+      text: "G304:"
+      source: "#nosec G304"
+
+    # G404: Weak random (acceptable for non-crypto use)
+    - linters:
+        - gosec
+      text: "G404:"
+      source: "math/rand"
+
+  max-issues-per-linter: 50
+  max-same-issues: 10
+  new: false
+
+severity:
+  default-severity: warning
+  case-sensitive: false
+  rules:
+    - linters:
+        - gosec
+      severity: error
+    - linters:
+        - errcheck
+      severity: warning
