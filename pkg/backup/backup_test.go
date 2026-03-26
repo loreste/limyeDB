@@ -290,6 +290,58 @@ func TestContains(t *testing.T) {
 	}
 }
 
+// TestSanitizeTarPath tests the Zip Slip protection
+func TestSanitizeTarPath(t *testing.T) {
+	baseDir := "/data/backup"
+
+	tests := []struct {
+		name      string
+		tarPath   string
+		expectErr bool
+	}{
+		{"normal path", "collection/data.json", false},
+		{"nested path", "a/b/c/file.txt", false},
+		{"simple traversal", "../etc/passwd", true},
+		{"hidden traversal", "foo/../../../etc/passwd", true},
+		{"absolute path escape", "/etc/passwd", true},
+		{"traversal in middle", "foo/../../etc/passwd", true},
+		{"double dot filename ok", "collection/file..name.txt", false},
+		{"parent dir literal", "collection/../other/file.txt", true},
+		{"trailing parent", "collection/..", true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := sanitizeTarPath(baseDir, tc.tarPath)
+			if tc.expectErr && err == nil {
+				t.Errorf("expected error for path %q", tc.tarPath)
+			}
+			if !tc.expectErr && err != nil {
+				t.Errorf("unexpected error for path %q: %v", tc.tarPath, err)
+			}
+		})
+	}
+}
+
+// TestSanitizeTarPathResult verifies the sanitized path stays within baseDir
+func TestSanitizeTarPathResult(t *testing.T) {
+	baseDir, err := os.MkdirTemp("", "sanitize-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(baseDir)
+
+	result, err := sanitizeTarPath(baseDir, "collection/data.json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expected := filepath.Join(baseDir, "collection/data.json")
+	if result != expected {
+		t.Errorf("expected %s, got %s", expected, result)
+	}
+}
+
 func BenchmarkBackup_Create(b *testing.B) {
 	dataDir, _ := os.MkdirTemp("", "bench-data")
 	defer os.RemoveAll(dataDir)

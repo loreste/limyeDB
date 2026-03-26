@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Permission represents a specific permission
@@ -429,7 +431,9 @@ func (rm *RBACManager) VerifyPassword(userID, password string) bool {
 		return false
 	}
 
-	return user.PasswordHash == hashPassword(password)
+	// Use bcrypt's secure comparison to prevent timing attacks
+	err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
+	return err == nil
 }
 
 // CreateAPIKey creates a new API key for a user
@@ -623,8 +627,13 @@ func (rm *RBACManager) RemoveRole(userID, roleID string) error {
 // Helper functions
 
 func hashPassword(password string) string {
-	hash := sha256.Sum256([]byte(password))
-	return hex.EncodeToString(hash[:])
+	// Use bcrypt for secure password hashing (cost factor 12 provides good security/performance balance)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		// Fallback should never happen with valid input, but return empty to indicate failure
+		return ""
+	}
+	return string(hash)
 }
 
 func hashAPIKey(key string) string {

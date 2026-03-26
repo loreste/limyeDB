@@ -189,11 +189,11 @@ func buildSQL(f *Filter) (string, []interface{}) {
 			}
 			return "json_extract(data, ?) IN (" + strings.Join(placeholders, ",") + ")", args
 		case OpContains:
-			return "json_extract(data, ?) LIKE ?", []interface{}{fieldPath, "%" + fmt.Sprint(c.Value) + "%"}
+			return "json_extract(data, ?) LIKE ? ESCAPE '\\'", []interface{}{fieldPath, "%" + escapeLikePattern(fmt.Sprint(c.Value)) + "%"}
 		case OpStartsWith:
-			return "json_extract(data, ?) LIKE ?", []interface{}{fieldPath, fmt.Sprint(c.Value) + "%"}
+			return "json_extract(data, ?) LIKE ? ESCAPE '\\'", []interface{}{fieldPath, escapeLikePattern(fmt.Sprint(c.Value)) + "%"}
 		case OpEndsWith:
-			return "json_extract(data, ?) LIKE ?", []interface{}{fieldPath, "%" + fmt.Sprint(c.Value)}
+			return "json_extract(data, ?) LIKE ? ESCAPE '\\'", []interface{}{fieldPath, "%" + escapeLikePattern(fmt.Sprint(c.Value))}
 		case OpIsNull:
 			return "json_extract(data, ?) IS NULL", []interface{}{fieldPath}
 		case OpIsNotNull:
@@ -271,4 +271,16 @@ func toFloat64(v interface{}) (float64, bool) {
 	default:
 		return 0, false
 	}
+}
+
+// escapeLikePattern escapes SQL LIKE pattern special characters to prevent injection.
+// This escapes %, _, and \ which have special meaning in LIKE patterns.
+func escapeLikePattern(s string) string {
+	// Escape backslash first (it's the escape character)
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	// Escape percent (matches any sequence)
+	s = strings.ReplaceAll(s, "%", "\\%")
+	// Escape underscore (matches single character)
+	s = strings.ReplaceAll(s, "_", "\\_")
+	return s
 }

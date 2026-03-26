@@ -5,12 +5,17 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
+
+// maxFileSize limits individual file extraction to prevent decompression bombs (1GB)
+const maxFileSize = 1 << 30 // 1GB
 
 // BackupMetadata contains information about a backup.
 type BackupMetadata struct {
@@ -224,26 +229,35 @@ func (b *Backup) Restore(inputPath string, opts RestoreOptions) (*BackupMetadata
 			}
 		}
 
-		// Create target path
-		targetPath := filepath.Join(b.dataDir, header.Name)
+		// Validate and sanitize the file path to prevent Zip Slip attacks (G305)
+		targetPath, err := sanitizeTarPath(b.dataDir, header.Name)
+		if err != nil {
+			return nil, fmt.Errorf("invalid path in archive: %w", err)
+		}
 
 		// Check if exists
 		if _, err := os.Stat(targetPath); err == nil && !opts.OverwriteExisting {
 			continue
 		}
 
-		// Create directory
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+		// Create directory with restricted permissions (G301)
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0750); err != nil {
 			return nil, err
 		}
 
-		// Create file
-		outFile, err := os.Create(targetPath)
+		// Validate file size to prevent decompression bombs (G110)
+		if header.Size > maxFileSize {
+			return nil, fmt.Errorf("file %s exceeds maximum allowed size", header.Name)
+		}
+
+		// Create file with restricted permissions (G306)
+		outFile, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0640)
 		if err != nil {
 			return nil, err
 		}
 
-		if _, err := io.Copy(outFile, tarReader); err != nil {
+		// Use LimitReader to prevent decompression bombs (G110)
+		if _, err := io.Copy(outFile, io.LimitReader(tarReader, maxFileSize)); err != nil {
 			outFile.Close()
 			return nil, err
 		}
@@ -340,6 +354,49 @@ func contains(slice []string, item string) bool {
 		}
 	}
 	return false
+}
+
+// sanitizeTarPath validates and returns a safe path for tar extraction.
+// Prevents Zip Slip (path traversal) attacks by ensuring the target stays within baseDir.
+func sanitizeTarPath(baseDir, tarPath string) (string, error) {
+	// Reject absolute paths immediately
+	if filepath.IsAbs(tarPath) {
+		return "", errors.New("absolute paths not allowed")
+	}
+
+	// Reject paths that start with or contain path traversal sequences
+	// Check BEFORE cleaning to catch attempts to escape
+	if strings.HasPrefix(tarPath, "..") || strings.Contains(tarPath, "/../") || strings.HasSuffix(tarPath, "/..") {
+		return "", errors.New("path contains directory traversal")
+	}
+
+	// Clean the tar path
+	cleanPath := filepath.Clean(tarPath)
+
+	// After cleaning, reject if path tries to escape (e.g., "foo/../../bar" -> "../bar")
+	if strings.HasPrefix(cleanPath, "..") {
+		return "", errors.New("path escapes base directory")
+	}
+
+	// Join with base directory
+	targetPath := filepath.Join(baseDir, cleanPath)
+
+	// Resolve to absolute path for final validation
+	absBase, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", err
+	}
+	absTarget, err := filepath.Abs(targetPath)
+	if err != nil {
+		return "", err
+	}
+
+	// Ensure the target is within the base directory
+	if !strings.HasPrefix(absTarget, absBase+string(filepath.Separator)) && absTarget != absBase {
+		return "", errors.New("path escapes base directory")
+	}
+
+	return targetPath, nil
 }
 
 // ExportJSON exports a collection to JSON format.
