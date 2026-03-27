@@ -950,7 +950,12 @@ func (c *Collection) Info() *Info {
 		Size:      c.Size(),
 		Config:    c.config,
 		CreatedAt: c.createdAt,
-		UpdatedAt: c.updatedAt.Load().(time.Time),
+		UpdatedAt: func() time.Time {
+			if t, ok := c.updatedAt.Load().(time.Time); ok {
+				return t
+			}
+			return time.Time{}
+		}(),
 	}
 
 	if c.config.HasNamedVectors() {
