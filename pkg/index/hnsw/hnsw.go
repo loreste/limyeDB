@@ -153,7 +153,7 @@ func (h *HNSW) Insert(p *point.Point) error {
 
 	// Create new node
 	var offset int64
-	var vec point.Vector = p.Vector
+	var vec = p.Vector
 
 	if h.vectorMmap != nil {
 		offset, _ = h.vectorMmap.Allocate()

@@ -303,16 +303,6 @@ func BenchmarkTSNE(b *testing.B) {
 	}
 }
 
-// squaredDist is a helper for testing
-func squaredDistTest(a, b []float64) float64 {
-	var sum float64
-	for i := range a {
-		diff := a[i] - b[i]
-		sum += diff * diff
-	}
-	return sum
-}
-
 func TestNormalization(t *testing.T) {
 	points := []Point2D{
 		{X: -10, Y: -20},

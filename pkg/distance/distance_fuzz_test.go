@@ -319,7 +319,9 @@ func FuzzChebyshevDistance(f *testing.F) {
 		// Chebyshev <= Manhattan (max component vs sum of components)
 		manhattan := &Manhattan{}
 		manhattanDist := manhattan.Distance(point.Vector(a), point.Vector(b))
-		if dist > manhattanDist+1e-6 && !math.IsNaN(float64(dist)) && !math.IsNaN(float64(manhattanDist)) {
+		isNaN := math.IsNaN(float64(dist))
+		isNaNManhattan := math.IsNaN(float64(manhattanDist))
+		if dist > manhattanDist+1e-6 && !isNaN && !isNaNManhattan {
 			// This is expected: Chebyshev is always <= Manhattan
 		}
 	})

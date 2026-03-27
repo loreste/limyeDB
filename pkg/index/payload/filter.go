@@ -10,16 +10,16 @@ import (
 type FilterType string
 
 const (
-	FilterTypeAnd      FilterType = "and"
-	FilterTypeOr       FilterType = "or"
-	FilterTypeNot      FilterType = "not"
-	FilterTypeField    FilterType = "field"
-	FilterMatch        FilterType = "match"
-	FilterRange        FilterType = "range"
-	FilterIsNull       FilterType = "is_null"
-	FilterIsNotNull    FilterType = "is_not_null"
-	FilterAnd          FilterType = "and"    // Alias
-	FilterOr           FilterType = "or"     // Alias
+	FilterTypeAnd   FilterType = "and"
+	FilterTypeOr    FilterType = "or"
+	FilterTypeNot   FilterType = "not"
+	FilterTypeField FilterType = "field"
+	FilterMatch     FilterType = "match"
+	FilterRange     FilterType = "range"
+	FilterIsNull    FilterType = "is_null"
+	FilterIsNotNull FilterType = "is_not_null"
+	FilterAnd       FilterType = "and" // Alias
+	FilterOr        FilterType = "or"  // Alias
 )
 
 // Operator represents a comparison operator
@@ -44,11 +44,11 @@ const (
 
 // Filter represents a filter expression
 type Filter struct {
-	Type       FilterType  `json:"type,omitempty"`
-	Field      string      `json:"field,omitempty"`
-	Condition  *Condition  `json:"condition,omitempty"`
-	Filters    []*Filter   `json:"filters,omitempty"`
-	Conditions []*Filter   `json:"conditions,omitempty"` // Alias for Filters (Qdrant compatibility)
+	Type       FilterType `json:"type,omitempty"`
+	Field      string     `json:"field,omitempty"`
+	Condition  *Condition `json:"condition,omitempty"`
+	Filters    []*Filter  `json:"filters,omitempty"`
+	Conditions []*Filter  `json:"conditions,omitempty"` // Alias for Filters (Qdrant compatibility)
 }
 
 // Condition represents a field condition

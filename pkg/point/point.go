@@ -312,7 +312,7 @@ func (p *Point) Decode(r io.Reader) error {
 	// Read NamedVectors
 	var numNamed uint16
 	if err := binary.Read(r, binary.LittleEndian, &numNamed); err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			// Backwards compatibility for points without NamedVectors (legacy)
 			p.Version = 1
 			return nil
@@ -348,7 +348,7 @@ func (p *Point) Decode(r io.Reader) error {
 
 	// Read version
 	err := binary.Read(r, binary.LittleEndian, &p.Version)
-	if err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		p.Version = 1
 		return nil
 	}
@@ -359,7 +359,7 @@ func (p *Point) Decode(r io.Reader) error {
 	// Read SparseVector sequentially backwards
 	var hasSparse bool
 	err = binary.Read(r, binary.LittleEndian, &hasSparse)
-	if err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		return nil // Legacy points lack sparse blocks
 	}
 	if err != nil {

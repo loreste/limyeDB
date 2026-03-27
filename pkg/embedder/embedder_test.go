@@ -242,7 +242,6 @@ func TestOpenAIEmbedBatchAPIError(t *testing.T) {
 
 	e := &OpenAIEmbedder{
 		APIKey: "invalid-key",
-		Model:  "text-embedding-3-small",
 		client: server.Client(),
 	}
 
@@ -297,7 +296,6 @@ func TestCohereEmbedBatch(t *testing.T) {
 
 	e := &CohereEmbedder{
 		APIKey: "test-api-key",
-		Model:  "embed-english-v3.0",
 		client: &http.Client{Timeout: 5 * time.Second},
 	}
 

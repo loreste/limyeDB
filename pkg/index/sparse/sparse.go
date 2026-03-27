@@ -507,7 +507,7 @@ func normalizeScores(docs []ScoredDoc) []ScoredDoc {
 		return docs
 	}
 
-	var maxScore, minScore float32 = docs[0].Score, docs[0].Score
+	var maxScore, minScore = docs[0].Score, docs[0].Score
 	for _, doc := range docs {
 		if doc.Score > maxScore {
 			maxScore = doc.Score

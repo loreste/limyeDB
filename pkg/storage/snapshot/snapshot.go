@@ -55,8 +55,8 @@ func validateSnapshotID(id string) error {
 
 // Manager handles snapshot creation and restoration
 type Manager struct {
-	dir             string
-	retainCount     int
+	dir              string
+	retainCount      int
 	compressionLevel int
 
 	mu sync.Mutex
@@ -64,16 +64,16 @@ type Manager struct {
 
 // Config holds snapshot configuration
 type Config struct {
-	Dir             string
-	RetainCount     int
+	Dir              string
+	RetainCount      int
 	CompressionLevel int
 }
 
 // DefaultConfig returns default snapshot configuration
 func DefaultConfig() *Config {
 	return &Config{
-		Dir:             "./data/snapshots",
-		RetainCount:     5,
+		Dir:              "./data/snapshots",
+		RetainCount:      5,
 		CompressionLevel: gzip.DefaultCompression,
 	}
 }
@@ -85,8 +85,8 @@ func NewManager(cfg *Config) (*Manager, error) {
 	}
 
 	return &Manager{
-		dir:             cfg.Dir,
-		retainCount:     cfg.RetainCount,
+		dir:              cfg.Dir,
+		retainCount:      cfg.RetainCount,
 		compressionLevel: cfg.CompressionLevel,
 	}, nil
 }
@@ -108,9 +108,9 @@ type Snapshot struct {
 
 // SnapshotWriter writes snapshot data
 type SnapshotWriter struct {
-	file       *os.File
-	gzWriter   *gzip.Writer
-	meta       *Snapshot
+	file          *os.File
+	gzWriter      *gzip.Writer
+	meta          *Snapshot
 	headerWritten bool
 }
 
@@ -342,10 +342,10 @@ type PointData struct {
 
 // SnapshotReader reads snapshot data
 type SnapshotReader struct {
-	file     *os.File
-	gzReader *gzip.Reader
-	Version  uint64
-	Timestamp time.Time
+	file           *os.File
+	gzReader       *gzip.Reader
+	Version        uint64
+	Timestamp      time.Time
 	NumCollections uint32
 }
 
@@ -569,7 +569,7 @@ func (m *Manager) Delete(id string) error {
 		return errors.New("invalid snapshot path")
 	}
 
-	_ = os.Remove(snapPath)  // Best effort removal
+	_ = os.Remove(snapPath) // Best effort removal
 	_ = os.Remove(metaPath) // Best effort removal
 
 	return nil

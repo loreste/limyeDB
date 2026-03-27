@@ -253,7 +253,7 @@ func NewBufferPool[T any](capacity int) *BufferPool[T] {
 
 // Get retrieves a buffer
 func (bp *BufferPool[T]) Get() []T {
-	wrapper := bp.pool.Get().(*bufferWrapper[T])
+	wrapper, _ := bp.pool.Get().(*bufferWrapper[T])
 	return wrapper.data[:0]
 }
 
@@ -280,7 +280,8 @@ func NewObjectPool[T any](newFunc func() T) *ObjectPool[T] {
 
 // Get retrieves an object from the pool
 func (op *ObjectPool[T]) Get() T {
-	return op.pool.Get().(T)
+	val, _ := op.pool.Get().(T)
+	return val
 }
 
 // Put returns an object to the pool
@@ -354,7 +355,7 @@ func NewVisitedListPool(initialSize int) *VisitedListPool {
 }
 
 func (vp *VisitedListPool) Get() *VisitedList {
-	vl := vp.pool.Get().(*VisitedList)
+	vl, _ := vp.pool.Get().(*VisitedList)
 	vl.Reset()
 	return vl
 }

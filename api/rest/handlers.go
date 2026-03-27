@@ -127,7 +127,7 @@ func (s *Server) handleCreateCollection(c *gin.Context) {
 
 	if s.raft != nil {
 		if err := s.raft.Write(cluster.OpCreateCollection, cluster.CreateCollectionData{Config: cfg}); err != nil {
-			respondError(c, http.StatusBadRequest, fmt.Errorf("raft write failed: %v", err))
+			respondError(c, http.StatusBadRequest, fmt.Errorf("raft write failed: %w", err))
 			return
 		}
 		coll, err := s.collections.Get(cfg.Name)
@@ -188,7 +188,7 @@ func (s *Server) handleDeleteCollection(c *gin.Context) {
 
 	if s.raft != nil {
 		if err := s.raft.Write(cluster.OpDeleteCollection, cluster.DeleteCollectionData{Name: name}); err != nil {
-			respondError(c, http.StatusBadRequest, fmt.Errorf("raft write failed: %v", err))
+			respondError(c, http.StatusBadRequest, fmt.Errorf("raft write failed: %w", err))
 			return
 		}
 		respondSuccess(c, gin.H{"deleted": name})
@@ -264,7 +264,7 @@ func (s *Server) handleUpsertPoints(c *gin.Context) {
 			CollectionName: name,
 			Points:         points,
 		}); err != nil {
-			respondError(c, http.StatusBadRequest, fmt.Errorf("raft write failed: %v", err))
+			respondError(c, http.StatusBadRequest, fmt.Errorf("raft write failed: %w", err))
 			return
 		}
 		respondSuccess(c, gin.H{

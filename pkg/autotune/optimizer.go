@@ -9,36 +9,36 @@ import (
 
 // QueryStats tracks query performance statistics
 type QueryStats struct {
-	TotalQueries      int64
-	AvgLatencyMs      float64
-	P50LatencyMs      float64
-	P95LatencyMs      float64
-	P99LatencyMs      float64
-	AvgRecall         float64
-	QueriesPerSecond  float64
-	CacheHitRate      float64
-	IndexSize         int64
-	LastQueryTime     time.Time
+	TotalQueries     int64
+	AvgLatencyMs     float64
+	P50LatencyMs     float64
+	P95LatencyMs     float64
+	P99LatencyMs     float64
+	AvgRecall        float64
+	QueriesPerSecond float64
+	CacheHitRate     float64
+	IndexSize        int64
+	LastQueryTime    time.Time
 }
 
 // IndexParams holds tunable index parameters
 type IndexParams struct {
-	EfConstruction int     `json:"ef_construction"`
-	EfSearch       int     `json:"ef_search"`
-	M              int     `json:"m"`
-	BatchSize      int     `json:"batch_size"`
-	NumThreads     int     `json:"num_threads"`
+	EfConstruction int `json:"ef_construction"`
+	EfSearch       int `json:"ef_search"`
+	M              int `json:"m"`
+	BatchSize      int `json:"batch_size"`
+	NumThreads     int `json:"num_threads"`
 }
 
 // OptimizationGoal represents what to optimize for
 type OptimizationGoal string
 
 const (
-	GoalLatency     OptimizationGoal = "latency"
-	GoalRecall      OptimizationGoal = "recall"
-	GoalThroughput  OptimizationGoal = "throughput"
-	GoalBalanced    OptimizationGoal = "balanced"
-	GoalMemory      OptimizationGoal = "memory"
+	GoalLatency    OptimizationGoal = "latency"
+	GoalRecall     OptimizationGoal = "recall"
+	GoalThroughput OptimizationGoal = "throughput"
+	GoalBalanced   OptimizationGoal = "balanced"
+	GoalMemory     OptimizationGoal = "memory"
 )
 
 // AutoTuner automatically optimizes index parameters based on workload
@@ -57,9 +57,9 @@ type AutoTuner struct {
 	minRecall       float64
 
 	// Tuning state
-	lastTuneTime   time.Time
-	tuneInterval   time.Duration
-	enabled        bool
+	lastTuneTime time.Time
+	tuneInterval time.Duration
+	enabled      bool
 
 	// Callbacks
 	onParamsChange func(params IndexParams)
