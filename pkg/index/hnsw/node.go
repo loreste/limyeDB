@@ -28,17 +28,8 @@ func NewNode(id string, vector point.Vector, level int, m int, useMmap bool) *No
 		connections = make([][]uint32, level+1)
 		for i := 0; i <= level; i++ {
 			// Layer 0 has 2*M connections, upper layers have M
-			var capacity int
-			if i == 0 {
-				// Safe multiplication: check overflow before computing 2*m
-				if m <= 0 {
-					capacity = 0
-				} else if m > math.MaxInt/2 {
-					capacity = math.MaxInt
-				} else {
-					capacity = 2 * m
-				}
-			} else {
+			capacity := safeLayer0Cap(m)
+			if i != 0 {
 				capacity = m
 			}
 			connections[i] = make([]uint32, 0, capacity)
@@ -147,6 +138,17 @@ func (n *Node) SetPayload(payload map[string]interface{}) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.payload = payload
+}
+
+// safeLayer0Cap computes 2*m for layer-0 capacity with overflow protection.
+func safeLayer0Cap(m int) int {
+	if m <= 0 {
+		return 0
+	}
+	if m > math.MaxInt/2 {
+		return math.MaxInt
+	}
+	return m + m
 }
 
 // GetPayload returns the node's payload

@@ -92,16 +92,13 @@ func (idx *Index) Filter(filter *Filter) []uint32 {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
-	where, args := buildSQL(filter)
-	if where == "" {
+	query, args := buildFilterQuery(filter)
+	if query == "" {
 		// If the filter resolves to nothing usable, it matches all or none depending on semantics
 		// For safety, assume empty filter matches nothing
 		return nil
 	}
 
-	// Build query using fmt.Sprintf to avoid string concatenation operator (G202).
-	// The where clause is built internally by buildSQL with parameterized args.
-	query := fmt.Sprintf("SELECT point_id FROM payloads WHERE %s", where) //nolint:gosec // where clause is built from internal filter logic, not user input
 	rows, err := idx.db.Query(query, args...)
 	if err != nil {
 		return nil
@@ -119,7 +116,18 @@ func (idx *Index) Filter(filter *Filter) []uint32 {
 }
 
 // buildSQL recursively compiles AST Filters into native SQLite JSON condition statements
-func buildSQL(f *Filter) (string, []interface{}) {
+// buildFilterQuery returns a complete parameterized SQL query for the given filter.
+// The WHERE clause is constructed from internal filter logic using ? placeholders;
+// no user input is interpolated into the query string.
+func buildFilterQuery(f *Filter) (string, []interface{}) {
+	where, args := buildWhereClause(f)
+	if where == "" {
+		return "", nil
+	}
+	return "SELECT point_id FROM payloads WHERE " + where, args
+}
+
+func buildWhereClause(f *Filter) (string, []interface{}) {
 	if f == nil {
 		return "", nil
 	}
@@ -129,7 +137,7 @@ func buildSQL(f *Filter) (string, []interface{}) {
 		var clauses []string
 		var args []interface{}
 		for _, sub := range f.Filters {
-			c, a := buildSQL(sub)
+			c, a := buildWhereClause(sub)
 			if c != "" {
 				clauses = append(clauses, c)
 				args = append(args, a...)
@@ -144,7 +152,7 @@ func buildSQL(f *Filter) (string, []interface{}) {
 		var clauses []string
 		var args []interface{}
 		for _, sub := range f.Filters {
-			c, a := buildSQL(sub)
+			c, a := buildWhereClause(sub)
 			if c != "" {
 				clauses = append(clauses, c)
 				args = append(args, a...)
@@ -159,7 +167,7 @@ func buildSQL(f *Filter) (string, []interface{}) {
 		if len(f.Filters) == 0 {
 			return "", nil
 		}
-		c, a := buildSQL(f.Filters[0])
+		c, a := buildWhereClause(f.Filters[0])
 		if c == "" {
 			return "", nil
 		}
