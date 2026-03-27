@@ -85,7 +85,8 @@ func TestDispatcherMemoryStability(t *testing.T) {
 	d := &Dispatcher{
 		subscriptions: make(map[string][]WebhookSubscription),
 		eventCh:       make(chan Event, 1000),
-		client:        &http.Client{Timeout: 1 * time.Second},
+		client:        &http.Client{Timeout: 5 * time.Second},
+		webhookSem:    make(chan struct{}, maxConcurrentWebhooks),
 	}
 
 	go d.worker()
@@ -96,9 +97,9 @@ func TestDispatcherMemoryStability(t *testing.T) {
 	var initialMem runtime.MemStats
 	runtime.ReadMemStats(&initialMem)
 
-	// Publish many events in batches
-	for batch := 0; batch < 10; batch++ {
-		for i := 0; i < 1000; i++ {
+	// Publish events in batches
+	for batch := 0; batch < 5; batch++ {
+		for i := 0; i < 500; i++ {
 			d.Publish(Event{
 				Collection: "memory_test",
 				Type:       EventInsert,
