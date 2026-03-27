@@ -293,7 +293,7 @@ func (b *Backup) Restore(inputPath string, opts RestoreOptions) (*BackupMetadata
 		}
 
 		// Create file with restricted permissions (G306)
-		outFile, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+		outFile, err := os.OpenFile(filepath.Clean(targetPath), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 		if err != nil {
 			return nil, err
 		}
