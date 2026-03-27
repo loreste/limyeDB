@@ -44,23 +44,23 @@ const (
 
 // ResourceQuota defines resource limits for a tenant
 type ResourceQuota struct {
-	MaxCollections     int   `json:"max_collections"`
-	MaxPointsTotal     int64 `json:"max_points_total"`
-	MaxPointsPerColl   int64 `json:"max_points_per_collection"`
-	MaxStorageBytes    int64 `json:"max_storage_bytes"`
-	MaxQueriesPerSec   int   `json:"max_queries_per_second"`
-	MaxDimension       int   `json:"max_dimension"`
-	MaxPayloadSize     int64 `json:"max_payload_size_bytes"`
+	MaxCollections     int      `json:"max_collections"`
+	MaxPointsTotal     int64    `json:"max_points_total"`
+	MaxPointsPerColl   int64    `json:"max_points_per_collection"`
+	MaxStorageBytes    int64    `json:"max_storage_bytes"`
+	MaxQueriesPerSec   int      `json:"max_queries_per_second"`
+	MaxDimension       int      `json:"max_dimension"`
+	MaxPayloadSize     int64    `json:"max_payload_size_bytes"`
 	AllowedVectorTypes []string `json:"allowed_vector_types"` // e.g., ["float32", "uint8"]
 }
 
 // ResourceUsage tracks current resource usage
 type ResourceUsage struct {
-	Collections   int   `json:"collections"`
-	PointsTotal   int64 `json:"points_total"`
-	StorageBytes  int64 `json:"storage_bytes"`
+	Collections   int       `json:"collections"`
+	PointsTotal   int64     `json:"points_total"`
+	StorageBytes  int64     `json:"storage_bytes"`
 	LastQueryTime time.Time `json:"last_query_time"`
-	QueriesCount  int64 `json:"queries_count"`
+	QueriesCount  int64     `json:"queries_count"`
 }
 
 // DefaultQuotas returns default quotas for each plan

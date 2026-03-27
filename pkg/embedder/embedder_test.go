@@ -242,7 +242,6 @@ func TestOpenAIEmbedBatchAPIError(t *testing.T) {
 
 	e := &OpenAIEmbedder{
 		APIKey: "invalid-key",
-		client: server.Client(),
 	}
 
 	// We need to test against the actual endpoint behavior

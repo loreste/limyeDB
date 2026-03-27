@@ -35,12 +35,12 @@ const (
 	PermRecommend Permission = "search:recommend"
 
 	// Admin permissions
-	PermAdminUsers       Permission = "admin:users"
-	PermAdminRoles       Permission = "admin:roles"
-	PermAdminTenants     Permission = "admin:tenants"
-	PermAdminSnapshots   Permission = "admin:snapshots"
-	PermAdminCluster     Permission = "admin:cluster"
-	PermAdminAll         Permission = "admin:*"
+	PermAdminUsers     Permission = "admin:users"
+	PermAdminRoles     Permission = "admin:roles"
+	PermAdminTenants   Permission = "admin:tenants"
+	PermAdminSnapshots Permission = "admin:snapshots"
+	PermAdminCluster   Permission = "admin:cluster"
+	PermAdminAll       Permission = "admin:*"
 )
 
 // Role represents a role with a set of permissions
@@ -82,14 +82,14 @@ const (
 
 // APIKey represents an API key for authentication
 type APIKey struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	KeyHash     string    `json:"key_hash"` // Store hash, not actual key
-	Prefix      string    `json:"prefix"`   // First 8 chars for identification
+	ID          string       `json:"id"`
+	Name        string       `json:"name"`
+	KeyHash     string       `json:"key_hash"`              // Store hash, not actual key
+	Prefix      string       `json:"prefix"`                // First 8 chars for identification
 	Permissions []Permission `json:"permissions,omitempty"` // Optional key-specific permissions
-	ExpiresAt   time.Time `json:"expires_at,omitempty"`
-	LastUsedAt  time.Time `json:"last_used_at"`
-	CreatedAt   time.Time `json:"created_at"`
+	ExpiresAt   time.Time    `json:"expires_at,omitempty"`
+	LastUsedAt  time.Time    `json:"last_used_at"`
+	CreatedAt   time.Time    `json:"created_at"`
 }
 
 // RBACManager manages roles and permissions

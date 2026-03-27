@@ -259,7 +259,7 @@ func (p *SQLParser) parseVectorSearch(query string) (*SQLQuery, error) {
 	// Parse vector
 	vec, err := p.parseVector(matches[2])
 	if err != nil {
-		return nil, fmt.Errorf("invalid vector: %v", err)
+		return nil, fmt.Errorf("invalid vector: %w", err)
 	}
 	result.Vector = vec
 

@@ -18,17 +18,17 @@ import (
 type EventType string
 
 const (
-	EventPointInsert   EventType = "point.insert"
-	EventPointUpdate   EventType = "point.update"
-	EventPointDelete   EventType = "point.delete"
+	EventPointInsert      EventType = "point.insert"
+	EventPointUpdate      EventType = "point.update"
+	EventPointDelete      EventType = "point.delete"
 	EventCollectionCreate EventType = "collection.create"
 	EventCollectionDelete EventType = "collection.delete"
-	EventSearchResult  EventType = "search.result"
-	EventSubscribe     EventType = "subscribe"
-	EventUnsubscribe   EventType = "unsubscribe"
-	EventPing          EventType = "ping"
-	EventPong          EventType = "pong"
-	EventError         EventType = "error"
+	EventSearchResult     EventType = "search.result"
+	EventSubscribe        EventType = "subscribe"
+	EventUnsubscribe      EventType = "unsubscribe"
+	EventPing             EventType = "ping"
+	EventPong             EventType = "pong"
+	EventError            EventType = "error"
 )
 
 // Event represents a real-time event

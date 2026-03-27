@@ -320,7 +320,7 @@ func (h *HNSW) searchLayer(query point.Vector, entryID uint32, ef int, layer int
 
 	for candidates.Len() > 0 {
 		// Get closest unexplored candidate
-		curr := heap.Pop(candidates).(Candidate)
+		curr, _ := heap.Pop(candidates).(Candidate)
 
 		// Stop if this candidate is worse than the worst result
 		if results.Len() >= ef && curr.Distance > (*results)[0].Distance {
@@ -361,7 +361,7 @@ func (h *HNSW) searchLayer(query point.Vector, entryID uint32, ef int, layer int
 	// Convert to slice
 	result := make([]Candidate, results.Len())
 	for i := len(result) - 1; i >= 0; i-- {
-		result[i] = heap.Pop(results).(Candidate)
+		result[i], _ = heap.Pop(results).(Candidate)
 	}
 	return result
 }

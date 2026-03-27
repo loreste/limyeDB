@@ -182,7 +182,9 @@ func (h CandidateHeap) Less(i, j int) bool { return h[i].Distance < h[j].Distanc
 func (h CandidateHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
 
 func (h *CandidateHeap) Push(x interface{}) {
-	*h = append(*h, x.(Candidate))
+	if c, ok := x.(Candidate); ok {
+		*h = append(*h, c)
+	}
 }
 
 func (h *CandidateHeap) Pop() interface{} {

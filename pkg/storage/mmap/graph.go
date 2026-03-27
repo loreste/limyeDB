@@ -76,7 +76,7 @@ func closeFileWithError(f *os.File, existingErr *error) {
 		if *existingErr == nil {
 			*existingErr = fmt.Errorf("failed to close file: %w", closeErr)
 		} else {
-			*existingErr = fmt.Errorf("%w; additionally failed to close file: %v", *existingErr, closeErr)
+			*existingErr = fmt.Errorf("%w; additionally failed to close file: %w", *existingErr, closeErr)
 		}
 	}
 }
