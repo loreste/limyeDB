@@ -17,7 +17,8 @@ formatters:
     - goimports
   settings:
     goimports:
-      local-prefixes: github.com/limyedb/limyedb
+      local-prefixes:
+        - github.com/limyedb/limyedb
 
 linters:
   default: none
@@ -101,9 +102,6 @@ linters:
       - linters:
           - gosec
         text: "G404:"
-
-    max-issues-per-linter: 50
-    max-same-issues: 10
 
 severity:
   default: warning
