@@ -4,8 +4,6 @@ run:
   timeout: 5m
   tests: true
   modules-download-mode: readonly
-  exclude-dirs:
-    - api/grpc
 
 output:
   formats:
@@ -78,6 +76,8 @@ linters:
 
   exclusions:
     generated: strict
+    paths:
+      - api/grpc
     rules:
       - path: _test\.go
         linters:
