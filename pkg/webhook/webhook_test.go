@@ -16,6 +16,7 @@ import (
 
 func TestManager_Subscribe(t *testing.T) {
 	m := NewManager(2, DefaultRetryPolicy())
+	m.allowLocalURLs = true
 	defer m.Close()
 
 	sub := &Subscription{
@@ -38,6 +39,7 @@ func TestManager_Subscribe(t *testing.T) {
 
 func TestManager_Unsubscribe(t *testing.T) {
 	m := NewManager(2, DefaultRetryPolicy())
+	m.allowLocalURLs = true
 	defer m.Close()
 
 	sub := &Subscription{
@@ -67,6 +69,7 @@ func TestManager_Emit(t *testing.T) {
 	defer server.Close()
 
 	m := NewManager(2, DefaultRetryPolicy())
+	m.allowLocalURLs = true
 	defer m.Close()
 
 	sub := &Subscription{
@@ -104,6 +107,7 @@ func TestManager_EventFiltering(t *testing.T) {
 	defer server.Close()
 
 	m := NewManager(2, DefaultRetryPolicy())
+	m.allowLocalURLs = true
 	defer m.Close()
 
 	sub := &Subscription{
@@ -143,6 +147,7 @@ func TestManager_HMAC(t *testing.T) {
 	defer server.Close()
 
 	m := NewManager(2, DefaultRetryPolicy())
+	m.allowLocalURLs = true
 	defer m.Close()
 
 	secret := "my-secret-key"
@@ -201,6 +206,7 @@ func TestManager_Retry(t *testing.T) {
 	}
 
 	m := NewManager(2, policy)
+	m.allowLocalURLs = true
 	defer m.Close()
 
 	sub := &Subscription{
@@ -238,6 +244,7 @@ func TestManager_Payload(t *testing.T) {
 	defer server.Close()
 
 	m := NewManager(2, DefaultRetryPolicy())
+	m.allowLocalURLs = true
 	defer m.Close()
 
 	sub := &Subscription{
@@ -272,6 +279,7 @@ func TestManager_Payload(t *testing.T) {
 
 func TestManager_GetSubscription(t *testing.T) {
 	m := NewManager(2, DefaultRetryPolicy())
+	m.allowLocalURLs = true
 	defer m.Close()
 
 	sub := &Subscription{
@@ -305,6 +313,7 @@ func TestManager_CollectionFilter(t *testing.T) {
 	defer server.Close()
 
 	m := NewManager(2, DefaultRetryPolicy())
+	m.allowLocalURLs = true
 	defer m.Close()
 
 	sub := &Subscription{
@@ -354,6 +363,7 @@ func TestManager_EmitHelpers(t *testing.T) {
 	defer server.Close()
 
 	m := NewManager(2, DefaultRetryPolicy())
+	m.allowLocalURLs = true
 	defer m.Close()
 
 	sub := &Subscription{
@@ -387,6 +397,7 @@ func BenchmarkManager_Emit(b *testing.B) {
 	defer server.Close()
 
 	m := NewManager(4, DefaultRetryPolicy())
+	m.allowLocalURLs = true
 	defer m.Close()
 
 	sub := &Subscription{

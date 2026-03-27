@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"crypto/subtle"
 	"net/http"
 	"strconv"
 	"strings"
@@ -183,7 +184,14 @@ func AuthMiddleware(apiKeys map[string]bool) gin.HandlerFunc {
 		}
 
 		apiKey := parts[1]
-		if !apiKeys[apiKey] {
+		valid := false
+		for key := range apiKeys {
+			if subtle.ConstantTimeCompare([]byte(key), []byte(apiKey)) == 1 {
+				valid = true
+				break
+			}
+		}
+		if !valid {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, ErrorResponse{
 				Error: "invalid API key",
 				Code:  "UNAUTHORIZED",

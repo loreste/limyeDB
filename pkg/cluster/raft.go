@@ -23,6 +23,7 @@ type RaftNode struct {
 	manager        *collection.Manager
 	LeaderRestAddr string
 	mu             sync.RWMutex
+	leaderCh       chan bool // leadership notification channel, closed on shutdown
 }
 
 // RaftConfig represents Raft configuration
@@ -79,9 +80,10 @@ func NewRaftNode(cfg *RaftConfig, manager *collection.Manager, snapMgr *snapshot
 	}
 
 	node := &RaftNode{
-		Raft:    r,
-		FSM:     fsm,
-		manager: manager,
+		Raft:     r,
+		FSM:      fsm,
+		manager:  manager,
+		leaderCh: leaderCh,
 	}
 
 	fsm.SetRaftNode(node)
@@ -153,6 +155,13 @@ func (n *RaftNode) Write(op OpType, data interface{}) error {
 	}
 
 	return nil
+}
+
+// Shutdown gracefully shuts down the Raft node and stops the leadership broadcast goroutine.
+func (n *RaftNode) Shutdown() error {
+	f := n.Raft.Shutdown()
+	// Raft shutdown closes the NotifyCh (leaderCh), which causes the broadcast goroutine to exit.
+	return f.Error()
 }
 
 // Join adds a new voter node to the distributed cluster

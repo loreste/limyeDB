@@ -18,6 +18,9 @@ const (
 	EventInsert EventType = "insert"
 	EventDelete EventType = "delete"
 	EventUpdate EventType = "update"
+
+	// maxConcurrentWebhooks limits the number of concurrent webhook goroutines
+	maxConcurrentWebhooks = 64
 )
 
 // Event packages the absolute point states and payloads dynamically.
@@ -41,6 +44,7 @@ type Dispatcher struct {
 	eventCh       chan Event
 	client        *http.Client
 	mu            sync.RWMutex
+	webhookSem    chan struct{} // semaphore to limit concurrent webhook goroutines
 }
 
 var globalDispatcher *Dispatcher
@@ -55,6 +59,7 @@ func GetDispatcher() *Dispatcher {
 			client: &http.Client{
 				Timeout: 3 * time.Second, // Fast explicit timeouts avoiding network drops locking processes
 			},
+			webhookSem: make(chan struct{}, maxConcurrentWebhooks),
 		}
 		go globalDispatcher.worker()
 	})
@@ -103,7 +108,15 @@ func (d *Dispatcher) worker() {
 
 		for _, hook := range hooks {
 			h := hook // Capture correctly explicitly across channels natively
+			if d.webhookSem != nil {
+				d.webhookSem <- struct{}{} // acquire semaphore slot
+			}
 			go func(sub WebhookSubscription, body []byte) {
+				defer func() {
+					if d.webhookSem != nil {
+						<-d.webhookSem // release semaphore slot
+					}
+				}()
 				req, err := http.NewRequest("POST", sub.URL, bytes.NewBuffer(body))
 				if err != nil {
 					log.Printf("CDC failed to create request for %s: %v", sub.URL, err)

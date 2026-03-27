@@ -208,14 +208,20 @@ func (wp *WorkerPool) Submit(task func()) {
 	}
 }
 
-// SubmitWait submits a task and waits for completion
-func (wp *WorkerPool) SubmitWait(task func()) {
+// SubmitWait submits a task and waits for completion.
+// Returns false if the pool is shutting down and the task was not executed.
+func (wp *WorkerPool) SubmitWait(task func()) bool {
 	done := make(chan struct{})
 	wp.Submit(func() {
 		task()
 		close(done)
 	})
-	<-done
+	select {
+	case <-done:
+		return true
+	case <-wp.quit:
+		return false
+	}
 }
 
 // Stop stops all workers

@@ -216,6 +216,9 @@ func (t *HTTPTransport) Stream(ctx context.Context, nodeAddr string) (Stream, er
 		_ = conn.Close() // Best effort close on error
 		return nil, err
 	}
+	if resp.Body != nil {
+		defer resp.Body.Close()
+	}
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		_ = conn.Close() // Best effort close on error
 		return nil, fmt.Errorf("unexpected streaming status: %d", resp.StatusCode)

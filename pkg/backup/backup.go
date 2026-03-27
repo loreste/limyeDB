@@ -17,6 +17,9 @@ import (
 // maxFileSize limits individual file extraction to prevent decompression bombs (1GB)
 const maxFileSize = 1 << 30 // 1GB
 
+// maxMetadataSize limits metadata reads to prevent decompression bombs (10MB)
+const maxMetadataSize = 10 << 20 // 10MB
+
 // BackupMetadata contains information about a backup.
 type BackupMetadata struct {
 	ID          string    `json:"id"`
@@ -232,7 +235,7 @@ func (b *Backup) Restore(inputPath string, opts RestoreOptions) (*BackupMetadata
 
 		// Handle metadata
 		if header.Name == "metadata.json" {
-			metaBytes, err := io.ReadAll(tarReader)
+			metaBytes, err := io.ReadAll(io.LimitReader(tarReader, maxMetadataSize))
 			if err != nil {
 				return nil, err
 			}
@@ -290,7 +293,7 @@ func (b *Backup) Restore(inputPath string, opts RestoreOptions) (*BackupMetadata
 		}
 
 		// Create file with restricted permissions (G306)
-		outFile, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0640)
+		outFile, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 		if err != nil {
 			return nil, err
 		}
@@ -368,7 +371,7 @@ func (b *Backup) ReadMetadata(backupPath string) (*BackupMetadata, error) {
 		}
 
 		if header.Name == "metadata.json" {
-			metaBytes, err := io.ReadAll(tarReader)
+			metaBytes, err := io.ReadAll(io.LimitReader(tarReader, maxMetadataSize))
 			if err != nil {
 				return nil, err
 			}

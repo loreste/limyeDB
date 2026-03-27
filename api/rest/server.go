@@ -2,6 +2,7 @@ package rest
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -34,13 +35,14 @@ type Server struct {
 
 // ServerOptions configures the REST server
 type ServerOptions struct {
-	Addr        string
-	Snapshots   *snapshot.Manager // Kept Snapshots here for NewServer compatibility
-	Aliases     *collection.AliasManager
-	Raft        *cluster.RaftNode
-	AuthToken   string
-	TLSCert     string
-	TLSKey      string
+	Addr           string
+	Snapshots      *snapshot.Manager // Kept Snapshots here for NewServer compatibility
+	Aliases        *collection.AliasManager
+	Raft           *cluster.RaftNode
+	AuthToken      string
+	TLSCert        string
+	TLSKey         string
+	AllowedOrigins []string // Allowed CORS origins; if empty, no origin is reflected
 }
 
 // NewServer creates a new REST API server
@@ -186,7 +188,8 @@ func (s *Server) setupMiddleware() {
 			claims, err := tokenManager.Validate(parts[1])
 			if err != nil {
 				// Fallback to static global API key for backward-compatibility or explicit Root overlays
-				if authHeader == "Bearer "+s.opts.AuthToken {
+				expected := "Bearer " + s.opts.AuthToken
+				if subtle.ConstantTimeCompare([]byte(authHeader), []byte(expected)) == 1 {
 					claims = &auth.TokenClaims{
 						Permissions: auth.Permissions{GlobalAdmin: true},
 					}
@@ -309,8 +312,23 @@ func (s *Server) requestLogger() gin.HandlerFunc {
 }
 
 func (s *Server) corsMiddleware() gin.HandlerFunc {
+	// Build a set of allowed origins for O(1) lookup
+	allowedSet := make(map[string]bool)
+	if s.opts != nil {
+		for _, o := range s.opts.AllowedOrigins {
+			allowedSet[o] = true
+		}
+	}
+
 	return func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
+		origin := c.GetHeader("Origin")
+		if origin != "" && allowedSet[origin] {
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Vary", "Origin")
+		}
+		// If no allowed origin matches, no Access-Control-Allow-Origin header is set,
+		// which causes the browser to block the cross-origin request.
+
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 

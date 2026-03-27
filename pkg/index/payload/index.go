@@ -53,6 +53,11 @@ func NewIndex(dbPath string) *Index {
 	}
 }
 
+// Close closes the underlying SQLite database connection.
+func (idx *Index) Close() error {
+	return idx.db.Close()
+}
+
 // IndexPoint adds a point's payload to the SQLite B-Tree
 func (idx *Index) IndexPoint(pointID uint32, payload map[string]interface{}) {
 	if len(payload) == 0 {

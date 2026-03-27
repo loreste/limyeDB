@@ -10,7 +10,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 )
@@ -61,15 +64,16 @@ type DeliveryResult struct {
 
 // Manager manages webhook subscriptions and event delivery.
 type Manager struct {
-	mu            sync.RWMutex
-	subscriptions map[string]*Subscription
-	client        *http.Client
-	queue         chan *deliveryJob
-	results       chan DeliveryResult
-	retryPolicy   RetryPolicy
-	workers       int
-	ctx           context.Context
-	cancel        context.CancelFunc
+	mu               sync.RWMutex
+	subscriptions    map[string]*Subscription
+	client           *http.Client
+	queue            chan *deliveryJob
+	results          chan DeliveryResult
+	retryPolicy      RetryPolicy
+	workers          int
+	ctx              context.Context
+	cancel           context.CancelFunc
+	allowLocalURLs   bool // for testing only: skip SSRF validation
 }
 
 // RetryPolicy defines retry behavior for failed deliveries.
@@ -123,6 +127,13 @@ func NewManager(workers int, retryPolicy RetryPolicy) *Manager {
 
 // Subscribe creates a new webhook subscription.
 func (m *Manager) Subscribe(sub *Subscription) error {
+	// Validate webhook URL to prevent SSRF attacks
+	if !m.allowLocalURLs {
+		if err := validateWebhookURL(sub.URL); err != nil {
+			return fmt.Errorf("invalid webhook URL: %w", err)
+		}
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -303,6 +314,19 @@ func (m *Manager) worker() {
 func (m *Manager) deliver(job *deliveryJob) DeliveryResult {
 	start := time.Now()
 
+	// Validate webhook URL to prevent SSRF attacks
+	if !m.allowLocalURLs {
+		if err := validateWebhookURL(job.subscription.URL); err != nil {
+			return DeliveryResult{
+				SubscriptionID: job.subscription.ID,
+				EventID:        job.event.ID,
+				Error:          fmt.Errorf("SSRF protection: %w", err),
+				Duration:       time.Since(start),
+				Timestamp:      time.Now(),
+			}
+		}
+	}
+
 	payload, err := json.Marshal(job.event)
 	if err != nil {
 		return DeliveryResult{
@@ -393,6 +417,79 @@ func (m *Manager) Results() <-chan DeliveryResult {
 // Close shuts down the webhook manager.
 func (m *Manager) Close() {
 	m.cancel()
+}
+
+// validateWebhookURL checks that a webhook URL is safe to call, rejecting
+// private/loopback addresses, non-HTTP(S) schemes, and localhost hostnames.
+func validateWebhookURL(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid webhook URL: %w", err)
+	}
+
+	scheme := strings.ToLower(u.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return fmt.Errorf("webhook URL scheme must be http or https, got %q", u.Scheme)
+	}
+
+	host := u.Hostname()
+
+	// Reject localhost variants
+	lower := strings.ToLower(host)
+	if lower == "localhost" || lower == "ip6-localhost" || lower == "ip6-loopback" {
+		return fmt.Errorf("webhook URL must not target localhost")
+	}
+
+	// Resolve the host to IP addresses and check each one
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		// If we can't resolve, also try parsing as a literal IP
+		ip := net.ParseIP(host)
+		if ip == nil {
+			return fmt.Errorf("cannot resolve webhook host %q: %w", host, err)
+		}
+		ips = []net.IP{ip}
+	}
+
+	for _, ip := range ips {
+		if isPrivateIP(ip) {
+			return fmt.Errorf("webhook URL must not target private/reserved IP %s", ip)
+		}
+	}
+
+	return nil
+}
+
+// isPrivateIP returns true if the IP is in a private, loopback, or link-local range.
+func isPrivateIP(ip net.IP) bool {
+	privateRanges := []struct {
+		network *net.IPNet
+	}{
+		{parseCIDR("127.0.0.0/8")},
+		{parseCIDR("10.0.0.0/8")},
+		{parseCIDR("172.16.0.0/12")},
+		{parseCIDR("192.168.0.0/16")},
+		{parseCIDR("169.254.0.0/16")},
+		{parseCIDR("::1/128")},
+		{parseCIDR("fc00::/7")},
+		{parseCIDR("fe80::/10")},
+	}
+
+	for _, r := range privateRanges {
+		if r.network.Contains(ip) {
+			return true
+		}
+	}
+
+	return ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified()
+}
+
+func parseCIDR(cidr string) *net.IPNet {
+	_, network, err := net.ParseCIDR(cidr)
+	if err != nil {
+		panic("invalid CIDR in webhook validation: " + cidr)
+	}
+	return network
 }
 
 func generateID() string {

@@ -211,13 +211,23 @@ func NewSemanticCache(capacity int, ttl time.Duration, threshold float32) *Seman
 // FindSimilar finds a cached result with a similar query vector.
 func (sc *SemanticCache) FindSimilar(vector []float32) (string, interface{}, bool) {
 	sc.mu.RLock()
-	defer sc.mu.RUnlock()
-
+	// Copy keys and vectors to avoid holding sc.mu while calling sc.cache.Get(),
+	// which acquires its own lock (preventing nested lock deadlocks).
+	type candidate struct {
+		key    string
+		vector []float32
+	}
+	candidates := make([]candidate, 0, len(sc.vectors))
 	for key, cachedVector := range sc.vectors {
-		similarity := cosineSimilarity(vector, cachedVector)
+		candidates = append(candidates, candidate{key: key, vector: cachedVector})
+	}
+	sc.mu.RUnlock()
+
+	for _, c := range candidates {
+		similarity := cosineSimilarity(vector, c.vector)
 		if similarity >= sc.similarityThreshold {
-			if result, ok := sc.cache.Get(key); ok {
-				return key, result, true
+			if result, ok := sc.cache.Get(c.key); ok {
+				return c.key, result, true
 			}
 		}
 	}
@@ -230,8 +240,10 @@ func (sc *SemanticCache) Set(key string, vector []float32, result interface{}) {
 	sc.vectors[key] = vector
 	sc.mu.Unlock()
 
+	// cache.Set() is called outside sc.mu to avoid nested locks
 	sc.cache.Set(key, result)
 }
+
 
 // cosineSimilarity calculates cosine similarity between two vectors.
 func cosineSimilarity(a, b []float32) float32 {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 type CohereEmbedder struct {
@@ -21,7 +22,7 @@ func NewCohereEmbedder(apiKey, model string) *CohereEmbedder {
 	return &CohereEmbedder{
 		APIKey: apiKey,
 		Model:  model,
-		client: &http.Client{},
+		client: &http.Client{Timeout: 30 * time.Second},
 	}
 }
 

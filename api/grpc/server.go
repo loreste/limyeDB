@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"crypto/subtle"
 	"net"
 	"strings"
 	"time"
@@ -57,7 +58,8 @@ func NewServer(cfg *config.ServerConfig, collections *collection.Manager, snapsh
 
 		claims, err := tokenManager.Validate(parts[1])
 		if err != nil {
-			if values[0] == "Bearer "+authToken {
+			expected := "Bearer " + authToken
+			if subtle.ConstantTimeCompare([]byte(values[0]), []byte(expected)) == 1 {
 				claims = &auth.TokenClaims{Permissions: auth.Permissions{GlobalAdmin: true}}
 			} else {
 				return nil, status.Errorf(codes.Unauthenticated, "invalid token claims")

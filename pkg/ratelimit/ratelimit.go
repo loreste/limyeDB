@@ -58,11 +58,12 @@ func (l *Limiter) Tokens() float64 {
 
 // RateLimiterStore manages rate limiters per key (e.g., IP, API key).
 type RateLimiterStore struct {
-	mu        sync.RWMutex
-	limiters  map[string]*Limiter
-	maxTokens float64
+	mu         sync.RWMutex
+	limiters   map[string]*Limiter
+	maxTokens  float64
 	refillRate float64
-	cleanup   time.Duration
+	cleanup    time.Duration
+	stopCh     chan struct{}
 }
 
 // NewRateLimiterStore creates a new store for rate limiters.
@@ -72,6 +73,7 @@ func NewRateLimiterStore(maxTokens, refillRate float64, cleanup time.Duration) *
 		maxTokens:  maxTokens,
 		refillRate: refillRate,
 		cleanup:    cleanup,
+		stopCh:     make(chan struct{}),
 	}
 
 	// Start cleanup goroutine
@@ -107,16 +109,26 @@ func (s *RateLimiterStore) cleanupLoop() {
 	ticker := time.NewTicker(s.cleanup)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		s.mu.Lock()
-		// Remove limiters that are at full capacity (inactive)
-		for key, limiter := range s.limiters {
-			if limiter.Tokens() >= s.maxTokens {
-				delete(s.limiters, key)
+	for {
+		select {
+		case <-s.stopCh:
+			return
+		case <-ticker.C:
+			s.mu.Lock()
+			// Remove limiters that are at full capacity (inactive)
+			for key, limiter := range s.limiters {
+				if limiter.Tokens() >= s.maxTokens {
+					delete(s.limiters, key)
+				}
 			}
+			s.mu.Unlock()
 		}
-		s.mu.Unlock()
 	}
+}
+
+// Stop stops the cleanup goroutine.
+func (s *RateLimiterStore) Stop() {
+	close(s.stopCh)
 }
 
 // Config holds rate limiter configuration.

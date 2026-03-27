@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 type OpenAIEmbedder struct {
@@ -21,7 +22,7 @@ func NewOpenAIEmbedder(apiKey, model string) *OpenAIEmbedder {
 	return &OpenAIEmbedder{
 		APIKey: apiKey,
 		Model:  model,
-		client: &http.Client{},
+		client: &http.Client{Timeout: 30 * time.Second},
 	}
 }
 

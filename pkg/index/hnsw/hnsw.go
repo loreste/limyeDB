@@ -173,41 +173,13 @@ func (h *HNSW) Insert(p *point.Point) error {
 	}
 	node.SetPayload(p.Payload)
 
-	h.mu.Lock()
-	if len(h.nodes) >= MaxNodes {
-		h.mu.Unlock()
-		return ErrTooManyNodes
+	nodeID, entryPoint, currentMaxLevel, done, err := h.insertNode(node, p.ID, level)
+	if err != nil {
+		return err
 	}
-	nodeID := uint32(len(h.nodes)) // #nosec G115 - bounds checked above
-
-	if h.graphMmap != nil {
-		if err := h.graphMmap.AddNode(nodeID, level); err != nil {
-			h.mu.Unlock()
-			return err
-		}
-	}
-
-	h.nodes = append(h.nodes, node)
-	h.idToIndex[p.ID] = nodeID
-	h.nodeCount.Add(1)
-
-	// Handle first node
-	if h.maxLevel == -1 {
-		h.maxLevel = level
-		h.entryPoint = nodeID
-		h.mu.Unlock()
+	if done {
 		return nil
 	}
-
-	entryPoint := h.entryPoint
-	currentMaxLevel := h.maxLevel
-
-	// Update entry point if new node has higher level
-	if level > currentMaxLevel {
-		h.maxLevel = level
-		h.entryPoint = nodeID
-	}
-	h.mu.Unlock()
 
 	// Find entry point by traversing from top to bottom
 	currNode := entryPoint
@@ -223,6 +195,47 @@ func (h *HNSW) Insert(p *point.Point) error {
 	}
 
 	return nil
+}
+
+// insertNode adds the node to the index structures under lock and returns
+// the information needed for graph traversal. If done is true, no further
+// traversal is needed (first node case).
+func (h *HNSW) insertNode(node *Node, pointID string, level int) (nodeID uint32, entryPoint uint32, maxLevel int, done bool, err error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if len(h.nodes) >= MaxNodes {
+		return 0, 0, 0, false, ErrTooManyNodes
+	}
+	nodeID = uint32(len(h.nodes)) // #nosec G115 - bounds checked above
+
+	if h.graphMmap != nil {
+		if err := h.graphMmap.AddNode(nodeID, level); err != nil {
+			return 0, 0, 0, false, err
+		}
+	}
+
+	h.nodes = append(h.nodes, node)
+	h.idToIndex[pointID] = nodeID
+	h.nodeCount.Add(1)
+
+	// Handle first node
+	if h.maxLevel == -1 {
+		h.maxLevel = level
+		h.entryPoint = nodeID
+		return nodeID, 0, 0, true, nil
+	}
+
+	entryPoint = h.entryPoint
+	maxLevel = h.maxLevel
+
+	// Update entry point if new node has higher level
+	if level > maxLevel {
+		h.maxLevel = level
+		h.entryPoint = nodeID
+	}
+
+	return nodeID, entryPoint, maxLevel, false, nil
 }
 
 // randomLevel generates a random level for a new node

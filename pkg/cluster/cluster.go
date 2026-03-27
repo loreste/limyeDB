@@ -286,6 +286,17 @@ func (sm *ShardManager) GetShard(shardID uint32) *Shard {
 	return sm.shards[shardID]
 }
 
+// GetShards returns a copy of all shards
+func (sm *ShardManager) GetShards() map[uint32]*Shard {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	shards := make(map[uint32]*Shard, len(sm.shards))
+	for id, shard := range sm.shards {
+		shards[id] = shard
+	}
+	return shards
+}
+
 // AddNode adds a node and rebalances shards
 func (sm *ShardManager) AddNode(node *Node) {
 	sm.mu.Lock()
@@ -332,15 +343,16 @@ func (sm *ShardManager) rebalanceShards() {
 func (sm *ShardManager) GetPrimaryNode(shardID uint32) *Node {
 	sm.mu.RLock()
 	shard := sm.shards[shardID]
-	sm.mu.RUnlock()
-
 	if shard == nil {
+		sm.mu.RUnlock()
 		return nil
 	}
+	primaryID := shard.Primary
+	sm.mu.RUnlock()
 
 	nodes := sm.hashRing.GetAllNodes()
 	for _, node := range nodes {
-		if node.ID == shard.Primary {
+		if node.ID == primaryID {
 			return node
 		}
 	}
@@ -513,9 +525,9 @@ func (c *Coordinator) failureDetectorLoop(ctx context.Context) {
 
 // detectFailures marks nodes as failed if heartbeat times out
 func (c *Coordinator) detectFailures() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	var failedEvents []MemberEvent
 
+	c.mu.Lock()
 	now := time.Now()
 	for _, node := range c.members {
 		if node.ID == c.localNode.ID {
@@ -527,25 +539,30 @@ func (c *Coordinator) detectFailures() {
 				node.State = NodeStateSuspect
 			} else if node.State == NodeStateSuspect {
 				node.State = NodeStateInactive
-				c.memberCh <- MemberEvent{
+				failedEvents = append(failedEvents, MemberEvent{
 					Type: MemberEventFailed,
 					Node: node,
 					Time: now,
-				}
+				})
 			}
 		}
+	}
+	c.mu.Unlock()
+
+	for _, event := range failedEvents {
+		c.memberCh <- event
 	}
 }
 
 // AddMember adds a member to the cluster
 func (c *Coordinator) AddMember(node *Node) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	node.State = NodeStateActive
 	node.LastHeartbeat = time.Now()
 	c.members[node.ID] = node
 	c.hashRing.AddNode(node)
+	c.mu.Unlock()
+
 	c.shardManager.AddNode(node)
 
 	c.memberCh <- MemberEvent{
@@ -558,15 +575,16 @@ func (c *Coordinator) AddMember(node *Node) {
 // RemoveMember removes a member from the cluster
 func (c *Coordinator) RemoveMember(nodeID string) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	node := c.members[nodeID]
 	if node == nil {
+		c.mu.Unlock()
 		return
 	}
 
 	delete(c.members, nodeID)
 	c.hashRing.RemoveNode(nodeID)
+	c.mu.Unlock()
+
 	c.shardManager.RemoveNode(nodeID)
 
 	c.memberCh <- MemberEvent{
@@ -816,23 +834,20 @@ type ClusterState struct {
 // GetState returns the current cluster state
 func (c *Coordinator) GetState() *ClusterState {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	members := make([]*Node, 0, len(c.members))
 	for _, node := range c.members {
 		members = append(members, node)
 	}
+	leaderID := c.leaderID
+	c.mu.RUnlock()
 
-	shards := make(map[uint32]*Shard)
-	for id, shard := range c.shardManager.shards {
-		shards[id] = shard
-	}
+	shards := c.shardManager.GetShards()
 
 	return &ClusterState{
 		Version:   1,
 		Members:   members,
 		Shards:    shards,
-		LeaderID:  c.leaderID,
+		LeaderID:  leaderID,
 		Timestamp: time.Now(),
 	}
 }

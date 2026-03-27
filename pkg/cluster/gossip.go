@@ -85,6 +85,7 @@ type Gossiper struct {
 
 	mu     sync.RWMutex
 	stopCh chan struct{}
+	wg     sync.WaitGroup
 	// (removed math/rand in favor of crypto/rand helpers)
 }
 
@@ -127,14 +128,25 @@ func NewGossiper(nodeID, addr string, transport Transport, config *GossipConfig)
 
 // Start starts the gossip protocol
 func (g *Gossiper) Start() error {
+	g.wg.Add(3)
+
 	// Start gossip loop
-	go g.gossipLoop()
+	go func() {
+		defer g.wg.Done()
+		g.gossipLoop()
+	}()
 
 	// Start probe loop
-	go g.probeLoop()
+	go func() {
+		defer g.wg.Done()
+		g.probeLoop()
+	}()
 
 	// Start suspicion timeout loop
-	go g.suspicionLoop()
+	go func() {
+		defer g.wg.Done()
+		g.suspicionLoop()
+	}()
 
 	return nil
 }
@@ -151,9 +163,10 @@ func cryptoRandIntn(n int) int {
 	return int(v.Int64())
 }
 
-// Stop stops the gossip protocol
+// Stop stops the gossip protocol and waits for all goroutines to finish.
 func (g *Gossiper) Stop() error {
 	close(g.stopCh)
+	g.wg.Wait()
 	return nil
 }
 
