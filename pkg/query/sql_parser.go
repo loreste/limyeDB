@@ -208,7 +208,7 @@ func (p *SQLParser) parseVectorSelectSearch(query string) (*SQLQuery, error) {
 	vectorStr := strings.TrimSpace(matches[3])
 	vec, err := p.parseVector(vectorStr)
 	if err != nil {
-		return nil, fmt.Errorf("invalid vector: %v", err)
+		return nil, fmt.Errorf("invalid vector: %w", err)
 	}
 	result.Vector = vec
 

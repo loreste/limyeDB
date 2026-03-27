@@ -328,7 +328,7 @@ func (s *Server) handleDeletePoint(c *gin.Context) {
 			CollectionName: name,
 			IDs:            []string{id},
 		}); err != nil {
-			respondError(c, http.StatusBadRequest, fmt.Errorf("raft write failed: %v", err))
+			respondError(c, http.StatusBadRequest, fmt.Errorf("raft write failed: %w", err))
 			return
 		}
 		respondSuccess(c, gin.H{"deleted": id})
@@ -1525,7 +1525,7 @@ func (s *Server) handleJoinCluster(c *gin.Context) {
 	}
 
 	if err := s.raft.Join(req.NodeID, req.RaftAddr); err != nil {
-		respondError(c, http.StatusInternalServerError, fmt.Errorf("failed to join cluster: %v", err))
+		respondError(c, http.StatusInternalServerError, fmt.Errorf("failed to join cluster: %w", err))
 		return
 	}
 

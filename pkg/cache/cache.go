@@ -44,7 +44,11 @@ func (c *Cache) Get(key string) (interface{}, bool) {
 	defer c.mu.Unlock()
 
 	if elem, ok := c.items[key]; ok {
-		entry := elem.Value.(*CacheEntry)
+		entry, ok := elem.Value.(*CacheEntry)
+		if !ok {
+			c.misses++
+			return nil, false
+		}
 		if time.Now().Before(entry.ExpiresAt) {
 			c.order.MoveToFront(elem)
 			c.hits++
@@ -64,7 +68,10 @@ func (c *Cache) Set(key string, value interface{}) {
 
 	if elem, ok := c.items[key]; ok {
 		c.order.MoveToFront(elem)
-		entry := elem.Value.(*CacheEntry)
+		entry, ok := elem.Value.(*CacheEntry)
+		if !ok {
+			return
+		}
 		entry.Value = value
 		entry.ExpiresAt = time.Now().Add(c.ttl)
 		return
@@ -132,7 +139,10 @@ type CacheStats struct {
 
 func (c *Cache) removeElement(elem *list.Element) {
 	c.order.Remove(elem)
-	entry := elem.Value.(*CacheEntry)
+	entry, ok := elem.Value.(*CacheEntry)
+	if !ok {
+		return
+	}
 	delete(c.items, entry.Key)
 }
 
@@ -193,18 +203,18 @@ func (sc *SearchCache) Stats() CacheStats {
 
 // SemanticCache caches queries based on semantic similarity.
 type SemanticCache struct {
-	cache           *Cache
+	cache               *Cache
 	similarityThreshold float32
-	vectors         map[string][]float32
-	mu              sync.RWMutex
+	vectors             map[string][]float32
+	mu                  sync.RWMutex
 }
 
 // NewSemanticCache creates a semantic cache.
 func NewSemanticCache(capacity int, ttl time.Duration, threshold float32) *SemanticCache {
 	return &SemanticCache{
-		cache:              NewCache(capacity, ttl),
+		cache:               NewCache(capacity, ttl),
 		similarityThreshold: threshold,
-		vectors:            make(map[string][]float32),
+		vectors:             make(map[string][]float32),
 	}
 }
 
@@ -243,7 +253,6 @@ func (sc *SemanticCache) Set(key string, vector []float32, result interface{}) {
 	// cache.Set() is called outside sc.mu to avoid nested locks
 	sc.cache.Set(key, result)
 }
-
 
 // cosineSimilarity calculates cosine similarity between two vectors.
 func cosineSimilarity(a, b []float32) float32 {

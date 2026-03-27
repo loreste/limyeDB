@@ -16,9 +16,9 @@ type BM25Index struct {
 	b  float64 // Length normalization parameter (default: 0.75)
 
 	// Index data
-	documents    map[string]*Document   // docID -> document
+	documents    map[string]*Document    // docID -> document
 	invertedIdx  map[string]*PostingList // term -> posting list
-	docLengths   map[string]int         // docID -> document length
+	docLengths   map[string]int          // docID -> document length
 	avgDocLength float64
 	totalDocs    int
 
@@ -39,16 +39,16 @@ type Document struct {
 
 // PostingList contains all documents containing a term
 type PostingList struct {
-	Term      string
-	DocFreq   int                    // Number of documents containing this term
-	Postings  map[string]*Posting    // docID -> posting
+	Term     string
+	DocFreq  int                 // Number of documents containing this term
+	Postings map[string]*Posting // docID -> posting
 }
 
 // Posting represents a term occurrence in a document
 type Posting struct {
 	DocID         string
-	TermFreq      int       // Number of times term appears in doc
-	Positions     []int     // Positions where term appears
+	TermFreq      int            // Number of times term appears in doc
+	Positions     []int          // Positions where term appears
 	FieldTermFreq map[string]int // Term frequency per field
 }
 
@@ -59,9 +59,9 @@ type Tokenizer interface {
 
 // DefaultTokenizer implements basic tokenization
 type DefaultTokenizer struct {
-	lowercase   bool
-	stemming    bool
-	minLength   int
+	lowercase bool
+	stemming  bool
+	minLength int
 }
 
 // NewDefaultTokenizer creates a new default tokenizer
@@ -180,7 +180,7 @@ func (idx *BM25Index) Index(doc *Document) error {
 			}
 			termFreqs[token]++
 			termPositions[token] = append(termPositions[token], offset+pos)
-			
+
 			if fieldTermFreqs[token] == nil {
 				fieldTermFreqs[token] = make(map[string]int)
 			}
@@ -323,8 +323,8 @@ func (idx *BM25Index) Search(query string, limit int) []SearchResult {
 		}
 
 		// Calculate IDF
-		idf := math.Log((float64(idx.totalDocs)-float64(postingList.DocFreq)+0.5) /
-			(float64(postingList.DocFreq) + 0.5) + 1)
+		idf := math.Log((float64(idx.totalDocs)-float64(postingList.DocFreq)+0.5)/
+			(float64(postingList.DocFreq)+0.5) + 1)
 
 		for docID, posting := range postingList.Postings {
 			docLength := float64(idx.docLengths[docID])
@@ -386,12 +386,12 @@ func (idx *BM25Index) SearchWithBoost(query string, limit int, fieldBoosts map[s
 			continue
 		}
 
-		idf := math.Log((float64(idx.totalDocs)-float64(postingList.DocFreq)+0.5) /
-			(float64(postingList.DocFreq) + 0.5) + 1)
+		idf := math.Log((float64(idx.totalDocs)-float64(postingList.DocFreq)+0.5)/
+			(float64(postingList.DocFreq)+0.5) + 1)
 
 		for docID, posting := range postingList.Postings {
 			docLength := float64(idx.docLengths[docID])
-			
+
 			tf := 0.0
 			if len(fieldBoosts) > 0 {
 				for fieldName, freq := range posting.FieldTermFreq {
@@ -436,7 +436,6 @@ func (idx *BM25Index) SearchWithBoost(query string, limit int, fieldBoosts map[s
 
 	return results
 }
-
 
 // Size returns the number of documents in the index
 func (idx *BM25Index) Size() int {

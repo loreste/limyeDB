@@ -15,13 +15,13 @@ type VamanaNode struct {
 
 // VamanaGraph orchestrates a pure single-layer topology traversing Extreme NVMe capacities fully bypassing RAM
 type VamanaGraph struct {
-	nodes        map[uint32]*VamanaNode
-	dimension    int
-	maxDegree    int
-	alpha        float32
-	getVector    func(uint32) point.Vector
-	entryNode    uint32
-	mu           sync.RWMutex
+	nodes     map[uint32]*VamanaNode
+	dimension int
+	maxDegree int
+	alpha     float32
+	getVector func(uint32) point.Vector
+	entryNode uint32
+	mu        sync.RWMutex
 }
 
 // NewVamanaGraph initiates the purely asynchronous topology seamlessly
@@ -39,7 +39,7 @@ func NewVamanaGraph(dimension int, maxDegree int, alpha float32, getVec func(uin
 func (g *VamanaGraph) AddNode(id uint32) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	
+
 	if _, exists := g.nodes[id]; !exists {
 		g.nodes[id] = &VamanaNode{
 			ID:        id,
@@ -72,13 +72,13 @@ func (g *VamanaGraph) GreedySearch(query point.Vector, L int) []uint32 {
 
 	visited := make(map[uint32]bool)
 	visited[g.entryNode] = true
-	
+
 	candidates := []uint32{g.entryNode}
-	
+
 	for len(candidates) > 0 {
 		bestIdx := 0
 		bestDist := Euclidean(query, g.getVector(candidates[0]))
-		
+
 		for i := 1; i < len(candidates); i++ {
 			d := Euclidean(query, g.getVector(candidates[i]))
 			if d < bestDist {
@@ -94,7 +94,7 @@ func (g *VamanaGraph) GreedySearch(query point.Vector, L int) []uint32 {
 		for _, neighbor := range node.Neighbors {
 			if !visited[neighbor] {
 				visited[neighbor] = true
-				
+
 				if len(visited) < L {
 					candidates = append(candidates, neighbor)
 				}
@@ -139,16 +139,16 @@ func (g *VamanaGraph) RobustPrune(nodeID uint32, candidates []uint32) {
 	sort.Slice(pool, func(i, j int) bool { return pool[i].dist < pool[j].dist })
 
 	newNeighbors := make([]uint32, 0, g.maxDegree)
-	
+
 	for _, p := range pool {
 		if len(newNeighbors) >= g.maxDegree {
 			break
 		}
-		
+
 		valid := true
 		for _, n := range newNeighbors {
 			// Alpha scaling bounds safely dropping highly clustered neighbor redundancies precisely preserving RAM boundaries
-			if g.alpha * Euclidean(g.getVector(p.id), g.getVector(n)) <= p.dist {
+			if g.alpha*Euclidean(g.getVector(p.id), g.getVector(n)) <= p.dist {
 				valid = false
 				break
 			}

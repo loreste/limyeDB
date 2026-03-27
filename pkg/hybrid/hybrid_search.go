@@ -76,8 +76,8 @@ type HybridSearchParams struct {
 	VectorName string
 
 	// Text search parameters
-	Query       string
-	TextField   string // Field to search in (default: all)
+	Query     string
+	TextField string // Field to search in (default: all)
 
 	// Fusion parameters
 	FusionMethod FusionMethod
@@ -104,14 +104,14 @@ type HybridSearchResult struct {
 
 // HybridScoredPoint represents a result with combined score
 type HybridScoredPoint struct {
-	ID           string                 `json:"id"`
-	Score        float64                `json:"score"`
-	VectorScore  float64                `json:"vector_score,omitempty"`
-	TextScore    float64                `json:"text_score,omitempty"`
-	VectorRank   int                    `json:"vector_rank,omitempty"`
-	TextRank     int                    `json:"text_rank,omitempty"`
-	Vector       point.Vector           `json:"vector,omitempty"`
-	Payload      map[string]interface{} `json:"payload,omitempty"`
+	ID          string                 `json:"id"`
+	Score       float64                `json:"score"`
+	VectorScore float64                `json:"vector_score,omitempty"`
+	TextScore   float64                `json:"text_score,omitempty"`
+	VectorRank  int                    `json:"vector_rank,omitempty"`
+	TextRank    int                    `json:"text_rank,omitempty"`
+	Vector      point.Vector           `json:"vector,omitempty"`
+	Payload     map[string]interface{} `json:"payload,omitempty"`
 }
 
 // Search performs hybrid search combining vector and text search

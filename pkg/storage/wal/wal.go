@@ -381,7 +381,7 @@ func (w *WAL) replaySegment(path string, fn func(*Record) error) error {
 	for {
 		record, err := decodeRecord(reader)
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			return err
