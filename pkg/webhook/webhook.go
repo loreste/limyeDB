@@ -397,11 +397,6 @@ func (m *Manager) Close() {
 
 func generateID() string {
 	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		// Fallback: use time-based generation if crypto/rand fails
-		for i := range b {
-			b[i] = byte(time.Now().UnixNano() >> (i * 8)) //nolint:gosec // fallback only
-		}
-	}
+	_, _ = rand.Read(b) // crypto/rand.Read never returns error on supported platforms
 	return hex.EncodeToString(b)
 }

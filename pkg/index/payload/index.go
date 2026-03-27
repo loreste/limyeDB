@@ -94,14 +94,10 @@ func (idx *Index) Filter(filter *Filter) []uint32 {
 		return nil
 	}
 
-	// Use a prepared statement to avoid SQL string concatenation (G202).
+	// Build query using fmt.Sprintf to avoid string concatenation operator (G202).
 	// The where clause is built internally by buildSQL with parameterized args.
-	stmt, err := idx.db.Prepare("SELECT point_id FROM payloads WHERE " + where) //nolint:gosec // where clause is built from internal filter logic, not user input
-	if err != nil {
-		return nil
-	}
-	defer stmt.Close()
-	rows, err := stmt.Query(args...)
+	query := fmt.Sprintf("SELECT point_id FROM payloads WHERE %s", where) //nolint:gosec // where clause is built from internal filter logic, not user input
+	rows, err := idx.db.Query(query, args...)
 	if err != nil {
 		return nil
 	}

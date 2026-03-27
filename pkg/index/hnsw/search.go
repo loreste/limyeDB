@@ -477,13 +477,14 @@ func (h *HNSW) Recommend(id string, k int) ([]Candidate, error) {
 		return nil, err
 	}
 
-	// Filter out the query point - cap allocation to actual results size
-	filterCap := k
-	if filterCap > len(results) {
-		filterCap = len(results)
-	}
+	// Filter out the query point - use actual results size for allocation cap
+	filterCap := len(results)
 	if filterCap < 0 {
 		filterCap = 0
+	}
+	const maxFilterCap = 1 << 20 // 1M entries max
+	if filterCap > maxFilterCap {
+		filterCap = maxFilterCap
 	}
 	filtered := make([]Candidate, 0, filterCap)
 	for _, c := range results {

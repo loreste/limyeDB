@@ -3,9 +3,8 @@ package cluster
 import (
 	"context"
 	cryptorand "crypto/rand"
-	"encoding/binary"
 	"encoding/json"
-	"math/rand"
+	"math/big"
 	"sync"
 	"time"
 )
@@ -86,7 +85,7 @@ type Gossiper struct {
 
 	mu     sync.RWMutex
 	stopCh chan struct{}
-	rng    *rand.Rand
+	// (removed math/rand in favor of crypto/rand helpers)
 }
 
 type suspicionTimer struct {
@@ -118,7 +117,6 @@ func NewGossiper(nodeID, addr string, transport Transport, config *GossipConfig)
 		suspicions: make(map[string]*suspicionTimer),
 		broadcasts: make([]GossipMessage, 0),
 		stopCh:     make(chan struct{}),
-		rng:        rand.New(rand.NewSource(cryptoRandSeed())),
 	}
 
 	// Add self to states
@@ -141,14 +139,16 @@ func (g *Gossiper) Start() error {
 	return nil
 }
 
-// cryptoRandSeed returns a cryptographically secure random seed for math/rand.
-func cryptoRandSeed() int64 {
-	var seedBytes [8]byte
-	if _, err := cryptorand.Read(seedBytes[:]); err != nil {
-		// Fallback to time-based seed if crypto/rand fails
-		return time.Now().UnixNano()
+// cryptoRandIntn returns a cryptographically secure random int in [0, n).
+func cryptoRandIntn(n int) int {
+	if n <= 0 {
+		return 0
 	}
-	return int64(binary.LittleEndian.Uint64(seedBytes[:]))
+	v, err := cryptorand.Int(cryptorand.Reader, big.NewInt(int64(n)))
+	if err != nil {
+		return 0
+	}
+	return int(v.Int64())
 }
 
 // Stop stops the gossip protocol
@@ -333,7 +333,7 @@ func (g *Gossiper) selectGossipTargets() []string {
 
 	// Fisher-Yates shuffle
 	for i := len(candidates) - 1; i > 0; i-- {
-		j := g.rng.Intn(i + 1)
+		j := cryptoRandIntn(i + 1)
 		candidates[i], candidates[j] = candidates[j], candidates[i]
 	}
 
@@ -396,7 +396,7 @@ func (g *Gossiper) selectProbeTarget() *GossipState {
 		return nil
 	}
 
-	return candidates[g.rng.Intn(len(candidates))]
+	return candidates[cryptoRandIntn(len(candidates))]
 }
 
 func (g *Gossiper) suspicionLoop() {

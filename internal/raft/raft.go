@@ -2,11 +2,10 @@ package raft
 
 import (
 	cryptorand "crypto/rand"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand"
+	"math/big"
 	"sync"
 	"time"
 )
@@ -101,8 +100,7 @@ type Node struct {
 	applyCh      chan LogEntry
 	commitCh     chan struct{}
 
-	// Random number generator
-	rng *rand.Rand
+	// (removed math/rand in favor of crypto/rand helpers)
 }
 
 // Transport defines the interface for network communication
@@ -194,19 +192,21 @@ func NewNode(cfg *Config) (*Node, error) {
 		stopCh:            make(chan struct{}),
 		applyCh:           make(chan LogEntry, 100),
 		commitCh:          make(chan struct{}, 1),
-		rng:               rand.New(rand.NewSource(secureRandSeed())),
 	}
 
 	return n, nil
 }
 
-// secureRandSeed returns a cryptographically secure random seed for math/rand.
-func secureRandSeed() int64 {
-	var seedBytes [8]byte
-	if _, err := cryptorand.Read(seedBytes[:]); err != nil {
-		return time.Now().UnixNano()
+// cryptoRandInt63n returns a cryptographically secure random int64 in [0, n).
+func cryptoRandInt63n(n int64) int64 {
+	if n <= 0 {
+		return 0
 	}
-	return int64(binary.LittleEndian.Uint64(seedBytes[:]))
+	v, err := cryptorand.Int(cryptorand.Reader, big.NewInt(n))
+	if err != nil {
+		return 0
+	}
+	return v.Int64()
 }
 
 // Start starts the Raft node
@@ -240,7 +240,7 @@ func (n *Node) runElectionTimer() {
 		n.mu.RLock()
 		state := n.state
 		lastHeartbeat := n.lastHeartbeat
-		timeout := n.electionTimeout + time.Duration(n.rng.Int63n(int64(n.electionTimeout)))
+		timeout := n.electionTimeout + time.Duration(cryptoRandInt63n(int64(n.electionTimeout)))
 		n.mu.RUnlock()
 
 		if state == Leader {

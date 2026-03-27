@@ -28,13 +28,18 @@ func NewNode(id string, vector point.Vector, level int, m int, useMmap bool) *No
 		connections = make([][]uint32, level+1)
 		for i := 0; i <= level; i++ {
 			// Layer 0 has 2*M connections, upper layers have M
-			capacity := m
+			var capacity int
 			if i == 0 {
-				if m > math.MaxInt/2 {
+				// Safe multiplication: check overflow before computing 2*m
+				if m <= 0 {
+					capacity = 0
+				} else if m > math.MaxInt/2 {
 					capacity = math.MaxInt
 				} else {
 					capacity = 2 * m
 				}
+			} else {
+				capacity = m
 			}
 			connections[i] = make([]uint32, 0, capacity)
 		}
