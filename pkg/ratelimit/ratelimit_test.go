@@ -12,7 +12,7 @@ import (
 
 func TestTokenBucket_Allow(t *testing.T) {
 	// 10 tokens, refill rate 10 per second
-	tb := NewLimiter(10, 10) 
+	tb := NewLimiter(10, 10)
 
 	// Should allow first 10 requests
 	for i := 0; i < 10; i++ {

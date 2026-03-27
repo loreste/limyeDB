@@ -32,7 +32,7 @@ func TestGoroutineLeaks(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Server.RESTAddress = ":18080"
 	server := rest.NewServer(&cfg.Server, cm, nil)
-	
+
 	errCh := make(chan error, 1)
 
 	go func() {
@@ -70,7 +70,7 @@ func TestGoroutineLeaks(t *testing.T) {
 	// Allow a tiny margin for Go testing internal routines
 	if finalGoroutines > initialGoroutines+5 {
 		t.Errorf("Goroutine leak detected! Started with %d, ended with %d", initialGoroutines, finalGoroutines)
-		
+
 		buf := make([]byte, 1<<16)
 		n := runtime.Stack(buf, true)
 		fmt.Printf("%s", string(buf[:n]))

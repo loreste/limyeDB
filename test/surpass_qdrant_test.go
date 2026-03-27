@@ -328,8 +328,8 @@ func TestAutoTuner(t *testing.T) {
 
 	// Record some queries
 	for i := 0; i < 200; i++ {
-		latency := float64(5 + i%10) // 5-14ms latency
-		recall := 0.95 + float64(i%10)*0.005  // 0.95-0.995 recall
+		latency := float64(5 + i%10)         // 5-14ms latency
+		recall := 0.95 + float64(i%10)*0.005 // 0.95-0.995 recall
 		tuner.RecordQuery(latency, recall)
 	}
 

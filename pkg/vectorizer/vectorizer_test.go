@@ -427,12 +427,12 @@ func TestOpenAIVectorizerVectorize(t *testing.T) {
 	defer server.Close()
 
 	v := &OpenAIVectorizer{
-		client: &http.Client{Timeout: 5 * time.Second},
-		apiKey: "test-key",
-		model:  "text-embedding-3-small",
-		dimension: 1536,
-		endpoint: server.URL,
-		batchSize: 100,
+		client:     &http.Client{Timeout: 5 * time.Second},
+		apiKey:     "test-key",
+		model:      "text-embedding-3-small",
+		dimension:  1536,
+		endpoint:   server.URL,
+		batchSize:  100,
 		retryCount: 0,
 	}
 

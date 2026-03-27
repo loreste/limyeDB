@@ -295,7 +295,6 @@ func TestCohereEmbedBatch(t *testing.T) {
 
 	e := &CohereEmbedder{
 		APIKey: "test-api-key",
-		client: &http.Client{Timeout: 5 * time.Second},
 	}
 
 	// Similar to OpenAI test, we'd need to override the endpoint

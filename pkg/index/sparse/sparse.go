@@ -373,7 +373,7 @@ type HybridResult struct {
 type FusionMethod string
 
 const (
-	FusionRRF     FusionMethod = "rrf"     // Reciprocal Rank Fusion
+	FusionRRF      FusionMethod = "rrf"      // Reciprocal Rank Fusion
 	FusionWeighted FusionMethod = "weighted" // Weighted linear combination
 )
 

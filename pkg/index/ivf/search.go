@@ -10,9 +10,9 @@ import (
 
 // SearchParams holds search parameters
 type SearchParams struct {
-	K       int                                             // Number of results to return
-	Nprobe  int                                             // Number of clusters to search (overrides default)
-	Filter  func(id string, payload map[string]interface{}) bool
+	K      int // Number of results to return
+	Nprobe int // Number of clusters to search (overrides default)
+	Filter func(id string, payload map[string]interface{}) bool
 }
 
 // DefaultSearchParams returns default search parameters

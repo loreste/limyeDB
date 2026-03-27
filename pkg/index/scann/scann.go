@@ -13,40 +13,40 @@ import (
 
 // Config holds ScaNN index configuration
 type Config struct {
-	NumLeaves           int               // Number of partitions/leaves (default: sqrt(n))
-	NumRerank           int               // Candidates for exact reranking (default: 100)
-	Dimension           int               // Vector dimension
-	Metric              config.MetricType // Distance metric
-	QuantizationDims    int               // Reduced dimensions for AQ (default: dimension/4)
-	AnisotropicThreshold float32          // Threshold for anisotropic quantization
-	MaxElements         int               // Maximum number of elements
-	TrainingSamples     int               // Samples for training
+	NumLeaves            int               // Number of partitions/leaves (default: sqrt(n))
+	NumRerank            int               // Candidates for exact reranking (default: 100)
+	Dimension            int               // Vector dimension
+	Metric               config.MetricType // Distance metric
+	QuantizationDims     int               // Reduced dimensions for AQ (default: dimension/4)
+	AnisotropicThreshold float32           // Threshold for anisotropic quantization
+	MaxElements          int               // Maximum number of elements
+	TrainingSamples      int               // Samples for training
 }
 
 // DefaultConfig returns default ScaNN configuration
 func DefaultConfig() *Config {
 	return &Config{
-		NumLeaves:           100,
-		NumRerank:           100,
-		Dimension:           0, // Must be set
-		Metric:              config.MetricCosine,
-		QuantizationDims:    0, // Auto-compute
+		NumLeaves:            100,
+		NumRerank:            100,
+		Dimension:            0, // Must be set
+		Metric:               config.MetricCosine,
+		QuantizationDims:     0, // Auto-compute
 		AnisotropicThreshold: 0.2,
-		MaxElements:         100000,
-		TrainingSamples:     10000,
+		MaxElements:          100000,
+		TrainingSamples:      10000,
 	}
 }
 
 // ScaNN implements the Scalable Nearest Neighbors algorithm
 type ScaNN struct {
-	config       *Config
-	partitioner  *TreePartitioner
-	aqEncoder    *AnisotropicQuantizer
-	distCalc     distance.Calculator
+	config      *Config
+	partitioner *TreePartitioner
+	aqEncoder   *AnisotropicQuantizer
+	distCalc    distance.Calculator
 
 	// Point storage
 	points       []*point.Point
-	quantized    [][]byte        // Quantized representations
+	quantized    [][]byte // Quantized representations
 	idToIndex    map[string]uint32
 	pointCount   atomic.Int64
 	deletedCount atomic.Int64
@@ -353,25 +353,25 @@ func copyVector(v point.Vector) point.Vector {
 
 // TreePartitioner implements tree-based space partitioning for ScaNN
 type TreePartitioner struct {
-	dimension  int
-	numLeaves  int
-	distCalc   distance.Calculator
+	dimension int
+	numLeaves int
+	distCalc  distance.Calculator
 
 	// Tree structure
-	root       *treeNode
-	leaves     []*leafNode
+	root   *treeNode
+	leaves []*leafNode
 
-	trained    bool
-	mu         sync.RWMutex
+	trained bool
+	mu      sync.RWMutex
 }
 
 type treeNode struct {
-	isLeaf      bool
-	splitDim    int
-	splitValue  float32
-	left        *treeNode
-	right       *treeNode
-	leafIndex   int
+	isLeaf     bool
+	splitDim   int
+	splitValue float32
+	left       *treeNode
+	right      *treeNode
+	leafIndex  int
 }
 
 type leafNode struct {

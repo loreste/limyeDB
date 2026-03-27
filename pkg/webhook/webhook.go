@@ -22,14 +22,14 @@ import (
 type EventType string
 
 const (
-	EventPointInsert     EventType = "point.insert"
-	EventPointUpdate     EventType = "point.update"
-	EventPointDelete     EventType = "point.delete"
+	EventPointInsert      EventType = "point.insert"
+	EventPointUpdate      EventType = "point.update"
+	EventPointDelete      EventType = "point.delete"
 	EventCollectionCreate EventType = "collection.create"
 	EventCollectionDelete EventType = "collection.delete"
-	EventSnapshotCreate  EventType = "snapshot.create"
-	EventClusterJoin     EventType = "cluster.join"
-	EventClusterLeave    EventType = "cluster.leave"
+	EventSnapshotCreate   EventType = "snapshot.create"
+	EventClusterJoin      EventType = "cluster.join"
+	EventClusterLeave     EventType = "cluster.leave"
 )
 
 // Event represents a webhook event.
@@ -42,13 +42,13 @@ type Event struct {
 
 // Subscription represents a webhook subscription.
 type Subscription struct {
-	ID         string      `json:"id"`
-	URL        string      `json:"url"`
-	Events     []EventType `json:"events"`
-	Secret     string      `json:"secret,omitempty"`
-	Active     bool        `json:"active"`
-	CreatedAt  time.Time   `json:"created_at"`
-	Collection string      `json:"collection,omitempty"` // Optional: filter by collection
+	ID         string            `json:"id"`
+	URL        string            `json:"url"`
+	Events     []EventType       `json:"events"`
+	Secret     string            `json:"secret,omitempty"`
+	Active     bool              `json:"active"`
+	CreatedAt  time.Time         `json:"created_at"`
+	Collection string            `json:"collection,omitempty"` // Optional: filter by collection
 	Headers    map[string]string `json:"headers,omitempty"`    // Custom headers
 }
 
@@ -64,16 +64,16 @@ type DeliveryResult struct {
 
 // Manager manages webhook subscriptions and event delivery.
 type Manager struct {
-	mu               sync.RWMutex
-	subscriptions    map[string]*Subscription
-	client           *http.Client
-	queue            chan *deliveryJob
-	results          chan DeliveryResult
-	retryPolicy      RetryPolicy
-	workers          int
-	ctx              context.Context
-	cancel           context.CancelFunc
-	allowLocalURLs   bool // for testing only: skip SSRF validation
+	mu             sync.RWMutex
+	subscriptions  map[string]*Subscription
+	client         *http.Client
+	queue          chan *deliveryJob
+	results        chan DeliveryResult
+	retryPolicy    RetryPolicy
+	workers        int
+	ctx            context.Context
+	cancel         context.CancelFunc
+	allowLocalURLs bool // for testing only: skip SSRF validation
 }
 
 // RetryPolicy defines retry behavior for failed deliveries.

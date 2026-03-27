@@ -25,11 +25,11 @@ const (
 
 // Event packages the absolute point states and payloads dynamically.
 type Event struct {
-	Collection string      `json:"collection"`
-	Type       EventType   `json:"type"`
+	Collection string       `json:"collection"`
+	Type       EventType    `json:"type"`
 	Point      *point.Point `json:"point,omitempty"`
-	PointID    string      `json:"point_id,omitempty"`
-	Timestamp  int64       `json:"timestamp"`
+	PointID    string       `json:"point_id,omitempty"`
+	Timestamp  int64        `json:"timestamp"`
 }
 
 // WebhookSubscription binds an external callback consumer URL efficiently
@@ -80,7 +80,7 @@ func (d *Dispatcher) Subscriptions(collection string) []WebhookSubscription {
 	return d.subscriptions[collection]
 }
 
-// Publish streams the mutation safely failing fast if buffer is exhausted dynamically 
+// Publish streams the mutation safely failing fast if buffer is exhausted dynamically
 func (d *Dispatcher) Publish(event Event) {
 	select {
 	case d.eventCh <- event:

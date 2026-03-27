@@ -156,7 +156,7 @@ func (c *Collection) Discover(params *DiscoveryParams) (*DiscoveryResult, error)
 	if len(negativeVectors) > pairCount {
 		pairCount = len(negativeVectors)
 	}
-	
+
 	for i := 0; i < pairCount; i++ {
 		pair := hnsw.ContextPair{}
 		if i < len(positiveVectors) {
@@ -186,7 +186,7 @@ func (c *Collection) Discover(params *DiscoveryParams) (*DiscoveryResult, error)
 			return evaluator.Evaluate(params.Filter, pl)
 		}
 	}
-	
+
 	candidates, err = idx.DiscoverWithFilter(discoverParams)
 
 	if err != nil {
@@ -399,9 +399,9 @@ func (c *Collection) RecommendV2(params *RecommendParams) (*DiscoveryResult, err
 // GroupSearchParams holds parameters for grouped search
 type GroupSearchParams struct {
 	Query      point.Vector    `json:"vector"`
-	GroupBy    string          `json:"group_by"`    // Payload field to group by
-	GroupSize  int             `json:"group_size"`  // Results per group
-	Limit      int             `json:"limit"`       // Total groups to return
+	GroupBy    string          `json:"group_by"`   // Payload field to group by
+	GroupSize  int             `json:"group_size"` // Results per group
+	Limit      int             `json:"limit"`      // Total groups to return
 	Filter     *payload.Filter `json:"filter,omitempty"`
 	VectorName string          `json:"vector_name,omitempty"`
 	WithVector bool            `json:"with_vector,omitempty"`
@@ -552,4 +552,3 @@ func (c *Collection) GroupSearch(params *GroupSearchParams) (*GroupSearchResult,
 
 	return result, nil
 }
-

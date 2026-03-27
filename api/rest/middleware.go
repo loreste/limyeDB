@@ -23,7 +23,7 @@ type RateLimiter struct {
 }
 
 const (
-	rateLimiterMaxEntries     = 100000
+	rateLimiterMaxEntries      = 100000
 	rateLimiterCleanupInterval = 5 * time.Minute
 	rateLimiterEntryTTL        = 1 * time.Hour
 )
@@ -331,7 +331,7 @@ func (m *MetricsMiddleware) GetMetrics() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"request_count":       counts,
+		"request_count":        counts,
 		"avg_duration_seconds": durations,
 	}
 }

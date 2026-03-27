@@ -27,18 +27,18 @@ type Storage struct {
 
 // Config holds mmap storage configuration
 type Config struct {
-	Path          string
-	InitialSize   int64
-	MaxSize       int64
-	Dimension     int
-	GrowthFactor  float64
+	Path         string
+	InitialSize  int64
+	MaxSize      int64
+	Dimension    int
+	GrowthFactor float64
 }
 
 // DefaultConfig returns default mmap configuration
 func DefaultConfig() *Config {
 	return &Config{
 		Path:         "./data/vectors.mmap",
-		InitialSize:  64 * 1024 * 1024,  // 64MB
+		InitialSize:  64 * 1024 * 1024,        // 64MB
 		MaxSize:      10 * 1024 * 1024 * 1024, // 10GB
 		Dimension:    128,
 		GrowthFactor: 2.0,

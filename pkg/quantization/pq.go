@@ -35,7 +35,7 @@ func NewProductQuantizer(dimension int, m int, k int) *ProductQuantizer {
 }
 
 // Train calculates the specific centroid bounds over subsets.
-// For pure simplicity, this implementation assigns deterministic initialization directly 
+// For pure simplicity, this implementation assigns deterministic initialization directly
 // mapping over vector arrays. A production K-Means iteration logic runs here contextually.
 func (q *ProductQuantizer) Train(vectors []point.Vector) error {
 	if len(vectors) < q.k {
@@ -73,10 +73,10 @@ func (q *ProductQuantizer) Encode(vector point.Vector) ([]byte, error) {
 
 	for i := 0; i < q.m; i++ {
 		subVec := vector[i*subDim : (i+1)*subDim]
-		
+
 		bestDist := float32(math.MaxFloat32)
 		bestIdx := 0
-		
+
 		for j := 0; j < q.k; j++ {
 			centroid := q.codebooks[i][j]
 			var dist float32
@@ -115,7 +115,7 @@ func (q *ProductQuantizer) Decode(data []byte) (point.Vector, error) {
 	return vector, nil
 }
 
-// Distance executes Asymmetric Distance Computation (ADC) mathematically evaluating 
+// Distance executes Asymmetric Distance Computation (ADC) mathematically evaluating
 // the raw queried vector uniformly mapped against the encoded centroid byte tables entirely natively.
 func (q *ProductQuantizer) Distance(query point.Vector, quantized []byte) float32 {
 	q.mu.RLock()
@@ -127,7 +127,7 @@ func (q *ProductQuantizer) Distance(query point.Vector, quantized []byte) float3
 	for i := 0; i < q.m; i++ {
 		subQuery := query[i*subDim : (i+1)*subDim]
 		centroid := q.codebooks[i][quantized[i]]
-		
+
 		for k := 0; k < subDim; k++ {
 			diff := subQuery[k] - centroid[k]
 			totalDist += diff * diff
@@ -141,7 +141,7 @@ func (q *ProductQuantizer) Distance(query point.Vector, quantized []byte) float3
 // significantly accelerating retrieval operations safely.
 func (q *ProductQuantizer) BatchDistance(query point.Vector, quantized [][]byte) []float32 {
 	distances := make([]float32, len(quantized))
-	
+
 	q.mu.RLock()
 	table := make([][]float32, q.m)
 	subDim := q.dimension / q.m
@@ -149,7 +149,7 @@ func (q *ProductQuantizer) BatchDistance(query point.Vector, quantized [][]byte)
 	for i := 0; i < q.m; i++ {
 		table[i] = make([]float32, q.k)
 		subQuery := query[i*subDim : (i+1)*subDim]
-		
+
 		for j := 0; j < q.k; j++ {
 			centroid := q.codebooks[i][j]
 			var dist float32

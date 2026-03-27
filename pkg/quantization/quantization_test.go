@@ -274,7 +274,7 @@ func BenchmarkBinaryDistance(b *testing.B) {
 
 func BenchmarkProductQuantizer(b *testing.B) {
 	dimension := 128
-	
+
 	q := NewProductQuantizer(dimension, 16, 256)
 	if q == nil {
 		b.Fatalf("failed to create quantizer")

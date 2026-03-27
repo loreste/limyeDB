@@ -114,10 +114,10 @@ func TestGeoIndex(t *testing.T) {
 	idx := NewIndex()
 
 	// Add some points
-	idx.Add(1, Point{Lat: 40.7128, Lon: -74.0060}) // NYC
-	idx.Add(2, Point{Lat: 40.7580, Lon: -73.9855}) // Central Park
+	idx.Add(1, Point{Lat: 40.7128, Lon: -74.0060})  // NYC
+	idx.Add(2, Point{Lat: 40.7580, Lon: -73.9855})  // Central Park
 	idx.Add(3, Point{Lat: 34.0522, Lon: -118.2437}) // LA
-	idx.Add(4, Point{Lat: 40.6892, Lon: -74.0445}) // Statue of Liberty
+	idx.Add(4, Point{Lat: 40.6892, Lon: -74.0445})  // Statue of Liberty
 
 	if idx.Size() != 4 {
 		t.Errorf("Expected 4 points, got %d", idx.Size())
@@ -140,9 +140,9 @@ func TestGeoIndex(t *testing.T) {
 func TestGeoIndexBoundingBox(t *testing.T) {
 	idx := NewIndex()
 
-	idx.Add(1, Point{Lat: 40.7128, Lon: -74.0060}) // NYC
+	idx.Add(1, Point{Lat: 40.7128, Lon: -74.0060})  // NYC
 	idx.Add(2, Point{Lat: 34.0522, Lon: -118.2437}) // LA
-	idx.Add(3, Point{Lat: 41.8781, Lon: -87.6298}) // Chicago
+	idx.Add(3, Point{Lat: 41.8781, Lon: -87.6298})  // Chicago
 
 	// Bounding box covering east coast
 	bb := BoundingBox{

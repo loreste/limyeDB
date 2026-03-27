@@ -28,7 +28,7 @@ type QueryPlan struct {
 
 // IndexPlanInfo describes the index usage in the query plan
 type IndexPlanInfo struct {
-	IndexType   string `json:"index_type"`    // "hnsw", "flat", etc.
+	IndexType   string `json:"index_type"` // "hnsw", "flat", etc.
 	VectorName  string `json:"vector_name"`
 	Dimension   int    `json:"dimension"`
 	Metric      string `json:"metric"`
@@ -42,10 +42,10 @@ type IndexPlanInfo struct {
 
 // FilterPlanInfo describes filter execution plan
 type FilterPlanInfo struct {
-	FilterType     string              `json:"filter_type"`      // "none", "pre", "post"
-	IndexesUsed    []string            `json:"indexes_used"`     // Payload indexes that can be used
-	EstimatedMatch float64             `json:"estimated_match"`  // Estimated fraction of points matching
-	Conditions     []*ConditionPlan    `json:"conditions"`       // Breakdown of conditions
+	FilterType     string           `json:"filter_type"`     // "none", "pre", "post"
+	IndexesUsed    []string         `json:"indexes_used"`    // Payload indexes that can be used
+	EstimatedMatch float64          `json:"estimated_match"` // Estimated fraction of points matching
+	Conditions     []*ConditionPlan `json:"conditions"`      // Breakdown of conditions
 }
 
 // ConditionPlan describes a single filter condition
@@ -164,8 +164,8 @@ func (c *Collection) Explain(params *ExplainParams) (*QueryPlan, error) {
 // analyzeFilter analyzes a filter and returns execution plan
 func (c *Collection) analyzeFilter(filter *payload.Filter, totalPoints int64) *FilterPlanInfo {
 	plan := &FilterPlanInfo{
-		FilterType:     "post",  // Default to post-filtering
-		EstimatedMatch: 1.0,     // Default: matches everything
+		FilterType:     "post", // Default to post-filtering
+		EstimatedMatch: 1.0,    // Default: matches everything
 		Conditions:     []*ConditionPlan{},
 	}
 

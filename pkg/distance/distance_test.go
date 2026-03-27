@@ -201,8 +201,8 @@ func TestFindNearest(t *testing.T) {
 	calc := &Cosine{}
 	query := point.Vector{1, 0, 0}
 	vectors := []point.Vector{
-		{0, 1, 0},    // index 0 - orthogonal
-		{1, 0, 0},    // index 1 - identical
+		{0, 1, 0},     // index 0 - orthogonal
+		{1, 0, 0},     // index 1 - identical
 		{0.9, 0.1, 0}, // index 2 - similar
 	}
 

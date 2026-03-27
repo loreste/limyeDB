@@ -139,16 +139,16 @@ func (e *DimensionMismatchError) Error() string {
 
 // BatchProcessor handles parallel batch processing
 type BatchProcessor struct {
-	workers    int
-	batchSize  int
+	workers     int
+	batchSize   int
 	processFunc func([]*Point) error
 }
 
 // NewBatchProcessor creates a new batch processor
 func NewBatchProcessor(workers, batchSize int, fn func([]*Point) error) *BatchProcessor {
 	return &BatchProcessor{
-		workers:    workers,
-		batchSize:  batchSize,
+		workers:     workers,
+		batchSize:   batchSize,
 		processFunc: fn,
 	}
 }

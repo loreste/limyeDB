@@ -57,7 +57,7 @@ func FuzzSQLParser(f *testing.F) {
 		"",
 		" ",
 		"   SELECT * FROM test   ",
-		"select * from test", // lowercase
+		"select * from test",    // lowercase
 		"SELECT  *  FROM  test", // extra spaces
 	}
 
@@ -129,7 +129,7 @@ func FuzzParseVector(f *testing.F) {
 		"",
 		" ",
 		"   0.1  ,  0.2  ",
-		"0.1,0.2,0.3", // no spaces
+		"0.1,0.2,0.3",     // no spaces
 		"0.1 , 0.2 , 0.3", // spaces around comma
 	}
 

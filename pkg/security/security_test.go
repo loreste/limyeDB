@@ -230,7 +230,7 @@ func TestEncryptPayload(t *testing.T) {
 	})
 
 	payload := map[string]interface{}{
-		"name": "test",
+		"name":  "test",
 		"value": 123,
 	}
 

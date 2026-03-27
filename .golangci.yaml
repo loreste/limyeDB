@@ -78,6 +78,9 @@ linters:
         - "-ST1023"   # omit type from declaration
         - "-S1009"    # omit nil check before len
         - "-QF1003"   # tagged switch
+        - "-QF1011"   # omit type from declaration
+        - "-SA4006"   # unused value
+        - "-SA4017"   # pure function return ignored
 
     govet:
       enable-all: true

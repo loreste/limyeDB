@@ -14,13 +14,13 @@ import (
 
 // Config holds IVF index configuration
 type Config struct {
-	NumClusters     int                  // Number of clusters (K), default: sqrt(n)
-	Nprobe          int                  // Number of clusters to search (default: 10)
-	Metric          config.MetricType    // Distance metric
-	Dimension       int                  // Vector dimension
+	NumClusters     int               // Number of clusters (K), default: sqrt(n)
+	Nprobe          int               // Number of clusters to search (default: 10)
+	Metric          config.MetricType // Distance metric
+	Dimension       int               // Vector dimension
 	Quantizer       quantization.Quantizer
-	TrainingSamples int                  // Samples for k-means training
-	MaxElements     int                  // Maximum number of elements
+	TrainingSamples int // Samples for k-means training
+	MaxElements     int // Maximum number of elements
 }
 
 // DefaultConfig returns default IVF configuration
@@ -44,9 +44,9 @@ type IVF struct {
 	quantizer quantization.Quantizer
 
 	// Point storage
-	points      []*point.Point
-	idToIndex   map[string]uint32
-	pointCount  atomic.Int64
+	points       []*point.Point
+	idToIndex    map[string]uint32
+	pointCount   atomic.Int64
 	deletedCount atomic.Int64
 
 	// Training state

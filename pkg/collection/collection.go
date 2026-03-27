@@ -12,12 +12,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/limyedb/limyedb/pkg/cdc"
 	"github.com/limyedb/limyedb/pkg/config"
 	"github.com/limyedb/limyedb/pkg/distance"
 	"github.com/limyedb/limyedb/pkg/index/hnsw"
 	"github.com/limyedb/limyedb/pkg/index/payload"
 	"github.com/limyedb/limyedb/pkg/index/sparse"
-	"github.com/limyedb/limyedb/pkg/cdc"
 	"github.com/limyedb/limyedb/pkg/point"
 	"github.com/limyedb/limyedb/pkg/quantization"
 	"github.com/limyedb/limyedb/pkg/storage/mmap"
@@ -25,9 +25,9 @@ import (
 
 // Collection represents a vector collection
 type Collection struct {
-	config *config.CollectionConfig
-	index  *hnsw.HNSW                // Default/single vector index (backwards compat)
-	indices map[string]*hnsw.HNSW    // Named vector indices
+	config       *config.CollectionConfig
+	index        *hnsw.HNSW            // Default/single vector index (backwards compat)
+	indices      map[string]*hnsw.HNSW // Named vector indices
 	payloadIndex *payload.Index
 	sparseIdx    *sparse.InvertedIndex
 	distCalc     distance.Calculator
@@ -72,7 +72,7 @@ func New(cfg *config.CollectionConfig) (*Collection, error) {
 				Metric:         metric,
 				Dimension:      vc.Dimension,
 			}
-			
+
 			if vc.Quantization != nil {
 				q, err := quantization.New(vc.Quantization, vc.Dimension)
 				if err != nil {
@@ -113,7 +113,7 @@ func New(cfg *config.CollectionConfig) (*Collection, error) {
 				mmapCfg := mmap.DefaultConfig()
 				mmapCfg.Path = filepath.Join(dirPath, "vectors.mmap")
 				mmapCfg.Dimension = vc.Dimension
-				
+
 				store, err := mmap.Open(mmapCfg)
 				if err != nil {
 					return nil, err
@@ -144,7 +144,7 @@ func New(cfg *config.CollectionConfig) (*Collection, error) {
 			Metric:         cfg.Metric,
 			Dimension:      cfg.Dimension,
 		}
-		
+
 		if cfg.Quantization != nil {
 			q, err := quantization.New(cfg.Quantization, cfg.Dimension)
 			if err != nil {
@@ -172,7 +172,7 @@ func New(cfg *config.CollectionConfig) (*Collection, error) {
 			mmapCfg := mmap.DefaultConfig()
 			mmapCfg.Path = filepath.Join(dirPath, "vectors.mmap")
 			mmapCfg.Dimension = cfg.Dimension
-			
+
 			store, err := mmap.Open(mmapCfg)
 			if err != nil {
 				return nil, err
@@ -515,7 +515,7 @@ func (c *Collection) SearchColBERT(query [][]float32, vectorName string, k int) 
 			Payload:    p.Payload,
 			VectorName: vectorName,
 		})
-		
+
 		return true
 	})
 
@@ -640,7 +640,7 @@ func (c *Collection) SearchV2WithParams(query point.Vector, vectorName string, p
 	if params.SparseQuery != nil && c.sparseIdx != nil {
 		sparseVec := &sparse.Vector{Indices: params.SparseQuery.Indices, Values: params.SparseQuery.Values}
 		sparseMatches := c.sparseIdx.Search(sparseVec, params.K)
-		
+
 		var denseMatches []sparse.ScoredDoc
 		for _, dm := range result.Points {
 			nID, ok := idx.GetNodeID(dm.ID)
@@ -860,7 +860,7 @@ func (c *Collection) SearchWithParams(query point.Vector, params *SearchParams) 
 	if params.SparseQuery != nil && c.sparseIdx != nil {
 		sparseVec := &sparse.Vector{Indices: params.SparseQuery.Indices, Values: params.SparseQuery.Values}
 		sparseMatches := c.sparseIdx.Search(sparseVec, params.K)
-		
+
 		var denseMatches []sparse.ScoredDoc
 		for _, dm := range result.Points {
 			nID, ok := c.getNodeID(dm.ID)
@@ -1063,12 +1063,12 @@ const (
 
 // ScrollParams holds parameters for scroll/pagination
 type ScrollParams struct {
-	Offset      string                 // Offset point ID (exclusive)
-	Limit       int                    // Maximum number of points to return
-	Filter      *payload.Filter        // Optional filter
-	WithVector  bool                   // Include vectors in response
-	WithPayload bool                   // Include payload in response
-	OrderBy     string                 // Field to order by (optional)
+	Offset      string          // Offset point ID (exclusive)
+	Limit       int             // Maximum number of points to return
+	Filter      *payload.Filter // Optional filter
+	WithVector  bool            // Include vectors in response
+	WithPayload bool            // Include payload in response
+	OrderBy     string          // Field to order by (optional)
 }
 
 // ScrollResult holds the result of a scroll operation

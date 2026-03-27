@@ -25,9 +25,9 @@ type VectorConfig struct {
 
 // MultiVectorPoint represents a point with multiple vector types.
 type MultiVectorPoint struct {
-	ID       string                 `json:"id"`
-	Vectors  map[string]interface{} `json:"vectors"` // name -> vector data
-	Payload  map[string]interface{} `json:"payload,omitempty"`
+	ID      string                 `json:"id"`
+	Vectors map[string]interface{} `json:"vectors"` // name -> vector data
+	Payload map[string]interface{} `json:"payload,omitempty"`
 }
 
 // DenseVector represents a dense floating-point vector.

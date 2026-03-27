@@ -29,10 +29,10 @@ var ErrAuthDisabled = errors.New("authentication disabled")
 
 // APIKeyConfig holds API key configuration
 type APIKeyConfig struct {
-	Enabled       bool     `json:"enabled"`
-	Keys          []APIKey `json:"keys"`
-	HeaderName    string   `json:"header_name"`    // Default: "X-API-Key"
-	QueryParam    string   `json:"query_param"`    // Default: "api_key"
+	Enabled    bool     `json:"enabled"`
+	Keys       []APIKey `json:"keys"`
+	HeaderName string   `json:"header_name"` // Default: "X-API-Key"
+	QueryParam string   `json:"query_param"` // Default: "api_key"
 }
 
 // APIKey represents an API key with permissions

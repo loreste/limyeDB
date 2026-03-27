@@ -626,8 +626,8 @@ func (v *Visualizer) VisualizeKNN(query point.Vector, neighbors []point.Vector, 
 
 // ClusterResult represents a clustering result for visualization
 type ClusterResult struct {
-	Points   []ClusterPoint `json:"points"`
-	Centroids []Point2D     `json:"centroids"`
+	Points    []ClusterPoint `json:"points"`
+	Centroids []Point2D      `json:"centroids"`
 }
 
 // ClusterPoint is a point with cluster assignment

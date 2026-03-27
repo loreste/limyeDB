@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
+	pb "github.com/limyedb/limyedb/api/grpc/proto"
 	"github.com/limyedb/limyedb/pkg/auth"
 	"github.com/limyedb/limyedb/pkg/collection"
 	"github.com/limyedb/limyedb/pkg/config"
 	"github.com/limyedb/limyedb/pkg/storage/snapshot"
-	pb "github.com/limyedb/limyedb/api/grpc/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
@@ -79,8 +79,8 @@ func NewServer(cfg *config.ServerConfig, collections *collection.Manager, snapsh
 			MaxConnectionIdle:     15 * time.Minute, // Evict idle connections to prevent memory starvation
 			MaxConnectionAge:      30 * time.Minute, // Aggressively cycle connections checking load balancers scaling
 			MaxConnectionAgeGrace: 5 * time.Minute,
-			Time:                  5 * time.Minute,  // Ping the client if idle 
-			Timeout:               1 * time.Second,  // Wait 1 second for ping back
+			Time:                  5 * time.Minute, // Ping the client if idle
+			Timeout:               1 * time.Second, // Wait 1 second for ping back
 		}),
 	}
 

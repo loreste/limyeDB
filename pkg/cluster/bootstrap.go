@@ -19,14 +19,14 @@ type BootstrapConfig struct {
 	ClusterName string `json:"cluster_name"`
 
 	// Node configuration
-	NodeID       string `json:"node_id"`
-	BindAddr     string `json:"bind_addr"`
+	NodeID        string `json:"node_id"`
+	BindAddr      string `json:"bind_addr"`
 	AdvertiseAddr string `json:"advertise_addr"`
 
 	// Bootstrap mode
-	Bootstrap     bool     `json:"bootstrap"`       // True if this is the first node
-	BootstrapExpect int    `json:"bootstrap_expect"` // Number of nodes to wait for
-	SeedNodes     []string `json:"seed_nodes"`      // Seed nodes for joining
+	Bootstrap       bool     `json:"bootstrap"`        // True if this is the first node
+	BootstrapExpect int      `json:"bootstrap_expect"` // Number of nodes to wait for
+	SeedNodes       []string `json:"seed_nodes"`       // Seed nodes for joining
 
 	// Discovery
 	DiscoveryType DiscoveryType `json:"discovery_type"`
@@ -93,12 +93,12 @@ type Bootstrapper struct {
 
 // ClusterState persisted to disk
 type BootstrapState struct {
-	ClusterID   string    `json:"cluster_id"`
-	ClusterName string    `json:"cluster_name"`
-	NodeID      string    `json:"node_id"`
-	Bootstrapped bool     `json:"bootstrapped"`
-	JoinedAt    time.Time `json:"joined_at"`
-	Members     []string  `json:"members"`
+	ClusterID    string    `json:"cluster_id"`
+	ClusterName  string    `json:"cluster_name"`
+	NodeID       string    `json:"node_id"`
+	Bootstrapped bool      `json:"bootstrapped"`
+	JoinedAt     time.Time `json:"joined_at"`
+	Members      []string  `json:"members"`
 }
 
 // NodeDiscovery discovers cluster nodes
@@ -197,11 +197,11 @@ func (b *Bootstrapper) Start(ctx context.Context) error {
 func (b *Bootstrapper) Stop() error {
 	close(b.stopCh)
 
-	_ = b.saveState()         // Best effort during shutdown
-	_ = b.gossiper.Leave()    // Best effort during shutdown
-	_ = b.gossiper.Stop()     // Best effort during shutdown
-	_ = b.transport.Stop()    // Best effort during shutdown
-	_ = b.coordinator.Stop()  // Best effort during shutdown
+	_ = b.saveState()        // Best effort during shutdown
+	_ = b.gossiper.Leave()   // Best effort during shutdown
+	_ = b.gossiper.Stop()    // Best effort during shutdown
+	_ = b.transport.Stop()   // Best effort during shutdown
+	_ = b.coordinator.Stop() // Best effort during shutdown
 
 	return nil
 }

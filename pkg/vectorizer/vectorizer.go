@@ -33,11 +33,11 @@ type Vectorizer interface {
 type VectorizerType string
 
 const (
-	VectorizerOpenAI       VectorizerType = "openai"
-	VectorizerCohere       VectorizerType = "cohere"
-	VectorizerHuggingFace  VectorizerType = "huggingface"
-	VectorizerLocal        VectorizerType = "local"
-	VectorizerCustom       VectorizerType = "custom"
+	VectorizerOpenAI      VectorizerType = "openai"
+	VectorizerCohere      VectorizerType = "cohere"
+	VectorizerHuggingFace VectorizerType = "huggingface"
+	VectorizerLocal       VectorizerType = "local"
+	VectorizerCustom      VectorizerType = "custom"
 )
 
 // VectorizerConfig holds configuration for a vectorizer

@@ -240,7 +240,7 @@ func (h *HNSW) contextDistance(vec point.Vector, target point.Vector, context []
 	for _, pair := range context {
 		posDist := h.distCalc.Distance(vec, pair.Positive)
 		negDist := h.distCalc.Distance(vec, pair.Negative)
-		
+
 		// If closer to negative than positive, add penalty
 		if posDist > negDist {
 			totalPenalty += posDist - negDist
@@ -250,7 +250,7 @@ func (h *HNSW) contextDistance(vec point.Vector, target point.Vector, context []
 	if len(target) > 0 {
 		return totalPenalty + h.distCalc.Distance(vec, target)
 	}
-	
+
 	// If no target, we just use the penalty (often points that fit the context perfectly tie at 0)
 	// We might add a small regularizer to distance it from positives
 	var regDist float32 = 0
@@ -260,7 +260,7 @@ func (h *HNSW) contextDistance(vec point.Vector, target point.Vector, context []
 		}
 		regDist /= float32(len(context))
 	}
-	
+
 	return totalPenalty + 0.1*regDist // slight preference to be near positives even if penalty is 0
 }
 
@@ -406,7 +406,7 @@ func (h *HNSW) rangeSearchLayer0(query point.Vector, entryID uint32, radius floa
 			continue
 		}
 
-		// Process dynamically mapped bounds natively 
+		// Process dynamically mapped bounds natively
 		dist := h.distCalc.Distance(query, h.getVector(currID))
 		if dist <= radius {
 			results = append(results, Candidate{ID: currID, Distance: dist})

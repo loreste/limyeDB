@@ -41,8 +41,8 @@ func validateName(name string) error {
 
 // Manager manages collections
 type Manager struct {
-	collections map[string]*Collection
-	dataDir     string
+	collections    map[string]*Collection
+	dataDir        string
 	maxCollections int
 
 	mu sync.RWMutex

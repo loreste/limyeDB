@@ -21,9 +21,9 @@ import (
 type ShardState string
 
 const (
-	ShardStateActive      ShardState = "active"
-	ShardStateRecovering  ShardState = "recovering"
-	ShardStateDead        ShardState = "dead"
+	ShardStateActive       ShardState = "active"
+	ShardStateRecovering   ShardState = "recovering"
+	ShardStateDead         ShardState = "dead"
 	ShardStateInitializing ShardState = "initializing"
 )
 
@@ -32,8 +32,8 @@ type Shard struct {
 	ID           uint32     `json:"id"`
 	CollectionID string     `json:"collection_id"`
 	State        ShardState `json:"state"`
-	NodeID       string     `json:"node_id"`       // Node hosting this shard
-	ReplicaOf    uint32     `json:"replica_of"`    // If replica, ID of primary shard
+	NodeID       string     `json:"node_id"`    // Node hosting this shard
+	ReplicaOf    uint32     `json:"replica_of"` // If replica, ID of primary shard
 	IsPrimary    bool       `json:"is_primary"`
 
 	// Internal state
@@ -86,7 +86,7 @@ func NewShard(cfg *ShardConfig) (*Shard, error) {
 		mmapCfg := mmap.DefaultConfig()
 		mmapCfg.Path = filepath.Join(cfg.DataDir, "vectors.mmap")
 		mmapCfg.Dimension = cfg.VectorConfig.Dimension
-		
+
 		store, err := mmap.Open(mmapCfg)
 		if err != nil {
 			return nil, err
@@ -184,11 +184,11 @@ type RecoveryHandler func(shardID uint32, dest *Shard) error
 
 // ShardManager manages shards for a collection
 type ShardManager struct {
-	shards         map[uint32]*Shard
-	shardCount     int
-	replicaFactor  int
-	collectionName string
-	dataDir        string
+	shards          map[uint32]*Shard
+	shardCount      int
+	replicaFactor   int
+	collectionName  string
+	dataDir         string
 	recoveryHandler RecoveryHandler
 
 	mu sync.RWMutex
@@ -445,10 +445,10 @@ func (sm *ShardManager) SaveMetadata() error {
 	defer sm.mu.RUnlock()
 
 	metadata := struct {
-		CollectionName string       `json:"collection_name"`
-		ShardCount     int          `json:"shard_count"`
-		ReplicaFactor  int          `json:"replica_factor"`
-		Shards         []ShardInfo  `json:"shards"`
+		CollectionName string      `json:"collection_name"`
+		ShardCount     int         `json:"shard_count"`
+		ReplicaFactor  int         `json:"replica_factor"`
+		Shards         []ShardInfo `json:"shards"`
 	}{
 		CollectionName: sm.collectionName,
 		ShardCount:     sm.shardCount,

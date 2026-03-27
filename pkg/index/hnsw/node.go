@@ -10,15 +10,15 @@ import (
 
 // Node represents a node in the HNSW graph
 type Node struct {
-	ID          string
-	Vector       point.Vector  // In RAM
-	VectorOffset int64         // On Disk mapping offset
+	ID           string
+	Vector       point.Vector // In RAM
+	VectorOffset int64        // On Disk mapping offset
 	Quantized    []byte
-	Level       int
-	Connections [][]uint32 // Connections per layer
-	mu          sync.RWMutex
-	deleted     atomic.Bool
-	payload     map[string]interface{}
+	Level        int
+	Connections  [][]uint32 // Connections per layer
+	mu           sync.RWMutex
+	deleted      atomic.Bool
+	payload      map[string]interface{}
 }
 
 // NewNode creates a new HNSW node

@@ -40,7 +40,7 @@ func main() {
 	dataDir := flag.String("data", "./data", "Data directory")
 	restAddr := flag.String("rest", ":8080", "REST API address")
 	grpcAddr := flag.String("grpc", ":50051", "gRPC API address")
-	
+
 	raftBind := flag.String("raft-bind", "", "Raft TCP Bind Address (e.g. 127.0.0.1:7000)")
 	raftData := flag.String("raft-data", "", "Raft Data Directory")
 	raftNodeID := flag.String("raft-node-id", "node0", "Raft Node ID")
@@ -51,7 +51,7 @@ func main() {
 	authToken := flag.String("auth-token", "", "Master bearer token for zero-trust API authentication")
 	tlsCert := flag.String("tls-cert", "", "Path to HTTPS TLS certificate file")
 	tlsKey := flag.String("tls-key", "", "Path to HTTPS TLS private key file")
-	
+
 	showVersion := flag.Bool("version", false, "Show version")
 	flag.Parse()
 
@@ -107,8 +107,8 @@ func main() {
 	}
 
 	snapMgr, err := snapshot.NewManager(&snapshot.Config{
-		Dir:             cfg.Snapshot.Dir,
-		RetainCount:     cfg.Snapshot.RetainCount,
+		Dir:              cfg.Snapshot.Dir,
+		RetainCount:      cfg.Snapshot.RetainCount,
 		CompressionLevel: cfg.Snapshot.CompressionLvl,
 	})
 	if err != nil {
@@ -139,7 +139,7 @@ func main() {
 
 		if *raftJoinAddr != "" {
 			slog.Info("Configured to join cluster", "node", *raftNodeID, "joinAddr", *raftJoinAddr)
-			
+
 			// Dial asynchronously once the local HTTP server has booted
 			go func() {
 				time.Sleep(3 * time.Second)
@@ -165,12 +165,12 @@ func main() {
 
 	// Start REST server
 	restServer := rest.NewServerWithOptions(&cfg.Server, collMgr, &rest.ServerOptions{
-		Addr:        cfg.Server.RESTAddress,
-		Snapshots:   snapMgr,
-		Raft:        raftNode,
-		AuthToken:   *authToken,
-		TLSCert:     *tlsCert,
-		TLSKey:      *tlsKey,
+		Addr:      cfg.Server.RESTAddress,
+		Snapshots: snapMgr,
+		Raft:      raftNode,
+		AuthToken: *authToken,
+		TLSCert:   *tlsCert,
+		TLSKey:    *tlsKey,
 	})
 	go func() {
 		slog.Info("Starting REST API server", "address", cfg.Server.RESTAddress)

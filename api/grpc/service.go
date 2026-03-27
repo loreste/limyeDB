@@ -5,13 +5,13 @@ import (
 	"io"
 	"math"
 
+	pb "github.com/limyedb/limyedb/api/grpc/proto"
 	"github.com/limyedb/limyedb/pkg/auth"
 	"github.com/limyedb/limyedb/pkg/collection"
 	"github.com/limyedb/limyedb/pkg/config"
 	"github.com/limyedb/limyedb/pkg/index/payload"
 	"github.com/limyedb/limyedb/pkg/point"
 	"github.com/limyedb/limyedb/pkg/storage/snapshot"
-	pb "github.com/limyedb/limyedb/api/grpc/proto"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -39,19 +39,23 @@ func checkPermission(ctx context.Context, collection string, action string) bool
 	claimsRaw := ctx.Value("token_claims")
 	if claimsRaw == nil {
 		// No auth token configured / passed successfully (meaning auth is disabled)
-		return true 
+		return true
 	}
-	
+
 	claims, ok := claimsRaw.(*auth.TokenClaims)
 	if !ok {
 		return false
 	}
-	
+
 	switch action {
-	case "read": return claims.CanRead(collection)
-	case "write": return claims.CanWrite(collection)
-	case "admin": return claims.CanAdmin(collection)
-	case "global_admin": return claims.Permissions.GlobalAdmin
+	case "read":
+		return claims.CanRead(collection)
+	case "write":
+		return claims.CanWrite(collection)
+	case "admin":
+		return claims.CanAdmin(collection)
+	case "global_admin":
+		return claims.Permissions.GlobalAdmin
 	}
 	return false
 }
@@ -573,7 +577,7 @@ func protoToPoint(p *pb.Point) *point.Point {
 	}
 
 	pt := point.NewPointWithID(p.Id, vector, payload)
-	
+
 	if p.Sparse != nil {
 		pt.Sparse = &point.SparseVector{
 			Indices: p.Sparse.Indices,

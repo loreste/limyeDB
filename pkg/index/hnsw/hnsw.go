@@ -47,11 +47,11 @@ type HNSW struct {
 	maxLevel       int     // Current maximum level
 
 	// Index data
-	nodes       []*Node
-	entryPoint  uint32
-	nodeCount   atomic.Int64
-	dimension   int
-	idToIndex   map[string]uint32
+	nodes        []*Node
+	entryPoint   uint32
+	nodeCount    atomic.Int64
+	dimension    int
+	idToIndex    map[string]uint32
 	deletedCount atomic.Int64
 
 	// Distance calculator
@@ -62,16 +62,16 @@ type HNSW struct {
 	buildLock sync.Mutex
 
 	// Random number generator
-	rng *rand.Rand
+	rng   *rand.Rand
 	rngMu sync.Mutex
 
 	// Object pools to completely eliminate GC stalls on search path
 	visitedPool   *pool.VisitedListPool
 	candidatePool *pool.CandidatePool
 
-	quantizer     quantization.Quantizer
-	graphMmap     *mmap.GraphMmap // On-disk graph pager
-	vectorMmap    *mmap.Storage   // On-disk vectors pager
+	quantizer  quantization.Quantizer
+	graphMmap  *mmap.GraphMmap // On-disk graph pager
+	vectorMmap *mmap.Storage   // On-disk vectors pager
 }
 
 // Config holds HNSW configuration
@@ -269,14 +269,14 @@ func (h *HNSW) greedySearchLayer(query point.Vector, entryID uint32, layer int) 
 			if h.nodes[neighborID].IsDeleted() {
 				continue
 			}
-			
+
 			var dist float32
 			if h.quantizer != nil && h.nodes[neighborID].Quantized != nil {
 				dist = h.quantizer.Distance(query, h.nodes[neighborID].Quantized)
 			} else {
 				dist = h.distCalc.Distance(query, h.getVector(neighborID))
 			}
-			
+
 			if dist < currentDist {
 				currentID = neighborID
 				currentDist = dist
@@ -337,7 +337,7 @@ func (h *HNSW) searchLayer(query point.Vector, entryID uint32, ef int, layer int
 			if h.nodes[neighborID].IsDeleted() {
 				continue
 			}
-			
+
 			var dist float32
 			if h.quantizer != nil && h.nodes[neighborID].Quantized != nil {
 				dist = h.quantizer.Distance(query, h.nodes[neighborID].Quantized)
@@ -646,7 +646,7 @@ func (h *HNSW) GetAllPoints() []*point.Point {
 	return points
 }
 
-// getVector extracts the node vector from either RAM or Mmap Storage dynamically 
+// getVector extracts the node vector from either RAM or Mmap Storage dynamically
 func (h *HNSW) getVector(id uint32) point.Vector {
 	node := h.nodes[id]
 	if node.Vector != nil {

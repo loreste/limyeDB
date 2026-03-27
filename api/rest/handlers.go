@@ -9,12 +9,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hashicorp/raft"
+	"github.com/limyedb/limyedb/pkg/cdc"
 	"github.com/limyedb/limyedb/pkg/cluster"
 	"github.com/limyedb/limyedb/pkg/collection"
 	"github.com/limyedb/limyedb/pkg/config"
 	"github.com/limyedb/limyedb/pkg/embedder"
 	"github.com/limyedb/limyedb/pkg/index/payload"
-	"github.com/limyedb/limyedb/pkg/cdc"
 	"github.com/limyedb/limyedb/pkg/point"
 	"github.com/limyedb/limyedb/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
@@ -154,14 +154,14 @@ func (s *Server) handleCreateCollection(c *gin.Context) {
 
 func (s *Server) handleListCollections(c *gin.Context) {
 	infos := s.collections.ListInfo()
-	
+
 	filtered := make([]*collection.Info, 0, len(infos))
 	for _, info := range infos {
 		if s.checkPermission(c, info.Name, "read") {
 			filtered = append(filtered, info)
 		}
 	}
-	
+
 	c.JSON(http.StatusOK, gin.H{
 		"collections": filtered,
 	})
@@ -796,9 +796,9 @@ func (s *Server) handleScroll(c *gin.Context) {
 
 // CreateCollectionV2Request supports named vectors
 type CreateCollectionV2Request struct {
-	Name    string                        `json:"name" binding:"required"`
-	Vectors map[string]VectorConfigInput  `json:"vectors"`
-	OnDisk  bool                          `json:"on_disk"`
+	Name    string                       `json:"name" binding:"required"`
+	Vectors map[string]VectorConfigInput `json:"vectors"`
+	OnDisk  bool                         `json:"on_disk"`
 }
 
 // VectorConfigInput represents vector configuration
@@ -1654,5 +1654,3 @@ func (s *Server) handleCreateWebhook(c *gin.Context) {
 		"collection": collectionName,
 	})
 }
-
-

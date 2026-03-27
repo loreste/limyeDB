@@ -34,11 +34,11 @@ func setupServer(t *testing.T) (*exec.Cmd, string) {
 	cmd := exec.Command("go", "-C", "../../..", "run", "cmd/limyedb/main.go", "--rest", ":8181", "--data", "/tmp/limyedb_gotest")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	
+
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("Failed to start limyedb: %v", err)
 	}
-	
+
 	host := "http://localhost:8181"
 	if !waitForServer(host, 10*time.Second) {
 		cmd.Process.Kill()

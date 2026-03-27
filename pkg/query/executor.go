@@ -13,13 +13,13 @@ import (
 
 // QueryResult represents the result of a SQL query
 type QueryResult struct {
-	Type       QueryType              `json:"type"`
-	Collection string                 `json:"collection,omitempty"`
+	Type       QueryType                `json:"type"`
+	Collection string                   `json:"collection,omitempty"`
 	Rows       []map[string]interface{} `json:"rows,omitempty"`
-	Points     []*point.Point         `json:"points,omitempty"`
-	Affected   int                    `json:"affected,omitempty"`
-	Message    string                 `json:"message,omitempty"`
-	Columns    []string               `json:"columns,omitempty"`
+	Points     []*point.Point           `json:"points,omitempty"`
+	Affected   int                      `json:"affected,omitempty"`
+	Message    string                   `json:"message,omitempty"`
+	Columns    []string                 `json:"columns,omitempty"`
 }
 
 // SQLExecutor executes parsed SQL queries against collections

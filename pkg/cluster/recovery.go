@@ -67,13 +67,13 @@ type DataIterator interface {
 
 // recoveryJob tracks a recovery operation
 type recoveryJob struct {
-	ShardID     uint32
-	SourceNode  string
-	StartTime   time.Time
-	BytesRecv   int64
-	Status      RecoveryStatus
-	Error       error
-	Progress    float64
+	ShardID    uint32
+	SourceNode string
+	StartTime  time.Time
+	BytesRecv  int64
+	Status     RecoveryStatus
+	Error      error
+	Progress   float64
 }
 
 // RecoveryStatus represents the status of a recovery job
@@ -357,9 +357,9 @@ type StreamRequest struct {
 type StreamType string
 
 const (
-	StreamTypeRecovery   StreamType = "recovery"
+	StreamTypeRecovery    StreamType = "recovery"
 	StreamTypeAntiEntropy StreamType = "anti_entropy"
-	StreamTypeSnapshot   StreamType = "snapshot"
+	StreamTypeSnapshot    StreamType = "snapshot"
 )
 
 // ChecksumRequest represents a checksum request

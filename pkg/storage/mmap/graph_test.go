@@ -14,7 +14,7 @@ func TestGraphMmap(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	path := filepath.Join(tmpDir, "graph.mmap")
-	
+
 	// Create with M=16
 	m := 16
 	graph, err := NewGraphMmap(path, m)

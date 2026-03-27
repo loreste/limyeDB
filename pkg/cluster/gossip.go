@@ -11,42 +11,42 @@ import (
 
 // GossipConfig holds gossip protocol configuration
 type GossipConfig struct {
-	GossipInterval   time.Duration // How often to gossip
-	GossipFanout     int           // Number of nodes to gossip to each round
-	SuspicionMult    int           // Multiplier for suspicion timeout
-	ProbeInterval    time.Duration // How often to probe nodes
-	ProbeTimeout     time.Duration // Timeout for probe responses
-	RetransmitMult   int           // Multiplier for message retransmit
+	GossipInterval time.Duration // How often to gossip
+	GossipFanout   int           // Number of nodes to gossip to each round
+	SuspicionMult  int           // Multiplier for suspicion timeout
+	ProbeInterval  time.Duration // How often to probe nodes
+	ProbeTimeout   time.Duration // Timeout for probe responses
+	RetransmitMult int           // Multiplier for message retransmit
 }
 
 // DefaultGossipConfig returns default gossip configuration
 func DefaultGossipConfig() *GossipConfig {
 	return &GossipConfig{
-		GossipInterval:   200 * time.Millisecond,
-		GossipFanout:     3,
-		SuspicionMult:    4,
-		ProbeInterval:    1 * time.Second,
-		ProbeTimeout:     500 * time.Millisecond,
-		RetransmitMult:   4,
+		GossipInterval: 200 * time.Millisecond,
+		GossipFanout:   3,
+		SuspicionMult:  4,
+		ProbeInterval:  1 * time.Second,
+		ProbeTimeout:   500 * time.Millisecond,
+		RetransmitMult: 4,
 	}
 }
 
 // GossipState represents the state of a node in the gossip protocol
 type GossipState struct {
-	NodeID      string    `json:"node_id"`
-	Address     string    `json:"address"`
-	State       NodeState `json:"state"`
-	Incarnation uint64    `json:"incarnation"`
-	LastUpdated time.Time `json:"last_updated"`
+	NodeID      string            `json:"node_id"`
+	Address     string            `json:"address"`
+	State       NodeState         `json:"state"`
+	Incarnation uint64            `json:"incarnation"`
+	LastUpdated time.Time         `json:"last_updated"`
 	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
 // GossipMessage represents a gossip message
 type GossipMessage struct {
-	Type    GossipMessageType `json:"type"`
-	States  []GossipState     `json:"states"`
-	From    string            `json:"from"`
-	SeqNo   uint64            `json:"seq_no"`
+	Type   GossipMessageType `json:"type"`
+	States []GossipState     `json:"states"`
+	From   string            `json:"from"`
+	SeqNo  uint64            `json:"seq_no"`
 }
 
 // GossipMessageType represents the type of gossip message
@@ -113,11 +113,11 @@ func NewGossiper(nodeID, addr string, transport Transport, config *GossipConfig)
 			LastUpdated: time.Now(),
 			Metadata:    make(map[string]string),
 		},
-		states:     make(map[string]*GossipState),
+		states:      make(map[string]*GossipState),
 		incarnation: 1,
-		suspicions: make(map[string]*suspicionTimer),
-		broadcasts: make([]GossipMessage, 0),
-		stopCh:     make(chan struct{}),
+		suspicions:  make(map[string]*suspicionTimer),
+		broadcasts:  make([]GossipMessage, 0),
+		stopCh:      make(chan struct{}),
 	}
 
 	// Add self to states

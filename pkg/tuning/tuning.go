@@ -119,24 +119,24 @@ func PresetConfig(preset Preset) *config.HNSWConfig {
 
 // AutoTuneParams holds parameters for auto-tuning
 type AutoTuneParams struct {
-	VectorCount      int     // Expected number of vectors
-	Dimension        int     // Vector dimension
-	TargetRecall     float64 // Target recall (0.0-1.0)
-	TargetLatencyMs  int     // Target p99 latency in ms
-	AvailableMemoryMB int    // Available memory in MB
-	CPUCores         int     // Available CPU cores
+	VectorCount       int     // Expected number of vectors
+	Dimension         int     // Vector dimension
+	TargetRecall      float64 // Target recall (0.0-1.0)
+	TargetLatencyMs   int     // Target p99 latency in ms
+	AvailableMemoryMB int     // Available memory in MB
+	CPUCores          int     // Available CPU cores
 }
 
 // AutoTuneResult holds the result of auto-tuning
 type AutoTuneResult struct {
-	M              int     `json:"m"`
-	EfConstruction int     `json:"ef_construction"`
-	EfSearch       int     `json:"ef_search"`
-	Quantization   string  `json:"quantization"` // "none", "scalar", "binary"
-	OnDisk         bool    `json:"on_disk"`
-	EstimatedMemoryMB int  `json:"estimated_memory_mb"`
-	EstimatedRecall float64 `json:"estimated_recall"`
-	Explanation    string  `json:"explanation"`
+	M                 int     `json:"m"`
+	EfConstruction    int     `json:"ef_construction"`
+	EfSearch          int     `json:"ef_search"`
+	Quantization      string  `json:"quantization"` // "none", "scalar", "binary"
+	OnDisk            bool    `json:"on_disk"`
+	EstimatedMemoryMB int     `json:"estimated_memory_mb"`
+	EstimatedRecall   float64 `json:"estimated_recall"`
+	Explanation       string  `json:"explanation"`
 }
 
 // AutoTune automatically determines optimal parameters
@@ -310,13 +310,13 @@ func buildExplanation(result *AutoTuneResult, params AutoTuneParams) string {
 
 // RuntimeConfig holds runtime optimization settings
 type RuntimeConfig struct {
-	WorkerPoolSize    int  `json:"worker_pool_size"`
-	BatchSearchSize   int  `json:"batch_search_size"`
-	PrefetchDistance  int  `json:"prefetch_distance"`
-	UseAVX            bool `json:"use_avx"`
-	UseNEON           bool `json:"use_neon"`
-	ParallelInsert    bool `json:"parallel_insert"`
-	AsyncCommit       bool `json:"async_commit"`
+	WorkerPoolSize   int  `json:"worker_pool_size"`
+	BatchSearchSize  int  `json:"batch_search_size"`
+	PrefetchDistance int  `json:"prefetch_distance"`
+	UseAVX           bool `json:"use_avx"`
+	UseNEON          bool `json:"use_neon"`
+	ParallelInsert   bool `json:"parallel_insert"`
+	AsyncCommit      bool `json:"async_commit"`
 }
 
 // OptimizeRuntime returns optimized runtime configuration
@@ -345,16 +345,16 @@ func ValidateParams(cfg *config.HNSWConfig, dimension, vectorCount int) []Recomm
 	// Check M
 	if cfg.M < 4 {
 		recs = append(recs, Recommendation{
-			Severity: SeverityWarning,
-			Field:    "M",
-			Message:  "M is very low, recall may suffer",
+			Severity:  SeverityWarning,
+			Field:     "M",
+			Message:   "M is very low, recall may suffer",
 			Suggested: 16,
 		})
 	} else if cfg.M > 64 {
 		recs = append(recs, Recommendation{
-			Severity: SeverityWarning,
-			Field:    "M",
-			Message:  "M is very high, memory usage may be excessive",
+			Severity:  SeverityWarning,
+			Field:     "M",
+			Message:   "M is very high, memory usage may be excessive",
 			Suggested: 32,
 		})
 	}
@@ -362,9 +362,9 @@ func ValidateParams(cfg *config.HNSWConfig, dimension, vectorCount int) []Recomm
 	// Check efConstruction
 	if cfg.EfConstruction < cfg.M {
 		recs = append(recs, Recommendation{
-			Severity: SeverityError,
-			Field:    "EfConstruction",
-			Message:  "efConstruction should be >= M",
+			Severity:  SeverityError,
+			Field:     "EfConstruction",
+			Message:   "efConstruction should be >= M",
 			Suggested: cfg.M * 10,
 		})
 	}
@@ -372,9 +372,9 @@ func ValidateParams(cfg *config.HNSWConfig, dimension, vectorCount int) []Recomm
 	// Check efSearch
 	if cfg.EfSearch < 10 {
 		recs = append(recs, Recommendation{
-			Severity: SeverityWarning,
-			Field:    "EfSearch",
-			Message:  "efSearch is very low, recall may suffer",
+			Severity:  SeverityWarning,
+			Field:     "EfSearch",
+			Message:   "efSearch is very low, recall may suffer",
 			Suggested: 50,
 		})
 	}
@@ -382,9 +382,9 @@ func ValidateParams(cfg *config.HNSWConfig, dimension, vectorCount int) []Recomm
 	// Check dimension-specific recommendations
 	if dimension > 1024 && cfg.M < 24 {
 		recs = append(recs, Recommendation{
-			Severity: SeverityInfo,
-			Field:    "M",
-			Message:  "High-dimensional vectors benefit from higher M",
+			Severity:  SeverityInfo,
+			Field:     "M",
+			Message:   "High-dimensional vectors benefit from higher M",
 			Suggested: 24,
 		})
 	}
@@ -392,9 +392,9 @@ func ValidateParams(cfg *config.HNSWConfig, dimension, vectorCount int) []Recomm
 	// Check size-specific recommendations
 	if vectorCount > 10000000 && cfg.EfConstruction < 400 {
 		recs = append(recs, Recommendation{
-			Severity: SeverityInfo,
-			Field:    "EfConstruction",
-			Message:  "Large collections benefit from higher efConstruction",
+			Severity:  SeverityInfo,
+			Field:     "EfConstruction",
+			Message:   "Large collections benefit from higher efConstruction",
 			Suggested: 400,
 		})
 	}
@@ -450,11 +450,11 @@ func EstimateMemory(dimension, vectorCount, M int, quantization string) MemoryEs
 	totalBytes := int64(perVector+payloadEstimate) * int64(vectorCount)
 
 	return MemoryEstimate{
-		VectorMemoryMB:   int(int64(vectorSize*vectorCount) / (1024 * 1024)),
-		IndexMemoryMB:    int(int64(hnswOverhead*vectorCount) / (1024 * 1024)),
-		PayloadMemoryMB:  int(int64(payloadEstimate*vectorCount) / (1024 * 1024)),
-		TotalMemoryMB:    int(totalBytes / (1024 * 1024)),
-		PerVectorBytes:   perVector + payloadEstimate,
+		VectorMemoryMB:  int(int64(vectorSize*vectorCount) / (1024 * 1024)),
+		IndexMemoryMB:   int(int64(hnswOverhead*vectorCount) / (1024 * 1024)),
+		PayloadMemoryMB: int(int64(payloadEstimate*vectorCount) / (1024 * 1024)),
+		TotalMemoryMB:   int(totalBytes / (1024 * 1024)),
+		PerVectorBytes:  perVector + payloadEstimate,
 	}
 }
 

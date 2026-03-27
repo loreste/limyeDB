@@ -1,6 +1,5 @@
 package cluster
 
-
 import (
 	"encoding/json"
 	"fmt"
@@ -31,7 +30,7 @@ type RaftConfig struct {
 	NodeID   string
 	BindAddr string
 	DataDir  string
-	IsLeader bool // True if bootstrapping cluster initially
+	IsLeader bool   // True if bootstrapping cluster initially
 	RestAddr string // This node's exposed HTTP listening address
 }
 
@@ -92,7 +91,7 @@ func NewRaftNode(cfg *RaftConfig, manager *collection.Manager, snapMgr *snapshot
 	go func() {
 		for isLeader := range leaderCh {
 			if isLeader {
-				// Allow Raft consensus to settle prior to inserting the configuration 
+				// Allow Raft consensus to settle prior to inserting the configuration
 				time.Sleep(1 * time.Second)
 				_ = node.Write(OpSetLeaderRest, SetLeaderRestData{RestAddr: cfg.RestAddr})
 			}

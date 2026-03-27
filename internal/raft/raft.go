@@ -77,9 +77,9 @@ type Node struct {
 	matchIndex map[string]uint64
 
 	// Node state
-	state          NodeState
-	leaderId       string
-	lastHeartbeat  time.Time
+	state         NodeState
+	leaderId      string
+	lastHeartbeat time.Time
 
 	// Cluster configuration
 	peers []string
@@ -91,14 +91,14 @@ type Node struct {
 	stateMachine StateMachine
 
 	// Timing
-	electionTimeout time.Duration
+	electionTimeout   time.Duration
 	heartbeatInterval time.Duration
 
 	// Synchronization
-	mu           sync.RWMutex
-	stopCh       chan struct{}
-	applyCh      chan LogEntry
-	commitCh     chan struct{}
+	mu       sync.RWMutex
+	stopCh   chan struct{}
+	applyCh  chan LogEntry
+	commitCh chan struct{}
 
 	// (removed math/rand in favor of crypto/rand helpers)
 }
@@ -627,12 +627,12 @@ func (n *Node) GetTerm() uint64 {
 
 // NodeInfo holds information about a node
 type NodeInfo struct {
-	ID       string    `json:"id"`
-	Address  string    `json:"address"`
-	State    string    `json:"state"`
-	Term     uint64    `json:"term"`
-	IsLeader bool      `json:"is_leader"`
-	LeaderID string    `json:"leader_id"`
+	ID       string `json:"id"`
+	Address  string `json:"address"`
+	State    string `json:"state"`
+	Term     uint64 `json:"term"`
+	IsLeader bool   `json:"is_leader"`
+	LeaderID string `json:"leader_id"`
 }
 
 // GetInfo returns information about this node

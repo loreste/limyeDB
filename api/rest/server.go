@@ -174,10 +174,10 @@ func (s *Server) setupMiddleware() {
 				c.Next()
 				return
 			}
-			
+
 			authHeader := c.GetHeader("Authorization")
 			parts := strings.SplitN(authHeader, " ", 2)
-			
+
 			if len(parts) != 2 || parts[0] != "Bearer" {
 				respondError(c, http.StatusUnauthorized, errors.New("unauthorized: missing or invalid bearer format"))
 				c.Abort()
@@ -247,19 +247,23 @@ func (s *Server) checkPermission(c *gin.Context, collection string, action strin
 	claimsRaw, exists := c.Get("token_claims")
 	if !exists {
 		// No auth token configured / passed successfully (meaning auth is disabled)
-		return true 
+		return true
 	}
-	
+
 	claims, ok := claimsRaw.(*auth.TokenClaims)
 	if !ok {
 		return false
 	}
-	
+
 	switch action {
-	case "read": return claims.CanRead(collection)
-	case "write": return claims.CanWrite(collection)
-	case "admin": return claims.CanAdmin(collection)
-	case "global_admin": return claims.Permissions.GlobalAdmin
+	case "read":
+		return claims.CanRead(collection)
+	case "write":
+		return claims.CanWrite(collection)
+	case "admin":
+		return claims.CanAdmin(collection)
+	case "global_admin":
+		return claims.Permissions.GlobalAdmin
 	}
 	return false
 }
@@ -268,7 +272,7 @@ func (s *Server) checkPermission(c *gin.Context, collection string, action strin
 func (s *Server) requirePermission(action string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		name := c.Param("name")
-		
+
 		// Unnamed global routes map entirely to global admins unconditionally!
 		if name == "" {
 			if !s.checkPermission(c, "", "global_admin") {
@@ -279,7 +283,7 @@ func (s *Server) requirePermission(action string) gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		
+
 		if !s.checkPermission(c, name, action) {
 			respondError(c, http.StatusForbidden, errors.New("forbidden: insufficient scoped privileges against collection"))
 			c.Abort()

@@ -15,10 +15,10 @@ import (
 // It uses a fixed-size block per node to guarantee O(1) disk offset lookups and eliminate
 // GC overhead that would otherwise crash the database on graphs >50M vectors.
 type GraphMmap struct {
-	path       string
-	file       *os.File
-	data       []byte
-	mu         sync.RWMutex
+	path string
+	file *os.File
+	data []byte
+	mu   sync.RWMutex
 
 	M          int
 	MaxLevel   int
@@ -274,7 +274,7 @@ func (g *GraphMmap) GetConnections(nodeID uint32, layer int) []uint32 {
 	offset := GraphHeaderSize + (int(nodeID) * g.NodeStride)
 
 	// Read level
-	level := int(binary.LittleEndian.Uint32(g.data[offset:offset+4]))
+	level := int(binary.LittleEndian.Uint32(g.data[offset : offset+4]))
 	if layer > level {
 		return nil
 	}

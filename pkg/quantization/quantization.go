@@ -22,18 +22,18 @@ const (
 
 // Config holds quantization configuration
 type Config struct {
-	Type           Type    `json:"type"`
-	Rescore        bool    `json:"rescore"`         // Whether to rescore with original vectors
-	RescoreLimit   int     `json:"rescore_limit"`   // How many candidates to rescore
-	AlwaysRam      bool    `json:"always_ram"`      // Keep quantized vectors in RAM
+	Type         Type `json:"type"`
+	Rescore      bool `json:"rescore"`       // Whether to rescore with original vectors
+	RescoreLimit int  `json:"rescore_limit"` // How many candidates to rescore
+	AlwaysRam    bool `json:"always_ram"`    // Keep quantized vectors in RAM
 
 	// Scalar quantization specific
 	ScalarType     string  `json:"scalar_type"`     // "int8" or "uint8"
 	ScalarQuantile float32 `json:"scalar_quantile"` // Quantile for range calculation
 
 	// Product quantization specific
-	PQSegments     int     `json:"pq_segments"`     // Number of subvector segments
-	PQCentroids    int     `json:"pq_centroids"`    // Centroids per segment (usually 256)
+	PQSegments  int `json:"pq_segments"`  // Number of subvector segments
+	PQCentroids int `json:"pq_centroids"` // Centroids per segment (usually 256)
 }
 
 // DefaultConfig returns default quantization config
@@ -511,4 +511,3 @@ func sortFloat32s(s []float32) {
 		s[j+1] = key
 	}
 }
-

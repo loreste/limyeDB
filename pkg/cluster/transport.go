@@ -46,11 +46,11 @@ type MessageType string
 
 const (
 	// Membership messages
-	MsgTypeJoin      MessageType = "join"
-	MsgTypeLeave     MessageType = "leave"
-	MsgTypePing      MessageType = "ping"
-	MsgTypePong      MessageType = "pong"
-	MsgTypeGossip    MessageType = "gossip"
+	MsgTypeJoin   MessageType = "join"
+	MsgTypeLeave  MessageType = "leave"
+	MsgTypePing   MessageType = "ping"
+	MsgTypePong   MessageType = "pong"
+	MsgTypeGossip MessageType = "gossip"
 
 	// Raft messages
 	MsgTypeRequestVote    MessageType = "request_vote"
@@ -59,11 +59,11 @@ const (
 	MsgTypeAppendResponse MessageType = "append_response"
 
 	// Data messages
-	MsgTypeForward      MessageType = "forward"
-	MsgTypeReplicate    MessageType = "replicate"
-	MsgTypeSnapshot     MessageType = "snapshot"
-	MsgTypeStreamData   MessageType = "stream_data"
-	MsgTypeRepairData   MessageType = "repair_data"
+	MsgTypeForward    MessageType = "forward"
+	MsgTypeReplicate  MessageType = "replicate"
+	MsgTypeSnapshot   MessageType = "snapshot"
+	MsgTypeStreamData MessageType = "stream_data"
+	MsgTypeRepairData MessageType = "repair_data"
 
 	// Search messages
 	MsgTypeSearch       MessageType = "search"
@@ -296,7 +296,7 @@ func (t *HTTPTransport) handleStream(w http.ResponseWriter, r *http.Request) {
 	response := "HTTP/1.1 101 Switching Protocols\r\n" +
 		"Connection: Upgrade\r\n" +
 		"Upgrade: limyedb-stream\r\n\r\n"
-	
+
 	if _, err := conn.Write([]byte(response)); err != nil {
 		_ = conn.Close() // Best effort close on write error
 		return

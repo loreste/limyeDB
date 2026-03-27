@@ -371,7 +371,7 @@ func (p *Point) Decode(r io.Reader) error {
 		if err := binary.Read(r, binary.LittleEndian, &sparseLen); err != nil {
 			return err
 		}
-		
+
 		p.Sparse = &SparseVector{
 			Indices: make([]uint32, sparseLen),
 			Values:  make([]float32, sparseLen),

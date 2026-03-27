@@ -10,9 +10,9 @@ import (
 
 // SearchParams holds search parameters
 type SearchParams struct {
-	K         int                                             // Number of results to return
-	NumLeaves int                                             // Number of partitions to search (overrides default)
-	NumRerank int                                             // Number of candidates for reranking
+	K         int // Number of results to return
+	NumLeaves int // Number of partitions to search (overrides default)
+	NumRerank int // Number of candidates for reranking
 	Filter    func(id string, payload map[string]interface{}) bool
 }
 
@@ -39,7 +39,9 @@ func (h CandidateHeap) Less(i, j int) bool { return h[i].Distance < h[j].Distanc
 func (h CandidateHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
 
 func (h *CandidateHeap) Push(x interface{}) {
-	*h = append(*h, x.(Candidate))
+	if c, ok := x.(Candidate); ok {
+		*h = append(*h, c)
+	}
 }
 
 func (h *CandidateHeap) Pop() interface{} {
@@ -58,7 +60,9 @@ func (h MaxCandidateHeap) Less(i, j int) bool { return h[i].Distance > h[j].Dist
 func (h MaxCandidateHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
 
 func (h *MaxCandidateHeap) Push(x interface{}) {
-	*h = append(*h, x.(Candidate))
+	if c, ok := x.(Candidate); ok {
+		*h = append(*h, c)
+	}
 }
 
 func (h *MaxCandidateHeap) Pop() interface{} {
@@ -173,7 +177,9 @@ func (s *ScaNN) getApproximateCandidates(query point.Vector, numLeaves, numReran
 	// Convert to slice
 	candidates := make([]Candidate, results.Len())
 	for i := len(candidates) - 1; i >= 0; i-- {
-		candidates[i] = heap.Pop(results).(Candidate)
+		if c, ok := heap.Pop(results).(Candidate); ok {
+			candidates[i] = c
+		}
 	}
 
 	return candidates

@@ -8,7 +8,7 @@ import (
 // MultiVector represents a point with multiple named vectors
 type MultiVector struct {
 	ID      string                 `json:"id"`
-	Vectors map[string]Vector      `json:"vectors"`  // Named vectors
+	Vectors map[string]Vector      `json:"vectors"` // Named vectors
 	Payload map[string]interface{} `json:"payload,omitempty"`
 }
 
@@ -119,10 +119,10 @@ func DecodeMultiVector(data []byte) (*MultiVector, error) {
 
 // VectorConfig holds configuration for a named vector
 type VectorConfig struct {
-	Name       string `json:"name"`
-	Dimension  int    `json:"dimension"`
-	Metric     string `json:"metric"`
-	OnDisk     bool   `json:"on_disk"`
+	Name      string `json:"name"`
+	Dimension int    `json:"dimension"`
+	Metric    string `json:"metric"`
+	OnDisk    bool   `json:"on_disk"`
 
 	// Quantization settings per vector
 	Quantization string `json:"quantization,omitempty"` // "none", "scalar", "binary", "pq"
@@ -190,8 +190,8 @@ func (c *MultiVectorConfig) Validate() error {
 
 // ColBERTVector represents a ColBERT-style document with multiple token vectors
 type ColBERTVector struct {
-	ID           string    `json:"id"`
-	TokenVectors []Vector  `json:"token_vectors"` // One vector per token
+	ID           string                 `json:"id"`
+	TokenVectors []Vector               `json:"token_vectors"` // One vector per token
 	Payload      map[string]interface{} `json:"payload,omitempty"`
 }
 
@@ -260,10 +260,10 @@ func dotProduct(a, b Vector) float32 {
 // MatryoshkaVector supports variable-length embeddings (Matryoshka representation)
 // The full vector can be truncated to smaller dimensions while maintaining quality
 type MatryoshkaVector struct {
-	ID           string                 `json:"id"`
-	FullVector   Vector                 `json:"full_vector"`
-	Dimensions   []int                  `json:"dimensions"` // Supported truncation dimensions
-	Payload      map[string]interface{} `json:"payload,omitempty"`
+	ID         string                 `json:"id"`
+	FullVector Vector                 `json:"full_vector"`
+	Dimensions []int                  `json:"dimensions"` // Supported truncation dimensions
+	Payload    map[string]interface{} `json:"payload,omitempty"`
 }
 
 // NewMatryoshkaVector creates a new Matryoshka vector

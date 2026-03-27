@@ -13,42 +13,42 @@ import (
 
 // PayloadIndexConfig holds configuration for a payload field index
 type PayloadIndexConfig struct {
-	FieldName  string            `json:"field_name"`
-	FieldType  PayloadFieldType  `json:"field_type"`
-	IndexType  PayloadIndexType  `json:"index_type"`
-	Options    map[string]interface{} `json:"options,omitempty"`
-	CreatedAt  time.Time         `json:"created_at"`
+	FieldName string                 `json:"field_name"`
+	FieldType PayloadFieldType       `json:"field_type"`
+	IndexType PayloadIndexType       `json:"index_type"`
+	Options   map[string]interface{} `json:"options,omitempty"`
+	CreatedAt time.Time              `json:"created_at"`
 }
 
 // PayloadFieldType represents the data type of a payload field
 type PayloadFieldType string
 
 const (
-	FieldTypeKeyword  PayloadFieldType = "keyword"   // Exact match strings
-	FieldTypeText     PayloadFieldType = "text"      // Full-text search
-	FieldTypeInteger  PayloadFieldType = "integer"   // Integer values
-	FieldTypeFloat    PayloadFieldType = "float"     // Floating point values
-	FieldTypeBool     PayloadFieldType = "bool"      // Boolean values
-	FieldTypeGeo      PayloadFieldType = "geo"       // Geo coordinates
-	FieldTypeDatetime PayloadFieldType = "datetime"  // Date/time values
+	FieldTypeKeyword  PayloadFieldType = "keyword"  // Exact match strings
+	FieldTypeText     PayloadFieldType = "text"     // Full-text search
+	FieldTypeInteger  PayloadFieldType = "integer"  // Integer values
+	FieldTypeFloat    PayloadFieldType = "float"    // Floating point values
+	FieldTypeBool     PayloadFieldType = "bool"     // Boolean values
+	FieldTypeGeo      PayloadFieldType = "geo"      // Geo coordinates
+	FieldTypeDatetime PayloadFieldType = "datetime" // Date/time values
 )
 
 // PayloadIndexType represents the type of index to create
 type PayloadIndexType string
 
 const (
-	IndexTypeHash      PayloadIndexType = "hash"      // Hash index for exact match
-	IndexTypeNumeric   PayloadIndexType = "numeric"   // B-tree for range queries
-	IndexTypeFullText  PayloadIndexType = "fulltext"  // Inverted index for text search
-	IndexTypeGeoPoint  PayloadIndexType = "geo"       // Spatial index
+	IndexTypeHash     PayloadIndexType = "hash"     // Hash index for exact match
+	IndexTypeNumeric  PayloadIndexType = "numeric"  // B-tree for range queries
+	IndexTypeFullText PayloadIndexType = "fulltext" // Inverted index for text search
+	IndexTypeGeoPoint PayloadIndexType = "geo"      // Spatial index
 )
 
 // PayloadIndexInfo provides information about an existing index
 type PayloadIndexInfo struct {
-	Config      *PayloadIndexConfig `json:"config"`
-	PointsIndexed int64            `json:"points_indexed"`
-	SizeBytes   int64              `json:"size_bytes"`
-	Status      string             `json:"status"` // "building", "ready", "error"
+	Config        *PayloadIndexConfig `json:"config"`
+	PointsIndexed int64               `json:"points_indexed"`
+	SizeBytes     int64               `json:"size_bytes"`
+	Status        string              `json:"status"` // "building", "ready", "error"
 }
 
 // PayloadSchema describes the full payload schema for a collection

@@ -18,7 +18,7 @@ import (
 // Config holds ingestion configuration
 type Config struct {
 	// Memory limits
-	MaxMemoryBytes    int64         `json:"max_memory_bytes"`    // Maximum memory for ingestion buffers
+	MaxMemoryBytes      int64         `json:"max_memory_bytes"`      // Maximum memory for ingestion buffers
 	MemoryCheckInterval time.Duration `json:"memory_check_interval"` // How often to check memory
 
 	// Batch settings
@@ -27,8 +27,8 @@ type Config struct {
 	FlushInterval     time.Duration `json:"flush_interval"`      // Auto-flush interval
 
 	// Backpressure settings
-	BackpressureThreshold float64 `json:"backpressure_threshold"` // 0.0-1.0, when to start backpressure
-	BackpressureDelay     time.Duration `json:"backpressure_delay"` // Delay when backpressure active
+	BackpressureThreshold float64       `json:"backpressure_threshold"` // 0.0-1.0, when to start backpressure
+	BackpressureDelay     time.Duration `json:"backpressure_delay"`     // Delay when backpressure active
 
 	// Workers
 	NumWorkers int `json:"num_workers"` // Number of ingestion workers
@@ -67,9 +67,9 @@ type Engine struct {
 	onBatch func([]*point.Point) error
 
 	// State
-	running    atomic.Bool
-	stopCh     chan struct{}
-	wg         sync.WaitGroup
+	running atomic.Bool
+	stopCh  chan struct{}
+	wg      sync.WaitGroup
 
 	// Stats
 	stats Stats
@@ -406,10 +406,10 @@ type IngestionStats struct {
 
 // RateLimiter limits ingestion rate
 type RateLimiter struct {
-	pointsPerSecond int64
-	lastCheck       time.Time
+	pointsPerSecond  int64
+	lastCheck        time.Time
 	pointsThisPeriod int64
-	mu              sync.Mutex
+	mu               sync.Mutex
 }
 
 // NewRateLimiter creates a new rate limiter

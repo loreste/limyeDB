@@ -18,14 +18,14 @@ import (
 
 // Config holds cluster configuration
 type Config struct {
-	NodeID           string        `json:"node_id"`
-	ListenAddr       string        `json:"listen_addr"`
-	AdvertiseAddr    string        `json:"advertise_addr"`
-	SeedNodes        []string      `json:"seed_nodes"`
-	ReplicationFactor int          `json:"replication_factor"`
-	ShardCount       int           `json:"shard_count"`
+	NodeID            string        `json:"node_id"`
+	ListenAddr        string        `json:"listen_addr"`
+	AdvertiseAddr     string        `json:"advertise_addr"`
+	SeedNodes         []string      `json:"seed_nodes"`
+	ReplicationFactor int           `json:"replication_factor"`
+	ShardCount        int           `json:"shard_count"`
 	HeartbeatInterval time.Duration `json:"heartbeat_interval"`
-	FailureTimeout   time.Duration `json:"failure_timeout"`
+	FailureTimeout    time.Duration `json:"failure_timeout"`
 }
 
 // DefaultConfig returns default cluster configuration
@@ -58,7 +58,7 @@ type Node struct {
 	Address       string            `json:"address"`
 	State         NodeState         `json:"state"`
 	LastHeartbeat time.Time         `json:"last_heartbeat"`
-	Shards        []uint32          `json:"shards"`        // Primary shards
+	Shards        []uint32          `json:"shards"`         // Primary shards
 	ReplicaShards []uint32          `json:"replica_shards"` // Replica shards
 	Metadata      map[string]string `json:"metadata"`
 }
@@ -74,10 +74,10 @@ func (n *Node) IsHealthy() bool {
 
 // HashRing implements consistent hashing with virtual nodes
 type HashRing struct {
-	nodes       map[string]*Node
-	ring        []hashEntry
+	nodes        map[string]*Node
+	ring         []hashEntry
 	virtualNodes int
-	mu          sync.RWMutex
+	mu           sync.RWMutex
 }
 
 type hashEntry struct {
@@ -220,9 +220,9 @@ func hashKey(key string) uint32 {
 
 // Shard represents a data shard
 type Shard struct {
-	ID       uint32   `json:"id"`
-	Primary  string   `json:"primary"`   // Primary node ID
-	Replicas []string `json:"replicas"`  // Replica node IDs
+	ID       uint32     `json:"id"`
+	Primary  string     `json:"primary"`  // Primary node ID
+	Replicas []string   `json:"replicas"` // Replica node IDs
 	State    ShardState `json:"state"`
 }
 
@@ -388,9 +388,9 @@ type Coordinator struct {
 
 // MemberEvent represents a membership change event
 type MemberEvent struct {
-	Type   MemberEventType
-	Node   *Node
-	Time   time.Time
+	Type MemberEventType
+	Node *Node
+	Time time.Time
 }
 
 // MemberEventType represents the type of membership event

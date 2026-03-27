@@ -17,13 +17,13 @@ type NamedVectors map[string]Vector
 // PointV2 represents a point with support for multiple named vectors
 // This is the next-generation point structure supporting multi-vector storage
 type PointV2 struct {
-	ID            string                 `json:"id"`
-	Vector        Vector                 `json:"vector,omitempty"`         // Default/unnamed vector (backwards compat)
-	Vectors       NamedVectors           `json:"vectors,omitempty"`        // Named vectors
-	Payload       map[string]interface{} `json:"payload,omitempty"`
-	Sparse        *SparseVector          `json:"sparse,omitempty"`         // Hybrid search mapping
-	MultiVectors  map[string][][]float32 `json:"multi_vectors,omitempty"`  // ColBERT matrices
-	Version       uint64                 `json:"-"`
+	ID           string                 `json:"id"`
+	Vector       Vector                 `json:"vector,omitempty"`  // Default/unnamed vector (backwards compat)
+	Vectors      NamedVectors           `json:"vectors,omitempty"` // Named vectors
+	Payload      map[string]interface{} `json:"payload,omitempty"`
+	Sparse       *SparseVector          `json:"sparse,omitempty"`        // Hybrid search mapping
+	MultiVectors map[string][][]float32 `json:"multi_vectors,omitempty"` // ColBERT matrices
+	Version      uint64                 `json:"-"`
 }
 
 // NewPointV2 creates a new point with named vectors

@@ -262,9 +262,9 @@ type ChunkedAutoEmbedConfig struct {
 	AutoEmbedConfig
 
 	// Chunking options
-	ChunkSize    int    `json:"chunk_size,omitempty"`     // Max characters per chunk
-	ChunkOverlap int    `json:"chunk_overlap,omitempty"`  // Overlap between chunks
-	ChunkField   string `json:"chunk_field,omitempty"`    // Field to chunk (default: content)
+	ChunkSize    int    `json:"chunk_size,omitempty"`    // Max characters per chunk
+	ChunkOverlap int    `json:"chunk_overlap,omitempty"` // Overlap between chunks
+	ChunkField   string `json:"chunk_field,omitempty"`   // Field to chunk (default: content)
 }
 
 // ChunkText splits text into overlapping chunks

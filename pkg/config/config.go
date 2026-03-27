@@ -19,11 +19,11 @@ type Config struct {
 
 // ServerConfig holds server-related configuration
 type ServerConfig struct {
-	RESTAddress string        `json:"rest_address"`
-	GRPCAddress string        `json:"grpc_address"`
-	ReadTimeout time.Duration `json:"read_timeout"`
-	WriteTimeout time.Duration `json:"write_timeout"`
-	MaxRequestSize int64      `json:"max_request_size"`
+	RESTAddress    string        `json:"rest_address"`
+	GRPCAddress    string        `json:"grpc_address"`
+	ReadTimeout    time.Duration `json:"read_timeout"`
+	WriteTimeout   time.Duration `json:"write_timeout"`
+	MaxRequestSize int64         `json:"max_request_size"`
 }
 
 // StorageConfig holds storage-related configuration
@@ -134,23 +134,23 @@ type VectorConfig struct {
 
 // CollectionConfig holds per-collection configuration
 type CollectionConfig struct {
-	Name           string       `json:"name"`
-	Dimension      int          `json:"dimension"`                  // Default vector dimension (backwards compat)
-	Metric         MetricType   `json:"metric"`                     // Default vector metric (backwards compat)
-	HNSW           HNSWConfig           `json:"hnsw"`                       // Default HNSW config (backwards compat)
-	OnDisk         bool                 `json:"on_disk"`
-	PayloadSchema  interface{}          `json:"payload_schema,omitempty"`
-	Quantization   *quantization.Config `json:"quantization,omitempty"`
+	Name          string               `json:"name"`
+	Dimension     int                  `json:"dimension"` // Default vector dimension (backwards compat)
+	Metric        MetricType           `json:"metric"`    // Default vector metric (backwards compat)
+	HNSW          HNSWConfig           `json:"hnsw"`      // Default HNSW config (backwards compat)
+	OnDisk        bool                 `json:"on_disk"`
+	PayloadSchema interface{}          `json:"payload_schema,omitempty"`
+	Quantization  *quantization.Config `json:"quantization,omitempty"`
 
 	// Named vectors support - each key is a vector name with its own config
-	Vectors        map[string]VectorConfig `json:"vectors,omitempty"`
+	Vectors map[string]VectorConfig `json:"vectors,omitempty"`
 
 	// Aliases for this collection
-	Aliases        []string    `json:"aliases,omitempty"`
+	Aliases []string `json:"aliases,omitempty"`
 
 	// Sharding configuration
-	ShardCount     int         `json:"shard_count,omitempty"`
-	ReplicationFactor int      `json:"replication_factor,omitempty"`
+	ShardCount        int `json:"shard_count,omitempty"`
+	ReplicationFactor int `json:"replication_factor,omitempty"`
 }
 
 // MetricType represents the distance metric to use
