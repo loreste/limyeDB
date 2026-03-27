@@ -1,5 +1,6 @@
 # golangci-lint configuration for LimyeDB
 # Security-focused linter configuration
+version: "2"
 
 run:
   timeout: 5m
@@ -8,7 +9,8 @@ run:
 
 output:
   formats:
-    colored-line-number: {}
+    text:
+      path: stdout
   print-issued-lines: true
   print-linter-name: true
   sort-results: true
@@ -116,17 +118,14 @@ issues:
     - linters:
         - gosec
       text: "G304:"
-      source: "#nosec G304"
 
     # G404: Weak random (acceptable for non-crypto use)
     - linters:
         - gosec
       text: "G404:"
-      source: "math/rand"
 
   max-issues-per-linter: 50
   max-same-issues: 10
-  new: false
 
 severity:
   default-severity: warning
