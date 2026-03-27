@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/raft"
+
 	"github.com/limyedb/limyedb/pkg/collection"
 	"github.com/limyedb/limyedb/pkg/config"
 	"github.com/limyedb/limyedb/pkg/point"

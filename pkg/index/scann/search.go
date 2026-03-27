@@ -301,7 +301,9 @@ func (s *ScaNN) bruteForceSearch(query point.Vector, k int, filter func(string, 
 	// Convert to sorted slice
 	result := make([]Candidate, results.Len())
 	for i := len(result) - 1; i >= 0; i-- {
-		result[i] = heap.Pop(results).(Candidate)
+		if c, ok := heap.Pop(results).(Candidate); ok {
+			result[i] = c
+		}
 	}
 
 	return result, nil
@@ -449,7 +451,9 @@ func (s *ScaNN) Discover(params *DiscoverParams) ([]Candidate, error) {
 	// Convert to sorted slice
 	result := make([]Candidate, results.Len())
 	for i := len(result) - 1; i >= 0; i-- {
-		result[i] = heap.Pop(results).(Candidate)
+		if c, ok := heap.Pop(results).(Candidate); ok {
+			result[i] = c
+		}
 	}
 
 	return result, nil
