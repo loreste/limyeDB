@@ -1,6 +1,7 @@
 package hybrid
 
 import (
+	"fmt"
 	"math"
 	"sort"
 	"strings"
@@ -150,7 +151,9 @@ func (idx *BM25Index) Index(doc *Document) error {
 
 	// Remove existing document if present
 	if _, exists := idx.documents[doc.ID]; exists {
-		idx.removeDocLocked(doc.ID)
+		if err := idx.removeDocLocked(doc.ID); err != nil {
+			return fmt.Errorf("failed to remove existing document %s: %w", doc.ID, err)
+		}
 	}
 
 	// Store document

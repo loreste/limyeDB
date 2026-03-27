@@ -1,9 +1,28 @@
 package hnsw
 
 import (
+	"math"
 	"sync"
 	"sync/atomic"
 )
+
+// safeIntToUint32 converts an int to uint32 with bounds checking.
+// Returns 0 if the value is negative or exceeds uint32 max.
+func safeIntToUint32(v int) uint32 {
+	if v < 0 || v > math.MaxUint32 {
+		return 0
+	}
+	return uint32(v) //nolint:gosec
+}
+
+// safeIntToInt32 converts an int to int32 with bounds checking.
+// Returns 0 if the value exceeds int32 range.
+func safeIntToInt32(v int) int32 {
+	if v < math.MinInt32 || v > math.MaxInt32 {
+		return 0
+	}
+	return int32(v) //nolint:gosec
+}
 
 // NodeLock provides fine-grained locking for individual nodes
 // This enables concurrent insertions to different parts of the graph
@@ -25,22 +44,22 @@ func NewNodeLock(numShards int) *NodeLock {
 
 // Lock acquires a write lock for the given node ID
 func (nl *NodeLock) Lock(nodeID uint32) {
-	nl.locks[nodeID%uint32(nl.size)].Lock()
+	nl.locks[nodeID%safeIntToUint32(nl.size)].Lock()
 }
 
 // Unlock releases the write lock for the given node ID
 func (nl *NodeLock) Unlock(nodeID uint32) {
-	nl.locks[nodeID%uint32(nl.size)].Unlock()
+	nl.locks[nodeID%safeIntToUint32(nl.size)].Unlock()
 }
 
 // RLock acquires a read lock for the given node ID
 func (nl *NodeLock) RLock(nodeID uint32) {
-	nl.locks[nodeID%uint32(nl.size)].RLock()
+	nl.locks[nodeID%safeIntToUint32(nl.size)].RLock()
 }
 
 // RUnlock releases the read lock for the given node ID
 func (nl *NodeLock) RUnlock(nodeID uint32) {
-	nl.locks[nodeID%uint32(nl.size)].RUnlock()
+	nl.locks[nodeID%safeIntToUint32(nl.size)].RUnlock()
 }
 
 // LockMultiple acquires write locks for multiple nodes in order to prevent deadlock
@@ -53,7 +72,7 @@ func (nl *NodeLock) LockMultiple(nodeIDs []uint32) {
 	// Remove duplicates and lock
 	var last uint32 = 0xFFFFFFFF
 	for _, id := range sorted {
-		shard := id % uint32(nl.size)
+		shard := id % safeIntToUint32(nl.size)
 		if shard != last {
 			nl.locks[shard].Lock()
 			last = shard
@@ -69,7 +88,7 @@ func (nl *NodeLock) UnlockMultiple(nodeIDs []uint32) {
 
 	var last uint32 = 0xFFFFFFFF
 	for _, id := range sorted {
-		shard := id % uint32(nl.size)
+		shard := id % safeIntToUint32(nl.size)
 		if shard != last {
 			nl.locks[shard].Unlock()
 			last = shard
@@ -189,10 +208,11 @@ func (ep *AtomicEntryPoint) Get() (uint32, int) {
 func (ep *AtomicEntryPoint) Set(id uint32, level int) bool {
 	for {
 		currentLevel := ep.level.Load()
-		if int32(level) <= currentLevel {
+		newLevel := safeIntToInt32(level)
+		if newLevel <= currentLevel {
 			return false
 		}
-		if ep.level.CompareAndSwap(currentLevel, int32(level)) {
+		if ep.level.CompareAndSwap(currentLevel, newLevel) {
 			ep.id.Store(id)
 			return true
 		}
@@ -201,7 +221,7 @@ func (ep *AtomicEntryPoint) Set(id uint32, level int) bool {
 
 // SetIfEmpty sets the entry point only if the graph is empty
 func (ep *AtomicEntryPoint) SetIfEmpty(id uint32, level int) bool {
-	if ep.level.CompareAndSwap(-1, int32(level)) {
+	if ep.level.CompareAndSwap(-1, safeIntToInt32(level)) {
 		ep.id.Store(id)
 		return true
 	}

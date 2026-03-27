@@ -284,7 +284,11 @@ func (v *OpenAIVectorizer) vectorizeBatchInternal(ctx context.Context, texts []s
 		}
 
 		if resp.StatusCode == 429 || resp.StatusCode >= 500 {
-			resp.Body.Close()
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				lastErr = fmt.Errorf("API returned status %d and failed to close response body: %v", resp.StatusCode, closeErr)
+				time.Sleep(time.Duration(attempt+1) * time.Second)
+				continue
+			}
 			lastErr = fmt.Errorf("API returned status %d", resp.StatusCode)
 			time.Sleep(time.Duration(attempt+1) * time.Second)
 			continue

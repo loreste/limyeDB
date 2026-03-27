@@ -1,6 +1,8 @@
 package raft
 
 import (
+	cryptorand "crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -192,10 +194,19 @@ func NewNode(cfg *Config) (*Node, error) {
 		stopCh:            make(chan struct{}),
 		applyCh:           make(chan LogEntry, 100),
 		commitCh:          make(chan struct{}, 1),
-		rng:               rand.New(rand.NewSource(time.Now().UnixNano())),
+		rng:               rand.New(rand.NewSource(secureRandSeed())),
 	}
 
 	return n, nil
+}
+
+// secureRandSeed returns a cryptographically secure random seed for math/rand.
+func secureRandSeed() int64 {
+	var seedBytes [8]byte
+	if _, err := cryptorand.Read(seedBytes[:]); err != nil {
+		return time.Now().UnixNano()
+	}
+	return int64(binary.LittleEndian.Uint64(seedBytes[:]))
 }
 
 // Start starts the Raft node

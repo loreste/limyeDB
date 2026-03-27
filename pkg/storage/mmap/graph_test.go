@@ -39,11 +39,15 @@ func TestGraphMmap(t *testing.T) {
 
 	// Set connections for node 0, layer 0
 	conns0 := []uint32{10, 20, 30}
-	graph.SetConnections(0, 0, conns0)
+	if err := graph.SetConnections(0, 0, conns0); err != nil {
+		t.Fatalf("Failed to set connections for layer 0: %v", err)
+	}
 
 	// Set connections for node 0, layer 1
 	conns1 := []uint32{40, 50}
-	graph.SetConnections(0, 1, conns1)
+	if err := graph.SetConnections(0, 1, conns1); err != nil {
+		t.Fatalf("Failed to set connections for layer 1: %v", err)
+	}
 
 	// Verify connections layer 0
 	retrieved0 := graph.GetConnections(0, 0)

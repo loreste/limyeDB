@@ -2,6 +2,7 @@
 package ratelimit
 
 import (
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -216,7 +217,7 @@ func WithConfig(requestsPerSecond, burstSize float64) gin.HandlerFunc {
 }
 
 func formatFloat(f float64) string {
-	return string(rune(int(f)))
+	return fmt.Sprintf("%g", f)
 }
 
 // SlidingWindowLimiter implements sliding window rate limiting.

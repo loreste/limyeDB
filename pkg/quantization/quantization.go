@@ -3,6 +3,7 @@ package quantization
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"math"
 	"sync"
 
@@ -169,8 +170,14 @@ type ScalarQuantizer struct {
 	mu      sync.RWMutex
 }
 
+// maxDimension is the maximum allowed vector dimension to prevent uncontrolled allocation.
+const maxDimension = 65536
+
 // NewScalarQuantizer creates a new scalar quantizer
 func NewScalarQuantizer(dimension int, quantile float32) *ScalarQuantizer {
+	if dimension <= 0 || dimension > maxDimension {
+		panic(fmt.Sprintf("invalid dimension %d: must be between 1 and %d", dimension, maxDimension))
+	}
 	return &ScalarQuantizer{
 		dimension: dimension,
 		quantile:  quantile,
@@ -337,6 +344,9 @@ type BinaryQuantizer struct {
 
 // NewBinaryQuantizer creates a new binary quantizer
 func NewBinaryQuantizer(dimension int) *BinaryQuantizer {
+	if dimension <= 0 || dimension > maxDimension {
+		panic(fmt.Sprintf("invalid dimension %d: must be between 1 and %d", dimension, maxDimension))
+	}
 	return &BinaryQuantizer{
 		dimension:  dimension,
 		thresholds: make([]float32, dimension),

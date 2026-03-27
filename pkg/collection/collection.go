@@ -2,10 +2,12 @@ package collection
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -93,8 +95,21 @@ func New(cfg *config.CollectionConfig) (*Collection, error) {
 			}
 
 			if vc.OnDisk {
-				dirPath := filepath.Join("./data", cfg.Name, name)
-				os.MkdirAll(dirPath, 0755)
+				dirPath := filepath.Clean(filepath.Join("./data", cfg.Name, name))
+				absDir, absErr := filepath.Abs(dirPath)
+				if absErr != nil {
+					return nil, fmt.Errorf("failed to resolve directory path: %w", absErr)
+				}
+				absBase, absErr := filepath.Abs("./data")
+				if absErr != nil {
+					return nil, fmt.Errorf("failed to resolve base path: %w", absErr)
+				}
+				if !strings.HasPrefix(absDir, absBase+string(os.PathSeparator)) {
+					return nil, fmt.Errorf("directory path escapes data directory")
+				}
+				if err := os.MkdirAll(dirPath, 0750); err != nil {
+					return nil, fmt.Errorf("failed to create on-disk directory: %w", err)
+				}
 				mmapCfg := mmap.DefaultConfig()
 				mmapCfg.Path = filepath.Join(dirPath, "vectors.mmap")
 				mmapCfg.Dimension = vc.Dimension
@@ -139,8 +154,21 @@ func New(cfg *config.CollectionConfig) (*Collection, error) {
 		}
 
 		if cfg.OnDisk {
-			dirPath := filepath.Join("./data", cfg.Name, "default")
-			os.MkdirAll(dirPath, 0755)
+			dirPath := filepath.Clean(filepath.Join("./data", cfg.Name, "default"))
+			absDir, absErr := filepath.Abs(dirPath)
+			if absErr != nil {
+				return nil, fmt.Errorf("failed to resolve directory path: %w", absErr)
+			}
+			absBase, absErr := filepath.Abs("./data")
+			if absErr != nil {
+				return nil, fmt.Errorf("failed to resolve base path: %w", absErr)
+			}
+			if !strings.HasPrefix(absDir, absBase+string(os.PathSeparator)) {
+				return nil, fmt.Errorf("directory path escapes data directory")
+			}
+			if err := os.MkdirAll(dirPath, 0750); err != nil {
+				return nil, fmt.Errorf("failed to create on-disk directory: %w", err)
+			}
 			mmapCfg := mmap.DefaultConfig()
 			mmapCfg.Path = filepath.Join(dirPath, "vectors.mmap")
 			mmapCfg.Dimension = cfg.Dimension

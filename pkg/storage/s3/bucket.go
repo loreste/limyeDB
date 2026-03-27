@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -32,6 +33,7 @@ func NewStorage(ctx context.Context, region string, bucketName string) (*Storage
 
 // UploadFile streams the heavily bound local NVMe vectors/shards directly onto S3 natively saving IOPS
 func (s *Storage) UploadFile(ctx context.Context, localPath string, s3Key string) error {
+	localPath = filepath.Clean(localPath)
 	file, err := os.Open(localPath)
 	if err != nil {
 		return fmt.Errorf("unable to open local file %s: %w", localPath, err)
@@ -61,6 +63,7 @@ func (s *Storage) DownloadFile(ctx context.Context, s3Key string, destPath strin
 	}
 	defer resp.Body.Close()
 
+	destPath = filepath.Clean(destPath)
 	file, err := os.Create(destPath)
 	if err != nil {
 		return fmt.Errorf("failed to allocate dest disk block: %w", err)

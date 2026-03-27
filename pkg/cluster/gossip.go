@@ -2,6 +2,8 @@ package cluster
 
 import (
 	"context"
+	cryptorand "crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"math/rand"
 	"sync"
@@ -116,7 +118,7 @@ func NewGossiper(nodeID, addr string, transport Transport, config *GossipConfig)
 		suspicions: make(map[string]*suspicionTimer),
 		broadcasts: make([]GossipMessage, 0),
 		stopCh:     make(chan struct{}),
-		rng:        rand.New(rand.NewSource(time.Now().UnixNano())),
+		rng:        rand.New(rand.NewSource(cryptoRandSeed())),
 	}
 
 	// Add self to states
@@ -137,6 +139,16 @@ func (g *Gossiper) Start() error {
 	go g.suspicionLoop()
 
 	return nil
+}
+
+// cryptoRandSeed returns a cryptographically secure random seed for math/rand.
+func cryptoRandSeed() int64 {
+	var seedBytes [8]byte
+	if _, err := cryptorand.Read(seedBytes[:]); err != nil {
+		// Fallback to time-based seed if crypto/rand fails
+		return time.Now().UnixNano()
+	}
+	return int64(binary.LittleEndian.Uint64(seedBytes[:]))
 }
 
 // Stop stops the gossip protocol

@@ -1,6 +1,7 @@
 package hnsw
 
 import (
+	"math"
 	"sync"
 	"sync/atomic"
 
@@ -29,7 +30,11 @@ func NewNode(id string, vector point.Vector, level int, m int, useMmap bool) *No
 			// Layer 0 has 2*M connections, upper layers have M
 			capacity := m
 			if i == 0 {
-				capacity = 2 * m
+				if m > math.MaxInt/2 {
+					capacity = math.MaxInt
+				} else {
+					capacity = 2 * m
+				}
 			}
 			connections[i] = make([]uint32, 0, capacity)
 		}

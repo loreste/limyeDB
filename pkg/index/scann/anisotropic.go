@@ -64,7 +64,7 @@ func NewAnisotropicQuantizer(cfg *AnisotropicConfig) *AnisotropicQuantizer {
 	seed := int64(0)
 	var seedBytes [8]byte
 	if _, err := cryptorand.Read(seedBytes[:]); err == nil {
-		seed = int64(binary.LittleEndian.Uint64(seedBytes[:]))
+		seed = int64(binary.LittleEndian.Uint64(seedBytes[:]) & 0x7FFFFFFFFFFFFFFF)
 	} else {
 		seed = rand.Int63() // #nosec G404 - fallback only
 	}
@@ -368,7 +368,10 @@ func (aq *AnisotropicQuantizer) Encode(vec point.Vector) ([]byte, error) {
 	// Find nearest code
 	codeID := aq.findNearestCode(projected)
 
-	// Encode as bytes
+	// Encode as bytes with safe conversion
+	if codeID < 0 || codeID > math.MaxUint32 {
+		return nil, errors.New("code ID out of uint32 range")
+	}
 	data := make([]byte, 4)
 	binary.LittleEndian.PutUint32(data, uint32(codeID))
 

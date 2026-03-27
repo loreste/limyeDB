@@ -203,13 +203,19 @@ func (p *Point) Encode(w io.Writer) error {
 	}
 
 	// Write NamedVectors
-	numNamed := uint16(len(p.NamedVectors))
+	numNamed, err := safeIntToUint16(len(p.NamedVectors))
+	if err != nil {
+		return fmt.Errorf("too many named vectors: %w", err)
+	}
 	if err := binary.Write(w, binary.LittleEndian, numNamed); err != nil {
 		return err
 	}
 	for name, vec := range p.NamedVectors {
 		nameBytes := []byte(name)
-		nameLen := uint16(len(nameBytes))
+		nameLen, err := safeIntToUint16(len(nameBytes))
+		if err != nil {
+			return fmt.Errorf("named vector key too long: %w", err)
+		}
 		if err := binary.Write(w, binary.LittleEndian, nameLen); err != nil {
 			return err
 		}
@@ -217,7 +223,10 @@ func (p *Point) Encode(w io.Writer) error {
 			return err
 		}
 
-		vLen := uint32(len(vec))
+		vLen, err := safeIntToUint32(len(vec))
+		if err != nil {
+			return fmt.Errorf("named vector too large: %w", err)
+		}
 		if err := binary.Write(w, binary.LittleEndian, vLen); err != nil {
 			return err
 		}
@@ -239,7 +248,10 @@ func (p *Point) Encode(w io.Writer) error {
 		return err
 	}
 	if hasSparse {
-		sparseLen := uint32(len(p.Sparse.Indices))
+		sparseLen, err := safeIntToUint32(len(p.Sparse.Indices))
+		if err != nil {
+			return fmt.Errorf("sparse indices too large: %w", err)
+		}
 		if err := binary.Write(w, binary.LittleEndian, sparseLen); err != nil {
 			return err
 		}

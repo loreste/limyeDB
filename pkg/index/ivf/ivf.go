@@ -177,8 +177,12 @@ func (ivf *IVF) storePoint(p *point.Point, clusterID int) error {
 		return ErrPointExists
 	}
 
-	// Store the point
-	pointID := uint32(len(ivf.points))
+	// Store the point with safe integer conversion
+	n := len(ivf.points)
+	if n < 0 || n > math.MaxUint32 {
+		return errors.New("point count exceeds uint32 range")
+	}
+	pointID := uint32(n)
 	ivf.points = append(ivf.points, p)
 	ivf.idToIndex[p.ID] = pointID
 	ivf.pointCount.Add(1)

@@ -168,6 +168,8 @@ func (f *FSM) Restore(rc io.ReadCloser) error {
 	tempID := fmt.Sprintf("raft_restore_%d", time.Now().UnixNano())
 	tempPath := filepath.Join(f.snapMgr.Dir(), tempID+".snap")
 
+	// Use filepath.Clean to sanitize the constructed path
+	tempPath = filepath.Clean(tempPath)
 	file, err := os.Create(tempPath)
 	if err != nil {
 		return err

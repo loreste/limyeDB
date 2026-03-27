@@ -138,7 +138,7 @@ func NewTenantManager(dataDir string) (*TenantManager, error) {
 
 // loadTenants loads tenants from disk
 func (tm *TenantManager) loadTenants() error {
-	path := filepath.Join(tm.dataDir, "tenants.json")
+	path := filepath.Clean(filepath.Join(tm.dataDir, "tenants.json"))
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {

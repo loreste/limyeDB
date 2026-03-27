@@ -188,7 +188,7 @@ func (rm *RBACManager) createSystemRoles() {
 
 // loadRoles loads roles from disk
 func (rm *RBACManager) loadRoles() error {
-	path := filepath.Join(rm.dataDir, "roles.json")
+	path := filepath.Clean(filepath.Join(rm.dataDir, "roles.json"))
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -214,7 +214,7 @@ func (rm *RBACManager) loadRoles() error {
 
 // loadUsers loads users from disk
 func (rm *RBACManager) loadUsers() error {
-	path := filepath.Join(rm.dataDir, "users.json")
+	path := filepath.Clean(filepath.Join(rm.dataDir, "users.json"))
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {

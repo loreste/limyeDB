@@ -49,7 +49,7 @@ func NewRaftNode(cfg *RaftConfig, manager *collection.Manager, snapMgr *snapshot
 		return nil, err
 	}
 
-	if err := os.MkdirAll(cfg.DataDir, 0755); err != nil {
+	if err := os.MkdirAll(cfg.DataDir, 0750); err != nil {
 		return nil, err
 	}
 

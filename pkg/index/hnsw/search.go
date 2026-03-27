@@ -477,8 +477,15 @@ func (h *HNSW) Recommend(id string, k int) ([]Candidate, error) {
 		return nil, err
 	}
 
-	// Filter out the query point
-	filtered := make([]Candidate, 0, k)
+	// Filter out the query point - cap allocation to actual results size
+	filterCap := k
+	if filterCap > len(results) {
+		filterCap = len(results)
+	}
+	if filterCap < 0 {
+		filterCap = 0
+	}
+	filtered := make([]Candidate, 0, filterCap)
 	for _, c := range results {
 		if h.nodes[c.ID].ID != id {
 			filtered = append(filtered, c)

@@ -80,7 +80,9 @@ func NewShard(cfg *ShardConfig) (*Shard, error) {
 	}
 
 	if cfg.VectorConfig.OnDisk {
-		os.MkdirAll(cfg.DataDir, 0755)
+		if err := os.MkdirAll(cfg.DataDir, 0750); err != nil {
+			return nil, fmt.Errorf("failed to create shard data directory: %w", err)
+		}
 		mmapCfg := mmap.DefaultConfig()
 		mmapCfg.Path = filepath.Join(cfg.DataDir, "vectors.mmap")
 		mmapCfg.Dimension = cfg.VectorConfig.Dimension
@@ -270,7 +272,13 @@ func (sm *ShardManager) GetAllShards() []*Shard {
 func (sm *ShardManager) computeShardID(pointID string) uint32 {
 	hash := sha256.Sum256([]byte(pointID))
 	num := binary.BigEndian.Uint32(hash[:4])
-	return num % uint32(sm.shardCount)
+	// Safe conversion: shardCount is validated to be > 0 in NewShardManager
+	// and bounded by practical limits, so it fits in uint32
+	count := sm.shardCount
+	if count <= 0 {
+		count = 1
+	}
+	return num % uint32(count) // #nosec G115 - count is validated positive and bounded
 }
 
 // Insert inserts a point into the appropriate shard

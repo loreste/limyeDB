@@ -67,8 +67,11 @@ func NewBackup(dataDir string) *Backup {
 
 // Create creates a new backup.
 func (b *Backup) Create(outputPath string, opts BackupOptions) (*BackupMetadata, error) {
+	// Sanitize output path to prevent file inclusion via variable (G304)
+	cleanOutput := filepath.Clean(outputPath)
+
 	// Create output file
-	outFile, err := os.Create(outputPath)
+	outFile, err := os.Create(cleanOutput)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create backup file: %w", err)
 	}
@@ -94,8 +97,14 @@ func (b *Backup) Create(outputPath string, opts BackupOptions) (*BackupMetadata,
 		Version:   "1.0.0",
 	}
 
+	// Resolve base directory for safe path construction (G122)
+	absDataDir, err := filepath.Abs(b.dataDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve data directory: %w", err)
+	}
+
 	// Walk through data directory
-	err = filepath.Walk(b.dataDir, func(path string, info os.FileInfo, err error) error {
+	err = filepath.Walk(absDataDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -106,9 +115,17 @@ func (b *Backup) Create(outputPath string, opts BackupOptions) (*BackupMetadata,
 		}
 
 		// Get relative path
-		relPath, err := filepath.Rel(b.dataDir, path)
+		relPath, err := filepath.Rel(absDataDir, path)
 		if err != nil {
 			return err
+		}
+
+		// Construct a safe path from the base dir and relative path (G122)
+		safePath := filepath.Join(absDataDir, relPath)
+
+		// Verify the safe path stays within the data directory
+		if !strings.HasPrefix(safePath, absDataDir+string(filepath.Separator)) && safePath != absDataDir {
+			return fmt.Errorf("path %s escapes data directory", relPath)
 		}
 
 		// Check collection filter
@@ -135,8 +152,8 @@ func (b *Backup) Create(outputPath string, opts BackupOptions) (*BackupMetadata,
 			return err
 		}
 
-		// Write file content
-		file, err := os.Open(path)
+		// Write file content using the safe path (G304, G122)
+		file, err := os.Open(safePath)
 		if err != nil {
 			return err
 		}
@@ -175,8 +192,11 @@ func (b *Backup) Create(outputPath string, opts BackupOptions) (*BackupMetadata,
 
 // Restore restores from a backup.
 func (b *Backup) Restore(inputPath string, opts RestoreOptions) (*BackupMetadata, error) {
+	// Sanitize input path to prevent file inclusion via variable (G304)
+	cleanInput := filepath.Clean(inputPath)
+
 	// Open backup file
-	inFile, err := os.Open(inputPath)
+	inFile, err := os.Open(cleanInput)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open backup file: %w", err)
 	}
@@ -235,6 +255,23 @@ func (b *Backup) Restore(inputPath string, opts RestoreOptions) (*BackupMetadata
 		targetPath, err := sanitizeTarPath(b.dataDir, header.Name)
 		if err != nil {
 			return nil, fmt.Errorf("invalid path in archive: %w", err)
+		}
+
+		// Additional Zip Slip validation using filepath.Rel (go/zipslip)
+		absBase, err := filepath.Abs(b.dataDir)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve base directory: %w", err)
+		}
+		absTarget, err := filepath.Abs(targetPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve target path: %w", err)
+		}
+		relFromBase, err := filepath.Rel(absBase, absTarget)
+		if err != nil {
+			return nil, fmt.Errorf("failed to compute relative path: %w", err)
+		}
+		if strings.HasPrefix(relFromBase, "..") {
+			return nil, fmt.Errorf("illegal file path in archive: %s", header.Name)
 		}
 
 		// Check if exists
@@ -299,7 +336,9 @@ func (b *Backup) List(backupDir string) ([]BackupMetadata, error) {
 
 // ReadMetadata reads backup metadata without full restore.
 func (b *Backup) ReadMetadata(backupPath string) (*BackupMetadata, error) {
-	inFile, err := os.Open(backupPath)
+	// Sanitize path to prevent file inclusion via variable (G304)
+	cleanPath := filepath.Clean(backupPath)
+	inFile, err := os.Open(cleanPath)
 	if err != nil {
 		return nil, err
 	}
@@ -426,12 +465,16 @@ func ExportJSON(dataDir, collection, outputPath string) error {
 		return err
 	}
 
-	return os.WriteFile(outputPath, bytes, 0644)
+	// Use restricted permissions (G306) and sanitize path (G304)
+	cleanOutput := filepath.Clean(outputPath)
+	return os.WriteFile(cleanOutput, bytes, 0600)
 }
 
 // ImportJSON imports points from a JSON file.
 func ImportJSON(dataDir, collection, inputPath string) (int, error) {
-	bytes, err := os.ReadFile(inputPath)
+	// Sanitize path to prevent file inclusion via variable (G304)
+	cleanInput := filepath.Clean(inputPath)
+	bytes, err := os.ReadFile(cleanInput)
 	if err != nil {
 		return 0, err
 	}

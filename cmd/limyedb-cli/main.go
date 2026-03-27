@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -131,7 +132,8 @@ func cmdImport(client *Client, args []string) error {
 	collection := args[0]
 	filename := args[1]
 
-	// Read file
+	// Read file - sanitize path to prevent directory traversal
+	filename = filepath.Clean(filename)
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		return fmt.Errorf("failed to read file: %w", err)
@@ -232,7 +234,7 @@ func cmdExport(client *Client, args []string) error {
 	}
 
 	output, _ := json.MarshalIndent(exportData, "", "  ")
-	if err := os.WriteFile(filename, output, 0644); err != nil {
+	if err := os.WriteFile(filename, output, 0600); err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
 	}
 

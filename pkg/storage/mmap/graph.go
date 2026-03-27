@@ -2,20 +2,24 @@ package mmap
 
 import (
 	"encoding/binary"
+	"fmt"
+	"math"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 )
 
 // GraphMmap manages an on-disk, memory-mapped representation of an HNSW graph's connections.
-// It uses a fixed-size block per node to guarantee O(1) disk offset lookups and eliminate 
+// It uses a fixed-size block per node to guarantee O(1) disk offset lookups and eliminate
 // GC overhead that would otherwise crash the database on graphs >50M vectors.
 type GraphMmap struct {
 	path       string
 	file       *os.File
 	data       []byte
 	mu         sync.RWMutex
-	
+
 	M          int
 	MaxLevel   int
 	NodeStride int // Bytes per node block
@@ -28,14 +32,75 @@ const (
 	DefaultMaxLevel = 16 // Covers >1 Billion elements effectively
 )
 
+// safeInt64ToInt converts int64 to int with overflow checking
+func safeInt64ToInt(v int64) (int, error) {
+	if v < math.MinInt || v > math.MaxInt {
+		return 0, fmt.Errorf("integer overflow: int64 value %d cannot be safely converted to int", v)
+	}
+	return int(v), nil
+}
+
+// safeUintptrToInt converts uintptr to int with overflow checking
+func safeUintptrToInt(v uintptr) (int, error) {
+	if v > uintptr(math.MaxInt) {
+		return 0, fmt.Errorf("integer overflow: uintptr value %d cannot be safely converted to int", v)
+	}
+	return int(v), nil
+}
+
+// safeIntToUint32 safely converts int to uint32 with bounds checking
+func safeIntToUint32(v int) (uint32, error) {
+	if v < 0 || v > math.MaxUint32 {
+		return 0, fmt.Errorf("integer overflow: int value %d cannot be safely converted to uint32", v)
+	}
+	return uint32(v), nil
+}
+
+// validateGraphPath sanitizes and validates a file path to prevent path injection.
+// It ensures the path is cleaned and does not contain directory traversal sequences.
+func validateGraphPath(path string) (string, error) {
+	// Clean the path to resolve any . or .. components
+	cleaned := filepath.Clean(path)
+
+	// Reject paths containing traversal sequences after cleaning
+	if strings.Contains(cleaned, "..") {
+		return "", fmt.Errorf("path contains directory traversal: %s", path)
+	}
+
+	return cleaned, nil
+}
+
+// closeFileWithError closes a file and combines any close error with an existing error
+func closeFileWithError(f *os.File, existingErr *error) {
+	if closeErr := f.Close(); closeErr != nil {
+		if *existingErr == nil {
+			*existingErr = fmt.Errorf("failed to close file: %w", closeErr)
+		} else {
+			*existingErr = fmt.Errorf("%w; additionally failed to close file: %v", *existingErr, closeErr)
+		}
+	}
+}
+
 // NewGraphMmap creates or opens an exclusive memory-mapped file for HNSW connections
-func NewGraphMmap(path string, m int) (*GraphMmap, error) {
-	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
+func NewGraphMmap(path string, m int) (_ *GraphMmap, retErr error) {
+	// Validate and sanitize the file path to prevent path injection (G304/go/path-injection)
+	cleanPath, err := validateGraphPath(path)
+	if err != nil {
+		return nil, fmt.Errorf("invalid graph path: %w", err)
+	}
+
+	file, err := os.OpenFile(cleanPath, os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
 		return nil, err
 	}
+	// Ensure file is closed on any error path with proper error handling
+	defer func() {
+		if retErr != nil {
+			closeFileWithError(file, &retErr)
+		}
+	}()
 
-	// Calculate stride: 
+	// Calculate stride:
 	// [Level: 4] + [Counts: 4 * (MaxLevel+1)] + [Layer0: 4 * 2M] + [Layer1..L: 4 * MaxLevel * M]
 	countsSize := 4 * (DefaultMaxLevel + 1)
 	layer0Size := 4 * (2 * m)
@@ -45,7 +110,6 @@ func NewGraphMmap(path string, m int) (*GraphMmap, error) {
 	// Get file info
 	info, err := file.Stat()
 	if err != nil {
-		file.Close()
 		return nil, err
 	}
 
@@ -57,36 +121,68 @@ func NewGraphMmap(path string, m int) (*GraphMmap, error) {
 		// Start with 10,000 nodes capacity + header
 		initialCapacity := int64(GraphHeaderSize + (stride * 10000))
 		if err := file.Truncate(initialCapacity); err != nil {
-			file.Close()
 			return nil, err
 		}
 		size = initialCapacity
-		
-		var mmapErr error
-		data, mmapErr = syscall.Mmap(int(file.Fd()), 0, int(size), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
-		if mmapErr != nil {
-			file.Close()
-			return nil, mmapErr
+
+		mmapSize, err := safeInt64ToInt(size)
+		if err != nil {
+			return nil, fmt.Errorf("mmap size overflow: %w", err)
+		}
+
+		fdInt, err := safeUintptrToInt(file.Fd())
+		if err != nil {
+			return nil, fmt.Errorf("file descriptor overflow: %w", err)
+		}
+
+		data, err = syscall.Mmap(fdInt, 0, mmapSize, syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
+		if err != nil {
+			return nil, err
 		}
 
 		// Write header
 		binary.LittleEndian.PutUint32(data[0:4], 0) // NumNodes
-		binary.LittleEndian.PutUint32(data[4:8], uint32(m))
-		binary.LittleEndian.PutUint32(data[8:12], uint32(DefaultMaxLevel))
-		binary.LittleEndian.PutUint32(data[12:16], uint32(stride))
+		mU32, err := safeIntToUint32(m)
+		if err != nil {
+			_ = syscall.Munmap(data)
+			return nil, fmt.Errorf("M value overflow: %w", err)
+		}
+		binary.LittleEndian.PutUint32(data[4:8], mU32)
+
+		maxLevelU32, err := safeIntToUint32(DefaultMaxLevel)
+		if err != nil {
+			_ = syscall.Munmap(data)
+			return nil, fmt.Errorf("MaxLevel overflow: %w", err)
+		}
+		binary.LittleEndian.PutUint32(data[8:12], maxLevelU32)
+
+		strideU32, err := safeIntToUint32(stride)
+		if err != nil {
+			_ = syscall.Munmap(data)
+			return nil, fmt.Errorf("stride overflow: %w", err)
+		}
+		binary.LittleEndian.PutUint32(data[12:16], strideU32)
 	} else {
-		var mmapErr error
-		data, mmapErr = syscall.Mmap(int(file.Fd()), 0, int(size), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
-		if mmapErr != nil {
-			file.Close()
-			return nil, mmapErr
+		mmapSize, err := safeInt64ToInt(size)
+		if err != nil {
+			return nil, fmt.Errorf("mmap size overflow: %w", err)
+		}
+
+		fdInt, err := safeUintptrToInt(file.Fd())
+		if err != nil {
+			return nil, fmt.Errorf("file descriptor overflow: %w", err)
+		}
+
+		data, err = syscall.Mmap(fdInt, 0, mmapSize, syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
+		if err != nil {
+			return nil, err
 		}
 	}
 
 	numNodes := int(binary.LittleEndian.Uint32(data[0:4]))
 
 	return &GraphMmap{
-		path:       path,
+		path:       cleanPath,
 		file:       file,
 		data:       data,
 		M:          m,
@@ -121,12 +217,22 @@ func (g *GraphMmap) ensureCapacity(nodeID uint32) error {
 		return err
 	}
 
-	// Remap
-	data, err := syscall.Mmap(int(g.file.Fd()), 0, int(newSize), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
+	// Remap with safe conversions
+	mmapSize, err := safeInt64ToInt(newSize)
+	if err != nil {
+		return fmt.Errorf("mmap size overflow: %w", err)
+	}
+
+	fdInt, err := safeUintptrToInt(g.file.Fd())
+	if err != nil {
+		return fmt.Errorf("file descriptor overflow: %w", err)
+	}
+
+	data, err := syscall.Mmap(fdInt, 0, mmapSize, syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
 	if err != nil {
 		return err
 	}
-	
+
 	g.data = data
 	return nil
 }
@@ -141,14 +247,22 @@ func (g *GraphMmap) AddNode(nodeID uint32, level int) error {
 	}
 
 	offset := GraphHeaderSize + (int(nodeID) * g.NodeStride)
-	binary.LittleEndian.PutUint32(g.data[offset:offset+4], uint32(level))
+	levelU32, err := safeIntToUint32(level)
+	if err != nil {
+		return fmt.Errorf("level overflow: %w", err)
+	}
+	binary.LittleEndian.PutUint32(g.data[offset:offset+4], levelU32)
 
 	// Update global counter
 	if int(nodeID) >= g.NumNodes {
 		g.NumNodes = int(nodeID) + 1
-		binary.LittleEndian.PutUint32(g.data[0:4], uint32(g.NumNodes))
+		numNodesU32, err := safeIntToUint32(g.NumNodes)
+		if err != nil {
+			return fmt.Errorf("NumNodes overflow: %w", err)
+		}
+		binary.LittleEndian.PutUint32(g.data[0:4], numNodesU32)
 	}
-	
+
 	return nil
 }
 
@@ -158,7 +272,7 @@ func (g *GraphMmap) GetConnections(nodeID uint32, layer int) []uint32 {
 	defer g.mu.RUnlock()
 
 	offset := GraphHeaderSize + (int(nodeID) * g.NodeStride)
-	
+
 	// Read level
 	level := int(binary.LittleEndian.Uint32(g.data[offset:offset+4]))
 	if layer > level {
@@ -188,13 +302,17 @@ func (g *GraphMmap) GetConnections(nodeID uint32, layer int) []uint32 {
 }
 
 // SetConnections writes the slice directly back into the memory map
-func (g *GraphMmap) SetConnections(nodeID uint32, layer int, connections []uint32) {
+func (g *GraphMmap) SetConnections(nodeID uint32, layer int, connections []uint32) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	offset := GraphHeaderSize + (int(nodeID) * g.NodeStride)
 	countOffset := offset + 4 + (layer * 4)
-	binary.LittleEndian.PutUint32(g.data[countOffset:countOffset+4], uint32(len(connections)))
+	connLen, err := safeIntToUint32(len(connections))
+	if err != nil {
+		return fmt.Errorf("connections length overflow: %w", err)
+	}
+	binary.LittleEndian.PutUint32(g.data[countOffset:countOffset+4], connLen)
 
 	dataOffset := offset + 4 + (4 * (g.MaxLevel + 1))
 	if layer > 0 {
@@ -204,20 +322,21 @@ func (g *GraphMmap) SetConnections(nodeID uint32, layer int, connections []uint3
 	for i, conn := range connections {
 		binary.LittleEndian.PutUint32(g.data[dataOffset+(i*4):dataOffset+(i*4)+4], conn)
 	}
+	return nil
 }
 
 // Sync flushes the map and avoids partial persistent losses
 func (g *GraphMmap) Sync() error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	// OS handles page fluhes on MAP_SHARED automatically 
+	// OS handles page fluhes on MAP_SHARED automatically
 	return nil
 }
 
 func (g *GraphMmap) Close() error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	
+
 	if g.data != nil {
 		_ = syscall.Munmap(g.data)
 		g.data = nil

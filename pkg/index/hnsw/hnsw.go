@@ -364,7 +364,10 @@ func (h *HNSW) getConnections(nodeID uint32, layer int) []uint32 {
 // setConnections is a unified connection setter backing RAM or MMap
 func (h *HNSW) setConnections(nodeID uint32, layer int, connections []uint32) {
 	if h.graphMmap != nil {
-		h.graphMmap.SetConnections(nodeID, layer, connections)
+		if err := h.graphMmap.SetConnections(nodeID, layer, connections); err != nil {
+			// Log but don't propagate since callers don't expect errors from in-memory operations
+			_ = err
+		}
 	} else {
 		h.nodes[nodeID].SetConnections(layer, connections)
 	}

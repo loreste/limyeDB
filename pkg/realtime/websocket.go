@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
+	"math"
 	"net/http"
 	"sync"
 	"time"
@@ -251,15 +254,19 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 func (c *Client) readPump() {
 	defer func() {
 		c.hub.unregister <- c
-		c.conn.Close()
+		if err := c.conn.Close(); err != nil {
+			log.Printf("readPump: error closing connection for client %s: %v", c.id, err)
+		}
 		c.cancel()
 	}()
 
 	c.conn.SetReadLimit(64 * 1024) // 64KB max message
-	c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	if err := c.conn.SetReadDeadline(time.Now().Add(60 * time.Second)); err != nil {
+		log.Printf("readPump: error setting read deadline for client %s: %v", c.id, err)
+		return
+	}
 	c.conn.SetPongHandler(func(string) error {
-		c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
-		return nil
+		return c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 	})
 
 	for {
@@ -282,15 +289,22 @@ func (c *Client) writePump() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer func() {
 		ticker.Stop()
-		c.conn.Close()
+		if err := c.conn.Close(); err != nil {
+			log.Printf("writePump: error closing connection for client %s: %v", c.id, err)
+		}
 	}()
 
 	for {
 		select {
 		case message, ok := <-c.send:
-			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
+				log.Printf("writePump: error setting write deadline for client %s: %v", c.id, err)
+				return
+			}
 			if !ok {
-				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				if err := c.conn.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
+					log.Printf("writePump: error sending close message for client %s: %v", c.id, err)
+				}
 				return
 			}
 
@@ -299,7 +313,10 @@ func (c *Client) writePump() {
 			}
 
 		case <-ticker.C:
-			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
+				log.Printf("writePump: error setting write deadline for client %s: %v", c.id, err)
+				return
+			}
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
@@ -410,7 +427,10 @@ func generateID() string {
 	idCounter++
 	id := idCounter
 	idMu.Unlock()
-	return time.Now().Format("20060102150405") + "-" + string(rune(id))
+	if id < 0 || id > math.MaxInt32 {
+		return time.Now().Format("20060102150405") + "-" + fmt.Sprintf("%d", id)
+	}
+	return time.Now().Format("20060102150405") + "-" + fmt.Sprintf("%d", id)
 }
 
 // EventPublisher is an interface for publishing events

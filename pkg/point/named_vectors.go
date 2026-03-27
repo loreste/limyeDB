@@ -252,10 +252,11 @@ func (p *PointV2) Encode(w io.Writer) error {
 
 	// Write ID
 	idBytes := []byte(p.ID)
-	if len(idBytes) > math.MaxUint16 {
+	idLen, err := safeIntToUint16(len(idBytes))
+	if err != nil {
 		return errors.New("point ID too long")
 	}
-	if err := binary.Write(w, binary.LittleEndian, uint16(len(idBytes))); err != nil {
+	if err := binary.Write(w, binary.LittleEndian, idLen); err != nil {
 		return err
 	}
 	if _, err := w.Write(idBytes); err != nil {
@@ -268,10 +269,11 @@ func (p *PointV2) Encode(w io.Writer) error {
 	}
 
 	// Write named vectors count and data
-	if len(p.Vectors) > math.MaxUint16 {
+	numVectors, err := safeIntToUint16(len(p.Vectors))
+	if err != nil {
 		return errors.New("too many named vectors")
 	}
-	if err := binary.Write(w, binary.LittleEndian, uint16(len(p.Vectors))); err != nil {
+	if err := binary.Write(w, binary.LittleEndian, numVectors); err != nil {
 		return err
 	}
 	for name, vec := range p.Vectors {
@@ -280,7 +282,8 @@ func (p *PointV2) Encode(w io.Writer) error {
 		if len(nameBytes) > math.MaxUint8 {
 			return errors.New("vector name too long")
 		}
-		if err := binary.Write(w, binary.LittleEndian, uint8(len(nameBytes))); err != nil {
+		nameBytesLen := uint8(len(nameBytes)) // safe: bounds checked above
+		if err := binary.Write(w, binary.LittleEndian, nameBytesLen); err != nil {
 			return err
 		}
 		if _, err := w.Write(nameBytes); err != nil {
@@ -297,10 +300,11 @@ func (p *PointV2) Encode(w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if len(payloadBytes) > math.MaxUint32 {
+	payloadLen, err := safeIntToUint32(len(payloadBytes))
+	if err != nil {
 		return errors.New("payload too large")
 	}
-	if err := binary.Write(w, binary.LittleEndian, uint32(len(payloadBytes))); err != nil {
+	if err := binary.Write(w, binary.LittleEndian, payloadLen); err != nil {
 		return err
 	}
 	if _, err := w.Write(payloadBytes); err != nil {
@@ -312,10 +316,11 @@ func (p *PointV2) Encode(w io.Writer) error {
 }
 
 func writeVector(w io.Writer, v Vector) error {
-	if len(v) > math.MaxUint32 {
+	vLen, err := safeIntToUint32(len(v))
+	if err != nil {
 		return errors.New("vector too large")
 	}
-	if err := binary.Write(w, binary.LittleEndian, uint32(len(v))); err != nil {
+	if err := binary.Write(w, binary.LittleEndian, vLen); err != nil {
 		return err
 	}
 	for _, val := range v {

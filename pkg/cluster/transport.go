@@ -455,7 +455,7 @@ func (t *TCPTransport) removeConn(addr string) {
 	defer t.mu.Unlock()
 
 	if conn, ok := t.conns[addr]; ok {
-		conn.Close()
+		_ = conn.Close()
 		delete(t.conns, addr)
 	}
 }

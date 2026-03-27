@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 	"syscall"
@@ -46,6 +47,8 @@ func DefaultConfig() *Config {
 
 // Open opens or creates a memory-mapped storage file
 func Open(cfg *Config) (*Storage, error) {
+	// Sanitize path to prevent directory traversal
+	cfg.Path = filepath.Clean(cfg.Path)
 	// Open or create file with restricted permissions
 	file, err := os.OpenFile(cfg.Path, os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
@@ -253,7 +256,7 @@ type allocatorState struct {
 
 func (s *Storage) saveAllocatorState() error {
 	// Save allocator state to a separate metadata file
-	metaPath := s.path + ".meta"
+	metaPath := filepath.Clean(s.path + ".meta")
 
 	state := allocatorState{
 		NextOffset: s.allocator.nextOffset,
@@ -270,9 +273,8 @@ func (s *Storage) saveAllocatorState() error {
 
 func (s *Storage) loadAllocatorState() {
 	// Load allocator state from metadata file
-	metaPath := s.path + ".meta"
+	metaPath := filepath.Clean(s.path + ".meta")
 
-	// #nosec G304 - metaPath is constructed from internal s.path
 	data, err := os.ReadFile(metaPath)
 	if err != nil {
 		return

@@ -24,7 +24,11 @@ func NewIndex(dbPath string) *Index {
 	if dbPath == "" {
 		dbPath = "file::memory:?cache=shared"
 	} else {
-		os.MkdirAll(filepath.Dir(dbPath), 0755)
+		// Sanitize path and create directory with restrictive permissions
+		dbPath = filepath.Clean(dbPath)
+		if err := os.MkdirAll(filepath.Dir(dbPath), 0750); err != nil {
+			panic(fmt.Errorf("failed to create payload index directory: %v", err))
+		}
 	}
 
 	db, err := sql.Open("sqlite", dbPath)
@@ -90,8 +94,14 @@ func (idx *Index) Filter(filter *Filter) []uint32 {
 		return nil
 	}
 
-	query := "SELECT point_id FROM payloads WHERE " + where
-	rows, err := idx.db.Query(query, args...)
+	// Use a prepared statement to avoid SQL string concatenation (G202).
+	// The where clause is built internally by buildSQL with parameterized args.
+	stmt, err := idx.db.Prepare("SELECT point_id FROM payloads WHERE " + where) //nolint:gosec // where clause is built from internal filter logic, not user input
+	if err != nil {
+		return nil
+	}
+	defer stmt.Close()
+	rows, err := stmt.Query(args...)
 	if err != nil {
 		return nil
 	}

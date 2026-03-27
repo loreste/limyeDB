@@ -52,7 +52,7 @@ func NewKMeans(cfg *KMeansConfig, distCalc distance.Calculator, dimension int) *
 	if seed == 0 {
 		var seedBytes [8]byte
 		if _, err := cryptorand.Read(seedBytes[:]); err == nil {
-			seed = int64(binary.LittleEndian.Uint64(seedBytes[:]))
+			seed = int64(binary.LittleEndian.Uint64(seedBytes[:]) & 0x7FFFFFFFFFFFFFFF)
 		} else {
 			seed = rand.Int63() // #nosec G404 - fallback only
 		}

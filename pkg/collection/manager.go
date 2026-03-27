@@ -265,7 +265,25 @@ func (m *Manager) Count() int {
 
 // saveMetadata saves collection metadata to disk
 func (m *Manager) saveMetadata(cfg *config.CollectionConfig) error {
-	collDir := filepath.Join(m.dataDir, cfg.Name)
+	// Validate name to prevent path injection
+	if err := validateName(cfg.Name); err != nil {
+		return err
+	}
+
+	collDir := filepath.Clean(filepath.Join(m.dataDir, cfg.Name))
+	// Verify the resolved path stays within the data directory
+	absCollDir, err := filepath.Abs(collDir)
+	if err != nil {
+		return fmt.Errorf("failed to resolve collection directory: %w", err)
+	}
+	absDataDir, err := filepath.Abs(m.dataDir)
+	if err != nil {
+		return fmt.Errorf("failed to resolve data directory: %w", err)
+	}
+	if !strings.HasPrefix(absCollDir, absDataDir+string(os.PathSeparator)) {
+		return fmt.Errorf("collection path escapes data directory")
+	}
+
 	metaPath := filepath.Join(collDir, "meta.json")
 
 	data, err := json.MarshalIndent(cfg, "", "  ")

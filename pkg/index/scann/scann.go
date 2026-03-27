@@ -140,7 +140,9 @@ func (s *ScaNN) Insert(p *point.Point) error {
 					ID:     p.ID + "_temp_" + string(rune(i)),
 					Vector: vec,
 				}
-				s.insertTrained(tempPoint)
+				if err := s.insertTrained(tempPoint); err != nil {
+					return err
+				}
 			}
 			return s.insertTrained(p)
 		}
@@ -175,8 +177,12 @@ func (s *ScaNN) storePoint(p *point.Point, quantized []byte) error {
 		return ErrPointExists
 	}
 
-	// Store the point
-	pointID := uint32(len(s.points))
+	// Store the point with safe integer conversion
+	n := len(s.points)
+	if n < 0 || n > math.MaxUint32 {
+		return errors.New("point count exceeds uint32 range")
+	}
+	pointID := uint32(n)
 	s.points = append(s.points, p)
 	s.quantized = append(s.quantized, quantized)
 	s.idToIndex[p.ID] = pointID
