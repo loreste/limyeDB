@@ -13,20 +13,22 @@ LimyeDB distinguishes itself by natively supporting **Hybrid Search**—combinin
 
 ## Table of Contents
 
-- [Key Features](#-key-features)
-- [Quick Start](#-quick-start)
-- [Installation](#-installation)
-- [Configuration](#-configuration)
-- [API Reference](#-api-reference)
-- [Client SDKs](#-client-sdks)
-- [Clustering](#-clustering)
-- [Advanced Features](#-advanced-features)
-- [Observability](#-observability)
-- [Security](#-security)
-- [Performance](#-performance)
-- [Integrations](#-integrations)
-- [Contributing](#-contributing)
-- [License](#-license)
+- [Key Features](#key-features)
+- [Architecture](#architecture)
+- [Quick Start](#quick-start)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [CLI Tool](#cli-tool)
+- [API Reference](#api-reference)
+- [Client SDKs](#client-sdks)
+- [Clustering](#clustering)
+- [Advanced Features](#advanced-features)
+- [Observability](#observability)
+- [Security](#security)
+- [Performance](#performance)
+- [Integrations](#integrations)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
@@ -60,6 +62,51 @@ LimyeDB distinguishes itself by natively supporting **Hybrid Search**—combinin
 - **Serverless AWS SDK Integration:** Flush compute layers cleanly into Cold Storage AWS Object architectures completely asynchronously.
 - **Prometheus Metrics:** Native `/metrics` endpoint for monitoring
 - **OpenTelemetry Tracing:** Distributed tracing support
+- **Security Hardened:** Constant-time token comparison, SSRF protection, path traversal prevention, decompression bomb limits, and strict file permissions
+
+---
+
+## Architecture
+
+LimyeDB ships as two binaries:
+
+| Binary | Description |
+|--------|-------------|
+| `limyedb` | The database server — REST + gRPC APIs, clustering, storage engine |
+| `limyedb-cli` | Management CLI — import/export, backup/restore, collection management |
+
+### Internal Package Structure
+
+```
+cmd/limyedb/          Server entry point
+cmd/limyedb-cli/      CLI entry point
+api/rest/              REST API (Gin) with middleware, auth, CORS
+api/grpc/              gRPC API with streaming support
+pkg/index/hnsw/        HNSW index (concurrent, mmap-backed)
+pkg/index/ivf/         IVF (Inverted File) index
+pkg/index/scann/       ScaNN anisotropic quantization index
+pkg/index/diskann/     DiskANN Vamana graph index
+pkg/index/payload/     SQLite-backed payload filtering
+pkg/storage/mmap/      Memory-mapped vector and graph storage
+pkg/storage/wal/       Write-ahead logging
+pkg/storage/s3/        S3 tiered storage
+pkg/cluster/           Raft consensus + SWIM gossip + consistent hashing
+pkg/collection/        Collection management and sharding
+pkg/hybrid/            BM25 + dense RRF fusion
+pkg/quantization/      Product, scalar, and binary quantization
+pkg/embedder/          OpenAI, Cohere, Google embedding orchestration
+pkg/security/          API key generation, JWT, encryption
+pkg/tenancy/           Multi-tenant RBAC isolation
+pkg/realtime/          WebSocket event streaming
+pkg/webhook/           CDC webhook dispatch with SSRF protection
+pkg/cache/             Semantic result caching
+pkg/ratelimit/         Token bucket rate limiting
+pkg/backup/            Tar-based backup and restore
+pkg/observability/     OpenTelemetry tracing
+pkg/metrics/           Prometheus metrics
+internal/raft/         Standalone Raft implementation
+internal/pool/         Worker pool for parallel operations
+```
 
 ---
 
@@ -72,7 +119,7 @@ LimyeDB distinguishes itself by natively supporting **Hybrid Search**—combinin
 docker run -d \
   --name limyedb \
   -p 8080:8080 \
-  -p 6334:6334 \
+  -p 50051:50051 \
   -v limyedb_data:/data \
   limyedb/limyedb:latest
 
@@ -102,7 +149,7 @@ curl -LO https://github.com/loreste/limyeDB/releases/latest/download/limyedb-lin
 chmod +x limyedb-linux-amd64
 
 # Run
-./limyedb-linux-amd64 --rest-addr=0.0.0.0:8080
+./limyedb-linux-amd64 -rest :8080
 ```
 
 ---
@@ -151,20 +198,23 @@ make test
 
 ## Configuration
 
-### Command Line Options
+### Server Flags
 
 ```bash
 ./limyedb \
-  --rest-addr=0.0.0.0:8080 \       # REST API address
-  --grpc-addr=0.0.0.0:6334 \       # gRPC API address
-  --data-dir=./data \              # Data directory
-  --auth-token=SECRET \            # Authentication token
-  --tls-cert=./certs/server.crt \  # TLS certificate
-  --tls-key=./certs/server.key \   # TLS private key
-  --raft-node-id=node1 \           # Raft node ID
-  --raft-bind=0.0.0.0:7000 \       # Raft bind address
-  --raft-bootstrap=true \          # Bootstrap new cluster
-  --log-level=info                 # Log level (debug/info/warn/error)
+  -config config.json \              # Path to configuration file
+  -data ./data \                     # Data directory (default "./data")
+  -rest :8080 \                      # REST API address (default ":8080")
+  -grpc :50051 \                     # gRPC API address (default ":50051")
+  -auth-token SECRET \               # Master bearer token for auth
+  -tls-cert ./certs/server.crt \     # TLS certificate path
+  -tls-key ./certs/server.key \      # TLS private key path
+  -raft-node-id node1 \             # Raft node ID (default "node0")
+  -raft-bind 0.0.0.0:7000 \         # Raft TCP bind address
+  -raft-data ./raft-data \           # Raft data directory
+  -raft-bootstrap \                  # Bootstrap as first cluster leader
+  -raft-join http://node1:8080 \     # Join existing Raft cluster
+  -version                           # Print version and exit
 ```
 
 ### Configuration File (config.yaml)
@@ -172,7 +222,7 @@ make test
 ```yaml
 server:
   rest_addr: "0.0.0.0:8080"
-  grpc_addr: "0.0.0.0:6334"
+  grpc_addr: "0.0.0.0:50051"
   data_dir: "./data"
 
 security:
@@ -221,10 +271,84 @@ observability:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `LIMYEDB_REST_ADDR` | REST API address | `0.0.0.0:8080` |
-| `LIMYEDB_GRPC_ADDR` | gRPC API address | `0.0.0.0:6334` |
+| `LIMYEDB_GRPC_ADDR` | gRPC API address | `0.0.0.0:50051` |
 | `LIMYEDB_DATA_DIR` | Data directory | `./data` |
 | `LIMYEDB_AUTH_TOKEN` | Authentication token | (none) |
 | `LIMYEDB_LOG_LEVEL` | Log level | `info` |
+
+---
+
+## CLI Tool
+
+LimyeDB includes `limyedb-cli` for managing collections, importing/exporting data, and performing backups from the command line.
+
+### Usage
+
+```bash
+limyedb-cli [options] <command> [arguments]
+```
+
+### Options
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-host` | LimyeDB server URL | `http://localhost:8080` |
+| `-api-key` | API key for authentication | (none) |
+| `-timeout` | Request timeout | `30s` |
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `import <collection> <file>` | Import points from a JSON file (batched in groups of 100) |
+| `export <collection> <file>` | Export all points from a collection to JSON |
+| `collections` | List all collections |
+| `create <name> <dimension>` | Create a new collection with cosine metric |
+| `delete <name>` | Delete a collection |
+| `info <name>` | Get collection details (point count, config) |
+| `health` | Check server health status |
+| `backup <output>` | Create a snapshot backup |
+| `restore <input>` | Restore from a snapshot backup |
+| `version` | Print CLI version |
+
+### Examples
+
+```bash
+# Create a collection
+limyedb-cli create my_collection 1536
+
+# Import data from a JSON file
+limyedb-cli import my_collection data.json
+
+# Export collection to file
+limyedb-cli export my_collection backup.json
+
+# List all collections
+limyedb-cli -host https://db.example.com -api-key secret collections
+
+# Check server health
+limyedb-cli health
+
+# Backup and restore
+limyedb-cli backup /tmp/backup.snapshot
+limyedb-cli restore /tmp/backup.snapshot
+```
+
+### Import File Format
+
+The JSON file for import should follow this structure:
+
+```json
+{
+  "points": [
+    {
+      "id": "doc1",
+      "vector": [0.1, 0.2, 0.3],
+      "payload": {"title": "Example", "category": "test"}
+    }
+  ]
+}
+```
 
 ---
 
@@ -631,38 +755,36 @@ LimyeDB uses a hybrid clustering approach:
 
 ```bash
 ./limyedb \
-  --raft-node-id=node1 \
-  --raft-bind=192.168.1.1:7000 \
-  --raft-bootstrap=true \
-  --gossip-bind=192.168.1.1:7001 \
-  --rest-addr=192.168.1.1:8080 \
-  --data-dir=/data/node1
+  -raft-node-id node1 \
+  -raft-bind 192.168.1.1:7000 \
+  -raft-data /data/node1/raft \
+  -raft-bootstrap \
+  -rest 192.168.1.1:8080 \
+  -data /data/node1
 ```
 
 #### Node 2 (Join Cluster)
 
 ```bash
 ./limyedb \
-  --raft-node-id=node2 \
-  --raft-bind=192.168.1.2:7000 \
-  --raft-join=http://192.168.1.1:8080 \
-  --gossip-bind=192.168.1.2:7001 \
-  --gossip-seeds=192.168.1.1:7001 \
-  --rest-addr=192.168.1.2:8080 \
-  --data-dir=/data/node2
+  -raft-node-id node2 \
+  -raft-bind 192.168.1.2:7000 \
+  -raft-data /data/node2/raft \
+  -raft-join http://192.168.1.1:8080 \
+  -rest 192.168.1.2:8080 \
+  -data /data/node2
 ```
 
 #### Node 3 (Join Cluster)
 
 ```bash
 ./limyedb \
-  --raft-node-id=node3 \
-  --raft-bind=192.168.1.3:7000 \
-  --raft-join=http://192.168.1.1:8080 \
-  --gossip-bind=192.168.1.3:7001 \
-  --gossip-seeds=192.168.1.1:7001,192.168.1.2:7001 \
-  --rest-addr=192.168.1.3:8080 \
-  --data-dir=/data/node3
+  -raft-node-id node3 \
+  -raft-bind 192.168.1.3:7000 \
+  -raft-data /data/node3/raft \
+  -raft-join http://192.168.1.1:8080 \
+  -rest 192.168.1.3:8080 \
+  -data /data/node3
 ```
 
 ### Node Discovery
@@ -834,11 +956,7 @@ observability:
 
 ### Logging
 
-JSON-structured logging:
-
-```bash
-./limyedb --log-format=json --log-level=debug
-```
+LimyeDB uses Go's `slog` structured logging with JSON output by default. Log level is controlled via configuration.
 
 ---
 
@@ -849,7 +967,7 @@ JSON-structured logging:
 #### API Key Authentication
 
 ```bash
-./limyedb --auth-token=YOUR_SECRET_TOKEN
+./limyedb -auth-token YOUR_SECRET_TOKEN
 
 # All requests must include the token
 curl -H "Authorization: Bearer YOUR_SECRET_TOKEN" ...
@@ -885,25 +1003,43 @@ curl -X POST http://localhost:8080/admin/users \
 
 ```bash
 ./limyedb \
-  --tls-cert=/certs/server.crt \
-  --tls-key=/certs/server.key
+  -tls-cert /certs/server.crt \
+  -tls-key /certs/server.key
 ```
 
 #### mTLS (Mutual TLS)
 
 ```bash
 ./limyedb \
-  --tls-cert=/certs/server.crt \
-  --tls-key=/certs/server.key \
-  --tls-client-ca=/certs/ca.crt \
-  --tls-require-client-cert=true
+  -tls-cert /certs/server.crt \
+  -tls-key /certs/server.key \
+  -tls-client-ca /certs/ca.crt
 ```
+
+### Security Hardening
+
+LimyeDB includes multiple layers of security hardening:
+
+| Protection | Description |
+|-----------|-------------|
+| **Constant-time token comparison** | API keys and bearer tokens validated with `crypto/subtle.ConstantTimeCompare` to prevent timing attacks |
+| **SSRF protection** | Webhook URLs validated against private IP ranges (127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16), localhost, and non-HTTP schemes |
+| **Path traversal prevention** | All file paths sanitized with `filepath.Clean` and validated against base directories |
+| **Decompression bomb limits** | Backup metadata reads capped at 10MB; file extraction limited to prevent resource exhaustion |
+| **Cryptographic RNG** | All security-sensitive randomness uses `crypto/rand` (API keys, webhook IDs, cluster protocols) |
+| **Strict file permissions** | Data files created with 0600, directories with 0750 |
+| **Parameterized SQL** | All SQLite payload queries use parameterized arguments |
+| **CORS origin validation** | Configurable allowed origins (no wildcard in production) |
+| **Integer overflow protection** | Safe conversion helpers with bounds checking for all unsafe casts |
+| **Zip Slip protection** | Archive extraction validated with `filepath.Rel` to prevent directory escape |
+| **HTTP client timeouts** | All outbound HTTP clients configured with explicit timeouts |
+| **Rate limiting** | Token bucket rate limiter with configurable limits per endpoint |
 
 ### Network Security
 
-- Enable IP allowlisting
 - Use private networks for cluster communication
 - Encrypt inter-node traffic with TLS
+- Configure `AllowedOrigins` for CORS in production deployments
 
 ---
 
