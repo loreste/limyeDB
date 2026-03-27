@@ -348,7 +348,7 @@ func (m *Manager) RestoreSnapshot(snapMgr *snapshot.Manager, snapID string) erro
 	if err != nil {
 		return err
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	m.mu.Lock()
 	defer m.mu.Unlock()

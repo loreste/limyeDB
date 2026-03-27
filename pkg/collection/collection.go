@@ -1002,7 +1002,7 @@ func (c *Collection) Iterate(fn func(*point.Point) error) error {
 	return c.index.Iterate(func(id string) error {
 		p, err := c.index.Get(id)
 		if err != nil {
-			return nil // Skip deleted/invalid points
+			return err
 		}
 		return fn(p)
 	})

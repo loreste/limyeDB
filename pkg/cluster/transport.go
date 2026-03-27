@@ -144,7 +144,7 @@ func (t *HTTPTransport) Start() error {
 	}
 	t.listener = listener
 
-	go t.server.Serve(listener)
+	go func() { _ = t.server.Serve(listener) }()
 	return nil
 }
 

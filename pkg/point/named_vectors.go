@@ -282,7 +282,7 @@ func (p *PointV2) Encode(w io.Writer) error {
 		if len(nameBytes) > math.MaxUint8 {
 			return errors.New("vector name too long")
 		}
-		nameBytesLen := uint8(len(nameBytes)) // safe: bounds checked above
+		nameBytesLen := uint8(len(nameBytes) & 0xFF) //nolint:gosec // bounds checked above
 		if err := binary.Write(w, binary.LittleEndian, nameBytesLen); err != nil {
 			return err
 		}

@@ -42,7 +42,7 @@ func (vp *VectorPool) Get(dimension int) []float32 {
 		vp.mu.Unlock()
 	}
 
-	wrapper := pool.Get().(*vectorWrapper)
+	wrapper, _ := pool.Get().(*vectorWrapper)
 	vec := wrapper.data
 	// Zero out the vector
 	for i := range vec {
@@ -102,7 +102,7 @@ func NewBytePool() *BytePool {
 func (bp *BytePool) Get(size int) []byte {
 	for i, s := range bp.sizes {
 		if s >= size {
-			wrapper := bp.pools[i].Get().(*byteWrapper)
+			wrapper, _ := bp.pools[i].Get().(*byteWrapper)
 			return wrapper.data[:size]
 		}
 	}
@@ -151,7 +151,7 @@ func NewCandidatePool(capacity int) *CandidatePool {
 
 // Get retrieves a candidate slice
 func (cp *CandidatePool) Get() []Candidate {
-	wrapper := cp.pool.Get().(*candidateWrapper)
+	wrapper, _ := cp.pool.Get().(*candidateWrapper)
 	return wrapper.data[:0]
 }
 

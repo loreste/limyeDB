@@ -20,6 +20,9 @@ import (
 	"time"
 )
 
+// ErrAuthDisabled is returned when authentication is disabled.
+var ErrAuthDisabled = errors.New("authentication disabled")
+
 // =============================================================================
 // API Key Authentication
 // =============================================================================
@@ -133,7 +136,7 @@ func (m *APIKeyManager) cleanupExpiredRateLimits() {
 // Authenticate validates an API key and returns the key info
 func (m *APIKeyManager) Authenticate(key string) (*APIKey, error) {
 	if !m.config.Enabled {
-		return nil, nil // Auth disabled
+		return nil, ErrAuthDisabled
 	}
 
 	if key == "" {

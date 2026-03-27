@@ -27,13 +27,13 @@ func NewIndex(dbPath string) *Index {
 		// Sanitize path and create directory with restrictive permissions
 		dbPath = filepath.Clean(dbPath)
 		if err := os.MkdirAll(filepath.Dir(dbPath), 0750); err != nil {
-			panic(fmt.Errorf("failed to create payload index directory: %v", err))
+			panic(fmt.Errorf("failed to create payload index directory: %w", err))
 		}
 	}
 
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
-		panic(fmt.Errorf("failed to open sqlite payload index: %v", err))
+		panic(fmt.Errorf("failed to open sqlite payload index: %w", err))
 	}
 
 	// Create a generic EAV table containing JSON data universally
@@ -44,7 +44,7 @@ func NewIndex(dbPath string) *Index {
 		);
 	`)
 	if err != nil {
-		panic(fmt.Errorf("failed to initialize payloads table: %v", err))
+		panic(fmt.Errorf("failed to initialize payloads table: %w", err))
 	}
 
 	return &Index{
@@ -103,7 +103,7 @@ func (idx *Index) Filter(filter *Filter) []uint32 {
 	if err != nil {
 		return nil
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var result []uint32
 	for rows.Next() {

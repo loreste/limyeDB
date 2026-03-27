@@ -458,10 +458,9 @@ func (as *AdaptiveSearch) RecordDimensionPerformance(dimension int, efSearch int
 
 // WorkloadAnalyzer analyzes query patterns to suggest optimizations
 type WorkloadAnalyzer struct {
-	queryPatterns   map[string]int // pattern -> count
-	peakHours       map[int]int    // hour -> query count
-	avgQueriesPerSec float64
-	mu              sync.RWMutex
+	queryPatterns map[string]int // pattern -> count
+	peakHours     map[int]int    // hour -> query count
+	mu            sync.RWMutex
 }
 
 // NewWorkloadAnalyzer creates a new workload analyzer

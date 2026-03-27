@@ -413,7 +413,7 @@ func (sr *SnapshotReader) ReadCollection() (string, *CollectionData, error) {
 	// Read collection name
 	var nameLen uint16
 	if err := binary.Read(sr.gzReader, binary.LittleEndian, &nameLen); err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return "", nil, err
 		}
 		return "", nil, err

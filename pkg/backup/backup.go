@@ -226,7 +226,7 @@ func (b *Backup) Restore(inputPath string, opts RestoreOptions) (*BackupMetadata
 
 	for {
 		header, err := tarReader.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -363,7 +363,7 @@ func (b *Backup) ReadMetadata(backupPath string) (*BackupMetadata, error) {
 
 	for {
 		header, err := tarReader.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

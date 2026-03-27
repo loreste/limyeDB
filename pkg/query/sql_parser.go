@@ -10,6 +10,9 @@ import (
 	"github.com/limyedb/limyedb/pkg/point"
 )
 
+// ErrNullValue is returned when a SQL NULL value is encountered.
+var ErrNullValue = errors.New("sql: null value")
+
 // SQLQuery represents a parsed SQL-like query
 type SQLQuery struct {
 	Type       QueryType
@@ -496,7 +499,7 @@ func (p *SQLParser) parseValue(s string) (interface{}, error) {
 
 	// NULL
 	if strings.ToUpper(s) == "NULL" {
-		return nil, nil
+		return nil, ErrNullValue
 	}
 
 	// Boolean

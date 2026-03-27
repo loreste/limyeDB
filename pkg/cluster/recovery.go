@@ -239,13 +239,13 @@ func (rm *RecoveryManager) executeRecovery(job *recoveryJob, sourceNode *Node) {
 		rm.failRecovery(job, err)
 		return
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	// Receive and apply data
 	var totalBytes int64
 	for {
 		msg, err := stream.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -458,14 +458,14 @@ func (rm *RecoveryManager) pushDataToReplica(node *Node, shardID uint32) {
 	if err != nil {
 		return
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	// Get local data iterator
 	iter, err := rm.dataProvider.GetShardData(shardID)
 	if err != nil {
 		return
 	}
-	defer iter.Close()
+	defer func() { _ = iter.Close() }()
 
 	// Stream data to replica
 	for iter.Next() {
@@ -485,7 +485,7 @@ func (rm *RecoveryManager) HandleStreamRequest(stream Stream, req *StreamRequest
 	if err != nil {
 		return err
 	}
-	defer iter.Close()
+	defer func() { _ = iter.Close() }()
 
 	// Stream data
 	for iter.Next() {
