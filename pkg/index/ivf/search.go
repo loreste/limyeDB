@@ -58,7 +58,9 @@ func (h MaxCandidateHeap) Less(i, j int) bool { return h[i].Distance > h[j].Dist
 func (h MaxCandidateHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
 
 func (h *MaxCandidateHeap) Push(x interface{}) {
-	*h = append(*h, x.(Candidate))
+	if c, ok := x.(Candidate); ok {
+		*h = append(*h, c)
+	}
 }
 
 func (h *MaxCandidateHeap) Pop() interface{} {
@@ -154,7 +156,7 @@ func (ivf *IVF) SearchWithParams(query point.Vector, params *SearchParams) ([]Ca
 	// Convert to sorted slice
 	result := make([]Candidate, results.Len())
 	for i := len(result) - 1; i >= 0; i-- {
-		result[i] = heap.Pop(results).(Candidate)
+		result[i], _ = heap.Pop(results).(Candidate)
 	}
 
 	// Rescore with exact distances if using quantization
@@ -261,7 +263,7 @@ func (ivf *IVF) bruteForceSearch(query point.Vector, k int, filter func(string, 
 	// Convert to sorted slice
 	result := make([]Candidate, results.Len())
 	for i := len(result) - 1; i >= 0; i-- {
-		result[i] = heap.Pop(results).(Candidate)
+		result[i], _ = heap.Pop(results).(Candidate)
 	}
 
 	return result, nil
