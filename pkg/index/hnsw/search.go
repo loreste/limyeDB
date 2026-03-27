@@ -175,7 +175,7 @@ func (h *HNSW) searchLayerWithFilter(query point.Vector, entryID uint32, ef int,
 	}
 
 	for candidates.Len() > 0 {
-		curr := heap.Pop(candidates).(Candidate)
+		curr, _ := heap.Pop(candidates).(Candidate)
 
 		// Early termination
 		if results.Len() >= ef && curr.Distance > (*results)[0].Distance {
@@ -227,7 +227,7 @@ func (h *HNSW) searchLayerWithFilter(query point.Vector, entryID uint32, ef int,
 	// Convert to sorted slice
 	result := make([]Candidate, results.Len())
 	for i := len(result) - 1; i >= 0; i-- {
-		result[i] = heap.Pop(results).(Candidate)
+		result[i], _ = heap.Pop(results).(Candidate)
 	}
 	return result
 }
@@ -317,7 +317,7 @@ func (h *HNSW) discoverLayer0(entryID uint32, ef int, params *DiscoverParams) []
 	}
 
 	for candidates.Len() > 0 {
-		curr := heap.Pop(candidates).(Candidate)
+		curr, _ := heap.Pop(candidates).(Candidate)
 
 		if results.Len() >= searchEf && curr.Distance > (*results)[0].Distance {
 			break
@@ -355,7 +355,7 @@ func (h *HNSW) discoverLayer0(entryID uint32, ef int, params *DiscoverParams) []
 
 	result := make([]Candidate, results.Len())
 	for i := len(result) - 1; i >= 0; i-- {
-		result[i] = heap.Pop(results).(Candidate)
+		result[i], _ = heap.Pop(results).(Candidate)
 	}
 	return result
 }

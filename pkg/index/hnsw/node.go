@@ -208,7 +208,9 @@ func (h MaxCandidateHeap) Less(i, j int) bool { return h[i].Distance > h[j].Dist
 func (h MaxCandidateHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
 
 func (h *MaxCandidateHeap) Push(x interface{}) {
-	*h = append(*h, x.(Candidate))
+	if c, ok := x.(Candidate); ok {
+		*h = append(*h, c)
+	}
 }
 
 func (h *MaxCandidateHeap) Pop() interface{} {
