@@ -20,7 +20,7 @@ jobs:
         go-version: '1.26.x'
 
     - name: golangci-lint
-      uses: golangci/golangci-lint-action@v7
+      uses: golangci/golangci-lint-action@v9
       with:
         version: latest
         args: --timeout=5m ./pkg/... ./internal/... ./api/rest/... ./cmd/limyedb-cli/...
