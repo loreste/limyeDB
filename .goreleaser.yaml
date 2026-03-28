@@ -73,27 +73,10 @@ changelog:
       - Merge pull request
       - Merge branch
 
-dockers:
-  - image_templates:
-      - "limyedb/limyedb:{{ .Tag }}"
-      - "limyedb/limyedb:v{{ .Major }}"
-      - "limyedb/limyedb:v{{ .Major }}.{{ .Minor }}"
-      - "limyedb/limyedb:latest"
-    ids:
-      - limyedb
-    dockerfile: Dockerfile.goreleaser
-    build_flag_templates:
-      - "--pull"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-      - "--platform=linux/amd64"
-
 release:
   github:
-    owner: limyedb
-    name: limyedb
+    owner: loreste
+    name: limyeDB
   draft: false
   prerelease: auto
   name_template: "v{{.Version}}"
