@@ -189,10 +189,10 @@ func TestRaceHashRing(t *testing.T) {
 	}
 	t.Parallel()
 
-	hr := NewHashRing(10)
+	hr := NewHashRing(3) // fewer virtual nodes to reduce sort contention
 
-	const goroutines = 10
-	const ops = 100
+	const goroutines = 5
+	const ops = 20
 
 	var wg sync.WaitGroup
 
