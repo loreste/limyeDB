@@ -1,7 +1,9 @@
 package rest
 
 import (
+	"crypto/rand"
 	"crypto/subtle"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -9,6 +11,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/limyedb/limyedb/pkg/metrics"
 )
 
 // RateLimiter implements a token bucket rate limiter
@@ -203,19 +207,40 @@ func AuthMiddleware(apiKeys map[string]bool) gin.HandlerFunc {
 	}
 }
 
-// RequestIDMiddleware adds a request ID to each request
-func RequestIDMiddleware() gin.HandlerFunc {
-	var counter uint64
-	var mu sync.Mutex
+// generateUUID produces a version-4 UUID using crypto/rand.
+func generateUUID() (string, error) {
+	var buf [16]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return "", err
+	}
+	// Set version 4 and variant bits per RFC 4122.
+	buf[6] = (buf[6] & 0x0f) | 0x40
+	buf[8] = (buf[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		buf[0:4], buf[4:6], buf[6:8], buf[8:10], buf[10:16]), nil
+}
 
+// RequestIDMiddleware adds a request ID to each request.
+// If the incoming request carries an X-Request-Id header the value is reused;
+// otherwise a new UUID v4 is generated via crypto/rand.
+// The resolved ID is stored on the gin.Context under "request_id" and echoed
+// back in the X-Request-Id response header.
+func RequestIDMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		mu.Lock()
-		counter++
-		id := counter
-		mu.Unlock()
+		id := c.GetHeader("X-Request-Id")
+		if id == "" {
+			generated, err := generateUUID()
+			if err != nil {
+				// Fallback: let the request continue without an ID rather than
+				// failing the whole request because of entropy exhaustion.
+				c.Next()
+				return
+			}
+			id = generated
+		}
 
 		c.Set("request_id", id)
-		c.Header("X-Request-ID", strconv.FormatUint(id, 10))
+		c.Header("X-Request-Id", id)
 
 		c.Next()
 	}
@@ -235,9 +260,14 @@ func RecoveryMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {
 			if err := recover(); err != nil {
-				c.AbortWithStatusJSON(http.StatusInternalServerError, ErrorResponse{
-					Error: "internal server error",
-					Code:  "INTERNAL_ERROR",
+				reqID, _ := c.Get("request_id")
+				rid, _ := reqID.(string)
+				c.AbortWithStatusJSON(http.StatusInternalServerError, StructuredErrorResponse{
+					Error: StructuredError{
+						Code:      "INTERNAL_ERROR",
+						Message:   "internal server error",
+						RequestID: rid,
+					},
 				})
 			}
 		}()
@@ -333,6 +363,90 @@ func (m *MetricsMiddleware) GetMetrics() map[string]interface{} {
 	return map[string]interface{}{
 		"request_count":        counts,
 		"avg_duration_seconds": durations,
+	}
+}
+
+// PrometheusMetricsMiddleware returns a gin middleware that records HTTP
+// request duration and total count in Prometheus histograms/counters.
+func PrometheusMetricsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+
+		c.Next()
+
+		duration := time.Since(start).Seconds()
+		status := strconv.Itoa(c.Writer.Status())
+		path := c.FullPath()
+		if path == "" {
+			path = c.Request.URL.Path
+		}
+		method := c.Request.Method
+
+		metrics.RequestDuration.WithLabelValues(method, path, status).Observe(duration)
+		metrics.RequestTotal.WithLabelValues(method, path, status).Inc()
+	}
+}
+
+// EndpointRateLimitConfig holds per-endpoint rate limiting settings.
+// When set on ServerOptions.RateLimits, the middleware is activated.
+type EndpointRateLimitConfig struct {
+	// DefaultRate is the default requests-per-second for endpoints without a
+	// specific override.
+	DefaultRate float64
+	// DefaultBurst is the default burst size.
+	DefaultBurst float64
+	// Overrides maps a route pattern (e.g. "POST /collections/:name/search")
+	// to a dedicated RateLimiter with its own rate/burst settings.
+	Overrides map[string]*RateLimiter
+}
+
+// DefaultEndpointRateLimitConfig returns a sensible default configuration:
+// 100 req/s for search endpoints, 1000 req/s for read endpoints, 500 req/s
+// default for everything else.
+func DefaultEndpointRateLimitConfig() *EndpointRateLimitConfig {
+	return &EndpointRateLimitConfig{
+		DefaultRate:  500,
+		DefaultBurst: 1000,
+		Overrides: map[string]*RateLimiter{
+			"POST /collections/:name/search":    NewRateLimiter(100, 200),
+			"POST /collections/:name/search/v2": NewRateLimiter(100, 200),
+			"POST /collections/:name/recommend": NewRateLimiter(100, 200),
+			"POST /collections/:name/discover":  NewRateLimiter(100, 200),
+			"GET /collections/:name":            NewRateLimiter(1000, 2000),
+			"GET /collections":                  NewRateLimiter(1000, 2000),
+			"GET /collections/:name/points/:id": NewRateLimiter(1000, 2000),
+		},
+	}
+}
+
+// EndpointRateLimitMiddleware returns middleware that applies per-endpoint rate
+// limits based on the provided configuration. Clients are keyed by IP address.
+func EndpointRateLimitMiddleware(cfg *EndpointRateLimitConfig) gin.HandlerFunc {
+	defaultLimiter := NewRateLimiter(cfg.DefaultRate, cfg.DefaultBurst)
+
+	return func(c *gin.Context) {
+		// Skip rate limiting for health/metrics endpoints
+		p := c.Request.URL.Path
+		if p == "/health" || p == "/readiness" || p == "/metrics" {
+			c.Next()
+			return
+		}
+
+		routeKey := c.Request.Method + " " + c.FullPath()
+		limiter := defaultLimiter
+		if override, ok := cfg.Overrides[routeKey]; ok {
+			limiter = override
+		}
+
+		clientKey := c.ClientIP()
+		if !limiter.Allow(clientKey) {
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, ErrorResponse{
+				Error: "rate limit exceeded",
+				Code:  "RATE_LIMITED",
+			})
+			return
+		}
+		c.Next()
 	}
 }
 

@@ -245,11 +245,11 @@ func TestScaNNSearchAfterTraining(t *testing.T) {
 
 	cfg := &Config{
 		NumLeaves:       numLeaves,
-		NumRerank:       50,
+		NumRerank:       100,
 		Metric:          config.MetricEuclidean,
 		Dimension:       dimension,
 		MaxElements:     1000,
-		TrainingSamples: 50,
+		TrainingSamples: 500, // Higher than numVectors so auto-train does not trigger
 	}
 
 	scann, err := New(cfg)
@@ -273,9 +273,17 @@ func TestScaNNSearchAfterTraining(t *testing.T) {
 		t.Fatalf("Failed to train ScaNN: %v", err)
 	}
 
-	// Search
+	// Search with enough leaves to reliably find the query vector's partition.
+	// ScaNN is an approximate algorithm: the default search only probes a
+	// fraction of partitions, so the exact query vector may reside in an
+	// unsearched leaf.  Searching all leaves guarantees we hit the right one.
 	query := vectors[0]
-	results, err := scann.Search(query, 5)
+	params := &SearchParams{
+		K:         5,
+		NumLeaves: numLeaves, // search all leaves
+		NumRerank: 100,
+	}
+	results, err := scann.SearchWithParams(query, params)
 	if err != nil {
 		t.Fatalf("Search failed: %v", err)
 	}
@@ -284,8 +292,10 @@ func TestScaNNSearchAfterTraining(t *testing.T) {
 		t.Error("Expected at least one result")
 	}
 
-	// First result should be query itself (or very close)
-	if results[0].Distance > 0.01 {
+	// After exact reranking the nearest neighbour should be the query itself
+	// (distance 0) or very close.  Allow a small tolerance for floating-point
+	// arithmetic in the distance calculator.
+	if results[0].Distance > 0.001 {
 		t.Errorf("Expected first result to have distance ~0, got %f", results[0].Distance)
 	}
 

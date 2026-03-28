@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hashicorp/raft"
@@ -25,13 +26,37 @@ import (
 // Health handlers
 
 func (s *Server) handleHealth(c *gin.Context) {
+	uptime := time.Since(s.startTime).Truncate(time.Second).String()
+
+	collectionCount := s.collections.Count()
+	collectionStatus := "healthy"
+	if collectionCount < 0 {
+		collectionStatus = "degraded"
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "healthy",
 		"version": version.Version,
+		"uptime":  uptime,
+		"components": gin.H{
+			"storage": "healthy",
+			"collections": gin.H{
+				"count":  collectionCount,
+				"status": collectionStatus,
+			},
+		},
 	})
 }
 
 func (s *Server) handleReadiness(c *gin.Context) {
+	if s.collections == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"ready":  false,
+			"reason": "collection manager not initialized",
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"ready": true,
 	})
@@ -142,11 +167,11 @@ func (s *Server) handleCreateCollection(c *gin.Context) {
 
 	coll, err := s.collections.Create(cfg)
 	if err != nil {
-		status := http.StatusInternalServerError
 		if errors.Is(err, collection.ErrCollectionExists) {
-			status = http.StatusConflict
+			respondStructuredError(c, http.StatusConflict, "ALREADY_EXISTS", "collection already exists: "+cfg.Name)
+		} else {
+			respondStructuredError(c, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		}
-		respondError(c, status, err)
 		return
 	}
 
@@ -173,7 +198,7 @@ func (s *Server) handleGetCollection(c *gin.Context) {
 
 	coll, err := s.collections.Get(name)
 	if err != nil {
-		respondError(c, http.StatusNotFound, err)
+		respondStructuredError(c, http.StatusNotFound, "NOT_FOUND", "collection not found: "+name)
 		return
 	}
 
@@ -197,7 +222,7 @@ func (s *Server) handleDeleteCollection(c *gin.Context) {
 	}
 
 	if err := s.collections.Delete(name); err != nil {
-		respondError(c, http.StatusNotFound, err)
+		respondStructuredError(c, http.StatusNotFound, "NOT_FOUND", "collection not found: "+name)
 		return
 	}
 

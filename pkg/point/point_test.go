@@ -195,6 +195,182 @@ func TestScoredPoint(t *testing.T) {
 	}
 }
 
+func TestPointEncodeDecodeSparseVector(t *testing.T) {
+	original := NewPointWithID("sparse-pt", Vector{1.0, 2.0}, nil)
+	original.Version = 7
+	original.Sparse = &SparseVector{
+		Indices: []uint32{10, 42, 99},
+		Values:  []float32{0.5, 1.2, -0.3},
+	}
+
+	var buf bytes.Buffer
+	if err := original.Encode(&buf); err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+
+	decoded := &Point{}
+	if err := decoded.Decode(&buf); err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+
+	if decoded.Sparse == nil {
+		t.Fatal("Decoded sparse vector is nil")
+	}
+	if len(decoded.Sparse.Indices) != 3 {
+		t.Fatalf("Expected 3 sparse indices, got %d", len(decoded.Sparse.Indices))
+	}
+	for i := range original.Sparse.Indices {
+		if decoded.Sparse.Indices[i] != original.Sparse.Indices[i] {
+			t.Errorf("Sparse index %d: got %d, want %d", i, decoded.Sparse.Indices[i], original.Sparse.Indices[i])
+		}
+		if decoded.Sparse.Values[i] != original.Sparse.Values[i] {
+			t.Errorf("Sparse value %d: got %f, want %f", i, decoded.Sparse.Values[i], original.Sparse.Values[i])
+		}
+	}
+}
+
+func TestPointEncodeDecodeNamedVectors(t *testing.T) {
+	original := NewPointWithID("named-pt", Vector{1.0}, nil)
+	original.Version = 3
+	original.NamedVectors = map[string]Vector{
+		"text":  {0.1, 0.2, 0.3},
+		"image": {0.4, 0.5},
+	}
+
+	var buf bytes.Buffer
+	if err := original.Encode(&buf); err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+
+	decoded := &Point{}
+	if err := decoded.Decode(&buf); err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+
+	if len(decoded.NamedVectors) != 2 {
+		t.Fatalf("Expected 2 named vectors, got %d", len(decoded.NamedVectors))
+	}
+	for name, vec := range original.NamedVectors {
+		dv, ok := decoded.NamedVectors[name]
+		if !ok {
+			t.Fatalf("Missing named vector %q", name)
+		}
+		if len(dv) != len(vec) {
+			t.Errorf("Named vector %q length mismatch: got %d, want %d", name, len(dv), len(vec))
+		}
+		for i := range vec {
+			if dv[i] != vec[i] {
+				t.Errorf("Named vector %q[%d]: got %f, want %f", name, i, dv[i], vec[i])
+			}
+		}
+	}
+}
+
+func TestPointEncodeDecodeNoPayload(t *testing.T) {
+	original := NewPointWithID("no-payload", Vector{9.0, 8.0, 7.0}, nil)
+	original.Version = 1
+
+	var buf bytes.Buffer
+	if err := original.Encode(&buf); err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+
+	decoded := &Point{}
+	if err := decoded.Decode(&buf); err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+
+	if decoded.ID != original.ID {
+		t.Errorf("ID mismatch: got %s, want %s", decoded.ID, original.ID)
+	}
+	if len(decoded.Vector) != 3 {
+		t.Errorf("Vector length mismatch: got %d, want 3", len(decoded.Vector))
+	}
+}
+
+func TestVectorNormalizeZero(t *testing.T) {
+	v := Vector{0.0, 0.0, 0.0}
+	v.Normalize()
+	// Should be no-op, not NaN
+	for i, val := range v {
+		if val != 0.0 {
+			t.Errorf("Expected 0 at index %d after normalizing zero vector, got %f", i, val)
+		}
+	}
+}
+
+func TestCloneWithSparseVector(t *testing.T) {
+	original := NewPointWithID("sp", Vector{1.0}, nil)
+	original.Sparse = &SparseVector{
+		Indices: []uint32{1, 2},
+		Values:  []float32{0.5, 0.6},
+	}
+
+	clone := original.Clone()
+	clone.Sparse.Indices[0] = 999
+	if original.Sparse.Indices[0] == 999 {
+		t.Error("Modifying clone sparse indices should not affect original")
+	}
+}
+
+func TestCloneWithNamedVectors(t *testing.T) {
+	original := NewPointWithID("nv", Vector{1.0}, nil)
+	original.NamedVectors = map[string]Vector{
+		"a": {1.0, 2.0},
+	}
+
+	clone := original.Clone()
+	clone.NamedVectors["a"][0] = 999.0
+	if original.NamedVectors["a"][0] == 999.0 {
+		t.Error("Modifying clone named vector should not affect original")
+	}
+}
+
+func TestValidateWithNamedVectors(t *testing.T) {
+	// Valid: point with only named vectors (no primary vector)
+	p := &Point{
+		ID: "nv-only",
+		NamedVectors: map[string]Vector{
+			"text": {1.0, 2.0},
+		},
+	}
+	if err := p.Validate(); err != nil {
+		t.Errorf("Expected valid, got error: %v", err)
+	}
+
+	// Invalid: NaN in named vector
+	p2 := &Point{
+		ID: "nv-nan",
+		NamedVectors: map[string]Vector{
+			"bad": {float32(math.NaN())},
+		},
+	}
+	if err := p2.Validate(); err == nil {
+		t.Error("Expected error for NaN in named vector")
+	}
+}
+
+func TestValidateWithSparseOnly(t *testing.T) {
+	p := &Point{
+		ID: "sparse-only",
+		Sparse: &SparseVector{
+			Indices: []uint32{1},
+			Values:  []float32{0.5},
+		},
+	}
+	if err := p.Validate(); err != nil {
+		t.Errorf("Expected valid sparse-only point, got error: %v", err)
+	}
+}
+
+func TestInvalidVectorError(t *testing.T) {
+	e := &InvalidVectorError{Index: 5, Value: float32(math.NaN())}
+	msg := e.Error()
+	if msg == "" {
+		t.Error("Expected non-empty error message")
+	}
+}
+
 func BenchmarkPointEncode(b *testing.B) {
 	p := NewPointWithID("test", make(Vector, 128), nil)
 	for i := range p.Vector {

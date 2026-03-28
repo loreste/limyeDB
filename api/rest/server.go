@@ -32,6 +32,7 @@ type Server struct {
 	raft        *cluster.RaftNode
 	opts        *ServerOptions // Added to store ServerOptions
 	realtimeHub *realtime.Hub
+	startTime   time.Time // Tracks server start time for uptime reporting
 }
 
 // ServerOptions configures the REST server
@@ -44,6 +45,7 @@ type ServerOptions struct {
 	TLSCert        string
 	TLSKey         string
 	AllowedOrigins []string // Allowed CORS origins; if empty, no origin is reflected
+	RateLimits     *EndpointRateLimitConfig // Per-endpoint rate limits; nil disables
 }
 
 // NewServer creates a new REST API server
@@ -64,6 +66,7 @@ func NewServerWithOptions(cfg *config.ServerConfig, collections *collection.Mana
 		collections: collections,
 		opts:        opts, // Store opts
 		realtimeHub: realtime.NewHub(),
+		startTime:   time.Now(),
 	}
 
 	if opts != nil {
@@ -167,6 +170,10 @@ func (s *Server) setupMiddleware() {
 	// Standard Recovery middleware
 	s.router.Use(gin.Recovery())
 
+	// Request ID middleware — must come early so downstream middleware and
+	// handlers can reference the ID via c.Get("request_id").
+	s.router.Use(RequestIDMiddleware())
+
 	// Enterprise Zero-Trust Token Bearer Interceptor
 	if s.opts.AuthToken != "" {
 		tokenManager := auth.NewTokenManager(s.opts.AuthToken)
@@ -206,6 +213,14 @@ func (s *Server) setupMiddleware() {
 			c.Next()
 		})
 	}
+	// Prometheus request metrics middleware
+	s.router.Use(PrometheusMetricsMiddleware())
+
+	// Per-endpoint rate limiting (only active when configured)
+	if s.opts != nil && s.opts.RateLimits != nil {
+		s.router.Use(EndpointRateLimitMiddleware(s.opts.RateLimits))
+	}
+
 	s.router.Use(s.requestLogger())
 	s.router.Use(s.corsMiddleware())
 	s.router.Use(s.requestSizeLimit())
@@ -306,12 +321,17 @@ func (s *Server) requestLogger() gin.HandlerFunc {
 		latency := time.Since(start)
 		status := c.Writer.Status()
 
+		// Retrieve request ID set by RequestIDMiddleware.
+		reqID, _ := c.Get("request_id")
+		rid, _ := reqID.(string)
+
 		// Output JSON telemetry for Kubernetes metrics extraction
 		slog.Info("HTTP Request Segment",
 			slog.Int("status", status),
 			slog.String("method", c.Request.Method),
 			slog.String("path", path),
 			slog.Duration("latency", latency),
+			slog.String("request_id", rid),
 		)
 	}
 }
@@ -355,11 +375,26 @@ func (s *Server) requestSizeLimit() gin.HandlerFunc {
 
 // Response types
 
-// ErrorResponse represents an error response
+// ErrorResponse represents a legacy error response (kept for backward compatibility).
 type ErrorResponse struct {
 	Error   string `json:"error"`
 	Code    string `json:"code,omitempty"`
 	Details string `json:"details,omitempty"`
+}
+
+// StructuredError is the inner payload of a structured error response.
+type StructuredError struct {
+	Code      string `json:"code"`
+	Message   string `json:"message"`
+	RequestID string `json:"request_id,omitempty"`
+}
+
+// StructuredErrorResponse wraps StructuredError under an "error" key for
+// consistent API error envelopes:
+//
+//	{"error":{"code":"NOT_FOUND","message":"collection not found","request_id":"..."}}
+type StructuredErrorResponse struct {
+	Error StructuredError `json:"error"`
 }
 
 // SuccessResponse represents a success response
@@ -368,9 +403,25 @@ type SuccessResponse struct {
 	Data    interface{} `json:"data,omitempty"`
 }
 
+// respondError sends a legacy-style error response. Existing handlers continue
+// to work without changes.
 func respondError(c *gin.Context, status int, err error) {
 	c.JSON(status, ErrorResponse{
 		Error: err.Error(),
+	})
+}
+
+// respondStructuredError sends a structured error response with the request ID
+// pulled from the gin context (set by RequestIDMiddleware).
+func respondStructuredError(c *gin.Context, status int, code string, message string) {
+	reqID, _ := c.Get("request_id")
+	rid, _ := reqID.(string)
+	c.JSON(status, StructuredErrorResponse{
+		Error: StructuredError{
+			Code:      code,
+			Message:   message,
+			RequestID: rid,
+		},
 	})
 }
 
