@@ -1,9 +1,10 @@
 # LimyeDB - Open Source Vector Database for GenAI, RAG & LLMs
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/limyedb/limyedb.svg)](https://pkg.go.dev/github.com/limyedb/limyedb)
+[![CI](https://github.com/loreste/limyeDB/actions/workflows/ci.yml/badge.svg)](https://github.com/loreste/limyeDB/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/loreste/limyeDB/actions/workflows/codeql.yml/badge.svg)](https://github.com/loreste/limyeDB/actions/workflows/codeql.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/limyedb/limyedb)](https://goreportcard.com/report/github.com/limyedb/limyedb)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Docker Pulls](https://img.shields.io/docker/pulls/limyedb/limyedb)](https://hub.docker.com/r/limyedb/limyedb)
+[![Release](https://img.shields.io/github/v/release/loreste/limyeDB)](https://github.com/loreste/limyeDB/releases/latest)
 
 **LimyeDB** is a lightning-fast, highly-available **open-source vector database** engineered specifically for the next generation of AI applications. Built entirely from scratch in Go, it is the ultimate semantic storage engine designed to power **Retrieval-Augmented Generation (RAG)**, large language model (LLM) memory arrays, and predictive similarity matching with sub-millisecond retrieval latency.
 
@@ -144,13 +145,15 @@ docker-compose logs -f
 ### From Binary
 
 ```bash
-# Download latest release
-curl -LO https://github.com/loreste/limyeDB/releases/latest/download/limyedb-linux-amd64
-chmod +x limyedb-linux-amd64
+# Download latest release (Linux amd64)
+curl -LO https://github.com/loreste/limyeDB/releases/latest/download/limyedb_$(curl -s https://api.github.com/repos/loreste/limyeDB/releases/latest | grep tag_name | cut -d'"' -f4 | sed 's/v//')_linux_amd64.tar.gz
 
-# Run
-./limyedb-linux-amd64 -rest :8080
+# Extract and run
+tar xzf limyedb_*_linux_amd64.tar.gz
+./limyedb -rest :8080
 ```
+
+Available platforms: `linux_amd64`, `linux_arm64`, `darwin_amd64`, `darwin_arm64`
 
 ---
 
@@ -158,9 +161,10 @@ chmod +x limyedb-linux-amd64
 
 ### Prerequisites
 
-- Go 1.21+ (for building from source)
+- Go 1.26+ (for building from source)
 - Docker 20.10+ (for containerized deployment)
 - Make (optional, for build automation)
+- protoc (optional, for regenerating gRPC stubs)
 
 ### Build from Source
 
@@ -169,30 +173,30 @@ chmod +x limyedb-linux-amd64
 git clone https://github.com/loreste/limyeDB.git
 cd limyeDB
 
-# Install dependencies
-make deps
-
-# Build
+# Build both binaries
 make build
 
-# Run tests
+# Run tests with race detection
 make test
 
-# The binary will be at ./bin/limyedb
-./bin/limyedb --help
+# The binaries will be at ./bin/
+./bin/limyedb -help
+./bin/limyedb-cli -help
 ```
 
 ### Makefile Targets
 
 | Target | Description |
 |--------|-------------|
-| `make build` | Build the limyedb binary |
-| `make test` | Run all tests |
-| `make bench` | Run benchmarks |
-| `make lint` | Run linters |
-| `make proto` | Generate protobuf files |
+| `make build` | Build `limyedb` and `limyedb-cli` into `bin/` |
+| `make test` | Run all tests with `-race` |
+| `make bench` | Run benchmarks on core packages |
+| `make lint` | Run golangci-lint |
+| `make fmt` | Format code with gofmt and goimports |
+| `make proto` | Regenerate protobuf Go files |
 | `make docker` | Build Docker image |
-| `make clean` | Clean build artifacts |
+| `make clean` | Remove build artifacts |
+| `make help` | Show all available targets |
 
 ---
 
@@ -217,7 +221,9 @@ make test
   -version                           # Print version and exit
 ```
 
-### Configuration File (config.yaml)
+### Configuration File
+
+See [`config.example.yaml`](config.example.yaml) for a complete annotated example. Summary:
 
 ```yaml
 server:
@@ -597,6 +603,58 @@ curl -X POST http://localhost:8080/collections/documents/points/scroll \
   }'
 ```
 
+### Health & Readiness
+
+```bash
+# Health check with component status
+curl http://localhost:8080/health
+# {"status":"healthy","version":"0.2.0","uptime":"2h15m","components":{"storage":"healthy","collections":{"count":5,"status":"healthy"}}}
+
+# Readiness probe (for Kubernetes)
+curl http://localhost:8080/readiness
+# {"status":"ready"}
+```
+
+### Request Tracing
+
+Every request receives a unique `X-Request-Id` header for end-to-end tracing:
+
+```bash
+curl -v http://localhost:8080/health 2>&1 | grep X-Request-Id
+# < X-Request-Id: 7f3a8b2c-4d5e-6f7a-8b9c-0d1e2f3a4b5c
+
+# Pass your own request ID for correlation
+curl -H "X-Request-Id: my-trace-123" http://localhost:8080/collections
+```
+
+### Error Responses
+
+All API errors return a consistent structured format:
+
+```json
+{
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "collection 'missing' not found",
+    "request_id": "7f3a8b2c-4d5e-6f7a-8b9c-0d1e2f3a4b5c"
+  }
+}
+```
+
+Common error codes: `NOT_FOUND`, `ALREADY_EXISTS`, `INVALID_REQUEST`, `INTERNAL_ERROR`
+
+### Rate Limiting
+
+Per-endpoint rate limiting is available (opt-in via server configuration):
+
+| Endpoint Pattern | Default Rate |
+|-----------------|-------------|
+| Search / Recommend / Discover | 100 req/s per IP |
+| Read operations | 1000 req/s per IP |
+| All other endpoints | 500 req/s per IP |
+
+Health, readiness, and metrics endpoints are exempt from rate limiting.
+
 ---
 
 ## Client SDKs
@@ -920,15 +978,17 @@ curl http://localhost:8080/metrics
 
 Key metrics:
 
-| Metric | Description |
-|--------|-------------|
-| `limyedb_search_latency_seconds` | Search latency histogram |
-| `limyedb_search_total` | Total search requests |
-| `limyedb_insert_total` | Total insert operations |
-| `limyedb_vectors_total` | Total vectors stored |
-| `limyedb_collections_total` | Number of collections |
-| `limyedb_raft_state` | Raft cluster state |
-| `limyedb_gossip_members` | Active gossip members |
+| Metric | Type | Description |
+|--------|------|-------------|
+| `limyedb_request_duration_seconds` | Histogram | Request latency by method, path, and status code |
+| `limyedb_request_total` | Counter | Total requests by method, path, and status code |
+| `limyedb_search_latency_seconds` | Histogram | Search operation latency |
+| `limyedb_search_total` | Counter | Total search requests |
+| `limyedb_insert_total` | Counter | Total insert operations |
+| `limyedb_vectors_total` | Gauge | Total vectors stored |
+| `limyedb_collections_total` | Gauge | Number of collections |
+| `limyedb_raft_state` | Gauge | Raft cluster state |
+| `limyedb_gossip_members` | Gauge | Active gossip members |
 
 ### Grafana Dashboard
 
@@ -1116,18 +1176,23 @@ response = query_engine.query("What is AI?")
 
 ### Kubernetes Deployment
 
-```bash
-# Add Helm repo
-helm repo add limyedb https://charts.limyedb.io
-helm repo update
+A Helm chart is included in the repository:
 
-# Install
-helm install limyedb limyedb/limyedb \
+```bash
+# Install from local chart
+helm install limyedb ./deploy/helm/limyedb \
   --namespace limyedb \
   --create-namespace \
-  --set replicaCount=3 \
   --set persistence.size=100Gi
+
+# With custom values
+helm install limyedb ./deploy/helm/limyedb \
+  --namespace limyedb \
+  --create-namespace \
+  -f my-values.yaml
 ```
+
+See [`deploy/helm/limyedb/values.yaml`](deploy/helm/limyedb/values.yaml) for all configurable options including auth, TLS, persistence, and resource limits.
 
 ---
 
@@ -1142,21 +1207,54 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 git clone https://github.com/loreste/limyeDB.git
 cd limyeDB
 
-# Install dependencies
-make deps
+# Build both binaries
+make build
 
-# Run tests
+# Run tests with race detection
 make test
 
-# Build
-make build
+# Run linter
+make lint
+
+# Format code
+make fmt
 ```
 
-### Code Style
+### Pre-Commit Hooks
 
-- Follow Go best practices
-- Run `make lint` before submitting PRs
-- Add tests for new features
+Install pre-commit hooks to run gofmt, golangci-lint, and go vet before each commit:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+### Testing
+
+```bash
+# Unit tests with race detection
+make test
+
+# Benchmarks
+make bench
+
+# Integration tests (starts real cluster nodes)
+LIMYEDB_INTEGRATION=1 go test -race -timeout=10m ./pkg/...
+
+# Goroutine leak tests
+go test -race ./pkg/webhook/... ./pkg/cluster/... ./pkg/cache/... ./pkg/ratelimit/... -run Leak
+
+# Race condition stress tests
+go test -race ./pkg/collection/... ./pkg/index/hnsw/... ./pkg/cache/... ./pkg/cluster/... -run Race
+```
+
+### Code Standards
+
+- Run `make lint` and `make fmt` before submitting PRs
+- Add tests for new features (target >70% coverage for new packages)
+- Use `errors.Is()` for error comparisons, `%w` for error wrapping
+- Use `crypto/rand` for any security-sensitive randomness
+- Use `filepath.Clean` and validate paths for any file operations
 
 ---
 
@@ -1168,11 +1266,7 @@ LimyeDB is licensed under the [GNU General Public License v3.0](LICENSE).
 
 ## Support
 
-- **Documentation**: [https://docs.limyedb.io](https://docs.limyedb.io)
 - **GitHub Issues**: [https://github.com/loreste/limyeDB/issues](https://github.com/loreste/limyeDB/issues)
-- **Discord**: [https://discord.gg/limyedb](https://discord.gg/limyedb)
-- **Twitter**: [@LimyeDB](https://twitter.com/limyedb)
-
----
-
-Built with passion for the AI community.
+- **Security Issues**: See [SECURITY.md](SECURITY.md) for responsible disclosure
+- **Changelog**: See [CHANGELOG.md](CHANGELOG.md) for release history
+- **Releases**: [https://github.com/loreste/limyeDB/releases](https://github.com/loreste/limyeDB/releases)

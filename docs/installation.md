@@ -7,14 +7,14 @@ LimyeDB is built natively in Go and compiles to a single, statically linked bina
 The most resilient way to scale LimyeDB in production is via Docker. The image mounts a local persistence volume to protect HNSW indexes.
 
 ```bash
-docker pull loreste3201/limyedb:latest
+docker pull limyedb/limyedb:latest
 
 docker run -d \
   --name limyedb_core \
   -p 8080:8080 \
-  -p 6334:6334 \
+  -p 50051:50051 \
   -v limyedb_data:/data \
-  loreste3201/limyedb:latest
+  limyedb/limyedb:latest
 ```
 
 ## 2. Compile From Source
@@ -25,9 +25,15 @@ If you require custom forks or architecture optimizations (e.g., Apple Silicon M
 git clone https://github.com/loreste/limyeDB.git
 cd limyeDB
 
-# Build the generic CLI with native version injection
-go build -ldflags="-X 'github.com/limyedb/limyedb/pkg/version.Version=v0.2.0' -X 'github.com/limyedb/limyedb/pkg/version.Commit=$(git rev-parse HEAD)' -X 'github.com/limyedb/limyedb/pkg/version.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)'" -o limyedb ./cmd/limyedb
-./limyedb --port 8080 --metrics --grpc-port 6334
+# Build both binaries
+make build
+
+# Or build manually
+go build -o bin/limyedb ./cmd/limyedb
+go build -o bin/limyedb-cli ./cmd/limyedb-cli
+
+# Run
+./bin/limyedb -rest :8080 -grpc :50051
 ```
 
 ## 3. Kubernetes Deployment (Helm)
