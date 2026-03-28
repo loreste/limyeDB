@@ -68,6 +68,9 @@ func startNode(t *testing.T, id, restPort, raftPort, dataDir string, bootstrap b
 }
 
 func TestRaftClusterIntegration(t *testing.T) {
+	if os.Getenv("LIMYEDB_INTEGRATION") == "" {
+		t.Skip("Skipping integration test (set LIMYEDB_INTEGRATION=1 to run)")
+	}
 	// Pre-compile the binary to avert orphaned processes from 'go run'
 	buildCmd := exec.Command("go", "build", "-o", "/tmp/limyedb_raft_test_bin", "../../cmd/limyedb/main.go")
 	if err := buildCmd.Run(); err != nil {
