@@ -528,13 +528,14 @@ func (h *HNSW) SearchWithEf(query point.Vector, k int, ef int) ([]Candidate, err
 func (h *HNSW) Delete(id string) error {
 	h.mu.RLock()
 	nodeID, exists := h.idToIndex[id]
-	h.mu.RUnlock()
-
 	if !exists {
+		h.mu.RUnlock()
 		return ErrPointNotFound
 	}
+	node := h.nodes[nodeID]
+	h.mu.RUnlock()
 
-	h.nodes[nodeID].MarkDeleted()
+	node.MarkDeleted()
 	h.deletedCount.Add(1)
 
 	return nil
@@ -544,20 +545,21 @@ func (h *HNSW) Delete(id string) error {
 func (h *HNSW) Get(id string) (*point.Point, error) {
 	h.mu.RLock()
 	nodeID, exists := h.idToIndex[id]
-	h.mu.RUnlock()
-
 	if !exists {
+		h.mu.RUnlock()
 		return nil, ErrPointNotFound
 	}
-
 	node := h.nodes[nodeID]
+	vec := h.getVector(nodeID)
+	h.mu.RUnlock()
+
 	if node.IsDeleted() {
 		return nil, ErrPointNotFound
 	}
 
 	return &point.Point{
 		ID:      node.ID,
-		Vector:  h.getVector(nodeID),
+		Vector:  vec,
 		Payload: node.GetPayload(),
 	}, nil
 }

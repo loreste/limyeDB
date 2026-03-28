@@ -196,14 +196,15 @@ func (hr *HashRing) GetNodes(key string, n int) []*Node {
 	return nodes
 }
 
-// GetAllNodes returns all nodes in the ring
+// GetAllNodes returns a snapshot of all nodes in the ring
 func (hr *HashRing) GetAllNodes() []*Node {
 	hr.mu.RLock()
 	defer hr.mu.RUnlock()
 
 	nodes := make([]*Node, 0, len(hr.nodes))
 	for _, node := range hr.nodes {
-		nodes = append(nodes, node)
+		cp := *node
+		nodes = append(nodes, &cp)
 	}
 	return nodes
 }
@@ -286,13 +287,16 @@ func (sm *ShardManager) GetShard(shardID uint32) *Shard {
 	return sm.shards[shardID]
 }
 
-// GetShards returns a copy of all shards
+// GetShards returns a deep copy of all shards
 func (sm *ShardManager) GetShards() map[uint32]*Shard {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 	shards := make(map[uint32]*Shard, len(sm.shards))
 	for id, shard := range sm.shards {
-		shards[id] = shard
+		cp := *shard
+		cp.Replicas = make([]string, len(shard.Replicas))
+		copy(cp.Replicas, shard.Replicas)
+		shards[id] = &cp
 	}
 	return shards
 }
@@ -594,14 +598,23 @@ func (c *Coordinator) RemoveMember(nodeID string) {
 	}
 }
 
-// GetMembers returns all cluster members
+// GetMembers returns a deep copy of all cluster members
 func (c *Coordinator) GetMembers() []*Node {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	members := make([]*Node, 0, len(c.members))
 	for _, node := range c.members {
-		members = append(members, node)
+		cp := *node
+		cp.Shards = make([]uint32, len(node.Shards))
+		copy(cp.Shards, node.Shards)
+		cp.ReplicaShards = make([]uint32, len(node.ReplicaShards))
+		copy(cp.ReplicaShards, node.ReplicaShards)
+		cp.Metadata = make(map[string]string, len(node.Metadata))
+		for k, v := range node.Metadata {
+			cp.Metadata[k] = v
+		}
+		members = append(members, &cp)
 	}
 	return members
 }
@@ -831,12 +844,21 @@ type ClusterState struct {
 	Timestamp time.Time         `json:"timestamp"`
 }
 
-// GetState returns the current cluster state
+// GetState returns the current cluster state (deep copy, safe for concurrent use)
 func (c *Coordinator) GetState() *ClusterState {
 	c.mu.RLock()
 	members := make([]*Node, 0, len(c.members))
 	for _, node := range c.members {
-		members = append(members, node)
+		cp := *node
+		cp.Shards = make([]uint32, len(node.Shards))
+		copy(cp.Shards, node.Shards)
+		cp.ReplicaShards = make([]uint32, len(node.ReplicaShards))
+		copy(cp.ReplicaShards, node.ReplicaShards)
+		cp.Metadata = make(map[string]string, len(node.Metadata))
+		for k, v := range node.Metadata {
+			cp.Metadata[k] = v
+		}
+		members = append(members, &cp)
 	}
 	leaderID := c.leaderID
 	c.mu.RUnlock()

@@ -60,3 +60,4 @@ Thumbs.db
 
 # Helm charts (local values)
 deploy/helm/*/values-local.yaml
+limyedb-cli
