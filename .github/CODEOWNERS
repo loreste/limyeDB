@@ -1,74 +1,11 @@
-# CODEOWNERS file for LimyeDB
-# These owners will be requested for review when someone opens a pull request
-# that modifies code they own.
-#
-# The last matching pattern takes precedence. When a pull request modifies
-# multiple paths, all relevant owners will be requested for review.
-#
-# Learn more: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+# Default owner for all files
+* @loreste
 
-# Default owners for everything in the repo
-* @limyedb/core-team
+# Security-sensitive paths
+pkg/security/ @loreste
+api/ @loreste
 
-# Storage layer - critical for data integrity
-/pkg/storage/ @limyedb/storage-team
-/pkg/storage/wal/ @limyedb/storage-team
-/pkg/storage/snapshot/ @limyedb/storage-team
-/pkg/storage/mmap/ @limyedb/storage-team
-/pkg/storage/s3/ @limyedb/storage-team
-
-# Index implementations - performance critical
-/pkg/index/ @limyedb/index-team
-/pkg/index/hnsw/ @limyedb/index-team
-/pkg/index/payload/ @limyedb/index-team
-/pkg/index/sparse/ @limyedb/index-team
-/pkg/index/ivf/ @limyedb/index-team
-/pkg/index/scann/ @limyedb/index-team
-/pkg/index/diskann/ @limyedb/index-team
-
-# API layer - public interface
-/api/ @limyedb/api-team
-/api/grpc/ @limyedb/api-team
-/api/rest/ @limyedb/api-team
-/pkg/api/ @limyedb/api-team
-
-# Security - requires security review
-/pkg/security/ @limyedb/security-team
-/pkg/auth/ @limyedb/security-team
-/pkg/rbac/ @limyedb/security-team
-/pkg/tls/ @limyedb/security-team
-
-# Distance calculations - performance critical
-/pkg/distance/ @limyedb/core-team
-
-# Collection management
-/pkg/collection/ @limyedb/core-team
-
-# Query engine
-/pkg/query/ @limyedb/core-team
-
-# Configuration
-/pkg/config/ @limyedb/core-team
-
-# Quantization
-/pkg/quantization/ @limyedb/index-team
-
-# Distributed/Raft consensus
-/pkg/raft/ @limyedb/distributed-team
-/pkg/cluster/ @limyedb/distributed-team
-/pkg/sharding/ @limyedb/distributed-team
-
-# CI/CD and build configuration
-/.github/ @limyedb/devops-team
-/Makefile @limyedb/devops-team
-/Dockerfile @limyedb/devops-team
-/.golangci.yaml @limyedb/devops-team
-/.pre-commit-config.yaml @limyedb/devops-team
-
-# Documentation
-/docs/ @limyedb/docs-team
-/*.md @limyedb/docs-team
-
-# Protocol buffers
-/proto/ @limyedb/api-team
-/**/*.proto @limyedb/api-team
+# Infrastructure and CI
+.github/ @loreste
+deploy/ @loreste
+Dockerfile* @loreste

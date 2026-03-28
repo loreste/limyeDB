@@ -1,0 +1,46 @@
+name: Nightly Full Test Suite
+
+on:
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+jobs:
+  nightly-tests:
+    name: Full Test Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.26.x'
+
+    - name: Run full test suite with integration tests
+      env:
+        LIMYEDB_INTEGRATION: "1"
+      run: |
+        go test -race -timeout=10m \
+          ./pkg/... \
+          ./internal/... \
+          ./api/rest/... \
+          ./cmd/limyedb-cli/...
+
+    - name: Run benchmarks
+      run: |
+        go test -bench=. -benchmem -run=^$ -count=3 \
+          ./pkg/index/hnsw/... \
+          ./pkg/distance/... \
+          ./pkg/quantization/... \
+          ./pkg/point/... \
+          | tee benchmark-results.txt
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: nightly-benchmark-results
+        path: benchmark-results.txt
+        retention-days: 30
