@@ -1,0 +1,119 @@
+# ==============================================================================
+# LimyeDB Configuration File
+# ==============================================================================
+# This file shows all configurable options with their default values.
+# Copy this file to config.yaml and adjust as needed.
+#
+# Usage:
+#   limyedb --config config.yaml
+#
+# CLI flags override values set in this file.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Server settings
+# ------------------------------------------------------------------------------
+server:
+  # Address for the REST API (HTTP) server.
+  # CLI flag: --rest
+  rest_address: ":8080"
+
+  # Address for the gRPC API server.
+  # CLI flag: --grpc
+  grpc_address: ":50051"
+
+  # Maximum time to read the full request (including body).
+  read_timeout: "30s"
+
+  # Maximum time to write the response.
+  write_timeout: "30s"
+
+  # Maximum allowed request body size in bytes (64 MB).
+  max_request_size: 67108864
+
+# ------------------------------------------------------------------------------
+# Storage settings
+# ------------------------------------------------------------------------------
+storage:
+  # Root directory where collections and indexes are stored.
+  # CLI flag: --data
+  data_dir: "./data"
+
+  # Maximum number of collections the instance can hold.
+  max_collections: 1000
+
+  # Enable memory-mapped I/O for vector data.
+  mmap_enabled: true
+
+  # Interval (in milliseconds) between automatic flushes to disk.
+  flush_interval_ms: 1000
+
+# ------------------------------------------------------------------------------
+# HNSW index defaults
+# These values are used when creating new collections unless overridden.
+# ------------------------------------------------------------------------------
+hnsw:
+  # Maximum number of bi-directional links per node in each layer.
+  m: 16
+
+  # Size of the dynamic candidate list during index construction.
+  # Higher values produce better recall at the cost of slower builds.
+  ef_construction: 200
+
+  # Size of the dynamic candidate list during search.
+  # Higher values produce better recall at the cost of slower queries.
+  ef_search: 100
+
+  # Initial maximum number of elements the index can hold.
+  max_elements: 100000
+
+# ------------------------------------------------------------------------------
+# Write-Ahead Log (WAL)
+# Provides crash-recovery durability for write operations.
+# ------------------------------------------------------------------------------
+wal:
+  # Enable or disable the WAL.
+  enabled: true
+
+  # Directory for WAL segment files.
+  dir: "./data/wal"
+
+  # Maximum size (in MB) of a single WAL segment before rotation.
+  segment_size_mb: 64
+
+  # Fsync each write to disk for maximum durability.
+  # Disabling improves write throughput but risks data loss on crash.
+  sync_on_write: true
+
+# ------------------------------------------------------------------------------
+# Snapshot settings
+# Periodic full snapshots of all collection data for backup and recovery.
+# ------------------------------------------------------------------------------
+snapshot:
+  # Directory where snapshots are stored.
+  dir: "./data/snapshots"
+
+  # Interval (in seconds) between automatic snapshots. 3600 = 1 hour.
+  interval_sec: 3600
+
+  # Number of recent snapshots to keep. Older ones are purged automatically.
+  retain_count: 5
+
+  # Zstd compression level (1-19). Higher = smaller files, slower compression.
+  compression_level: 6
+
+# ==============================================================================
+# Security (set via CLI flags only)
+# ==============================================================================
+# --auth-token   Master bearer token for zero-trust API authentication.
+# --tls-cert     Path to the TLS certificate file for HTTPS.
+# --tls-key      Path to the TLS private key file for HTTPS.
+
+# ==============================================================================
+# Raft Clustering (set via CLI flags only)
+# ==============================================================================
+# --raft-bind       Raft TCP bind address, e.g. 127.0.0.1:7000
+# --raft-data       Raft data directory (defaults to <data_dir>/raft)
+# --raft-node-id    Unique node identifier (default: node0)
+# --raft-bootstrap  Bootstrap this node as the initial cluster leader
+# --raft-join       Address of an existing node to join, e.g. http://127.0.0.1:8080

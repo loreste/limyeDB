@@ -10,7 +10,7 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"   # REST API
-      - "6334:6334"   # gRPC API
+      - "50051:50051" # gRPC API
     volumes:
       - limyedb_data:/data
       - ./config.yaml:/config/config.yaml:ro

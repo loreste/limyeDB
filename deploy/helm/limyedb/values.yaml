@@ -1,113 +1,119 @@
-# Default values for LimyeDB
-replicaCount: 3
+# Default values for limyedb Helm chart.
+
+replicaCount: 1
 
 image:
   repository: limyedb/limyedb
   pullPolicy: IfNotPresent
-  tag: ""
+  tag: ""  # Defaults to Chart.appVersion
 
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
-serviceAccount:
-  create: true
-  annotations: {}
-  name: ""
+# LimyeDB server configuration
+config:
+  server:
+    rest_address: ":8080"
+    grpc_address: ":50051"
+    read_timeout: "30s"
+    write_timeout: "30s"
+    max_request_size: 67108864
+  storage:
+    data_dir: "/data"
+    max_collections: 1000
+    mmap_enabled: true
+    flush_interval_ms: 1000
+  hnsw:
+    m: 16
+    ef_construction: 200
+    ef_search: 100
+    max_elements: 100000
+  wal:
+    enabled: true
+    dir: "/data/wal"
+    segment_size_mb: 64
+    sync_on_write: true
+  snapshot:
+    dir: "/data/snapshots"
+    interval_sec: 3600
+    retain_count: 5
+    compression_level: 6
 
-podAnnotations: {}
+# Authentication
+auth:
+  # Enable bearer-token authentication
+  enabled: false
+  # Master bearer token (set via secret in production)
+  token: ""
 
-podSecurityContext:
-  fsGroup: 1000
+# TLS configuration
+tls:
+  enabled: false
+  certPath: ""
+  keyPath: ""
 
-securityContext:
-  runAsNonRoot: true
-  runAsUser: 1000
-  capabilities:
-    drop:
-      - ALL
-  readOnlyRootFilesystem: true
-
+# Service configuration
 service:
   type: ClusterIP
   restPort: 8080
-  grpcPort: 6334
-  raftPort: 7000
-  gossipPort: 7001
+  grpcPort: 50051
 
-ingress:
-  enabled: false
-  className: ""
-  annotations: {}
-  hosts:
-    - host: limyedb.local
-      paths:
-        - path: /
-          pathType: ImplementationSpecific
-  tls: []
-
-resources:
-  limits:
-    cpu: 4
-    memory: 8Gi
-  requests:
-    cpu: 1
-    memory: 2Gi
-
-autoscaling:
-  enabled: false
-  minReplicas: 3
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 80
-
+# Persistence
 persistence:
   enabled: true
   storageClass: ""
-  accessMode: ReadWriteOnce
-  size: 100Gi
+  accessModes:
+    - ReadWriteOnce
+  size: 10Gi
+  annotations: {}
 
-config:
-  logLevel: info
-  hnsw:
-    m: 16
-    efConstruction: 200
-    efSearch: 100
-  wal:
-    syncWrites: true
-    segmentSize: 67108864
+# Resource limits and requests
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 4Gi
 
-auth:
-  enabled: false
-  token: ""
-  existingSecret: ""
-  secretKey: "auth-token"
+# Liveness and readiness probes
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: rest
+  initialDelaySeconds: 10
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
 
-tls:
-  enabled: false
-  certFile: ""
-  keyFile: ""
-  existingSecret: ""
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: rest
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
 
-metrics:
-  enabled: true
-  serviceMonitor:
-    enabled: false
-    interval: 30s
-    scrapeTimeout: 10s
-
+# Node selector, tolerations, affinity
 nodeSelector: {}
-
 tolerations: []
+affinity: {}
 
-affinity:
-  podAntiAffinity:
-    preferredDuringSchedulingIgnoredDuringExecution:
-      - weight: 100
-        podAffinityTerm:
-          labelSelector:
-            matchExpressions:
-              - key: app.kubernetes.io/name
-                operator: In
-                values:
-                  - limyedb
-          topologyKey: kubernetes.io/hostname
+# Pod-level security context
+podSecurityContext:
+  fsGroup: 1000
+  runAsNonRoot: true
+
+# Container-level security context
+securityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+
+serviceAccount:
+  create: false
+  name: ""
+  annotations: {}

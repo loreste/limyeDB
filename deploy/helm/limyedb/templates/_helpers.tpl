@@ -29,7 +29,7 @@ Create chart name and version as used by the chart label.
 {{- end }}
 
 {{/*
-Common labels
+Common labels.
 */}}
 {{- define "limyedb.labels" -}}
 helm.sh/chart: {{ include "limyedb.chart" . }}
@@ -41,7 +41,7 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
 {{/*
-Selector labels
+Selector labels.
 */}}
 {{- define "limyedb.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "limyedb.name" . }}
@@ -49,12 +49,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
-Create the name of the service account to use
+Image reference.
 */}}
-{{- define "limyedb.serviceAccountName" -}}
-{{- if .Values.serviceAccount.create }}
-{{- default (include "limyedb.fullname" .) .Values.serviceAccount.name }}
-{{- else }}
-{{- default "default" .Values.serviceAccount.name }}
-{{- end }}
+{{- define "limyedb.image" -}}
+{{- $tag := default .Chart.AppVersion .Values.image.tag -}}
+{{- printf "%s:%s" .Values.image.repository $tag -}}
 {{- end }}

@@ -50,9 +50,7 @@ config.local.yaml
 .DS_Store
 Thumbs.db
 
-# Generated files
-*.pb.go
-*_grpc.pb.go
+# Generated files (proto .pb.go files are committed for build reproducibility)
 
 # Secrets
 *.pem

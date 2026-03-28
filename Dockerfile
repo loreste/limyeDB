@@ -1,8 +1,12 @@
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 # Install build dependencies
-RUN apk add --no-cache git make gcc musl-dev
+RUN apk add --no-cache git make gcc musl-dev protobuf protobuf-dev
+
+# Install protoc Go plugins
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest && \
+    go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
 # Set working directory
 WORKDIR /app
@@ -16,14 +20,19 @@ RUN go mod download
 # Copy source code
 COPY . .
 
+# Generate proto files
+RUN protoc --go_out=. --go_opt=paths=source_relative \
+    --go-grpc_out=. --go-grpc_opt=paths=source_relative \
+    api/grpc/proto/limyedb.proto
+
 # Build the binary
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build \
     -ldflags="-w -s -X main.Version=$(git describe --tags --always --dirty 2>/dev/null || echo 'dev')" \
     -o /app/bin/limyedb \
     ./cmd/limyedb
 
 # Final stage
-FROM alpine:3.19
+FROM alpine:3.20
 
 # Install runtime dependencies
 RUN apk add --no-cache ca-certificates tzdata
@@ -46,10 +55,10 @@ USER limyedb
 
 # Expose ports
 # 8080 - REST API
-# 6334 - gRPC API
+# 50051 - gRPC API
 # 7000 - Raft
 # 7001 - Gossip
-EXPOSE 8080 6334 7000 7001
+EXPOSE 8080 50051 7000 7001
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
@@ -65,4 +74,4 @@ WORKDIR /data
 ENTRYPOINT ["limyedb"]
 
 # Default command
-CMD ["--rest-addr=0.0.0.0:8080", "--grpc-addr=0.0.0.0:6334", "--data-dir=/data"]
+CMD ["--rest-addr=0.0.0.0:8080", "--grpc-addr=0.0.0.0:50051", "--data-dir=/data"]

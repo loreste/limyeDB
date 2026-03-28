@@ -7,42 +7,13 @@ metadata:
 spec:
   type: {{ .Values.service.type }}
   ports:
-    - port: {{ .Values.service.restPort }}
+    - name: rest
+      port: {{ .Values.service.restPort }}
       targetPort: rest
       protocol: TCP
-      name: rest
-    - port: {{ .Values.service.grpcPort }}
+    - name: grpc
+      port: {{ .Values.service.grpcPort }}
       targetPort: grpc
       protocol: TCP
-      name: grpc
-  selector:
-    {{- include "limyedb.selectorLabels" . | nindent 4 }}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: {{ include "limyedb.fullname" . }}-headless
-  labels:
-    {{- include "limyedb.labels" . | nindent 4 }}
-spec:
-  type: ClusterIP
-  clusterIP: None
-  ports:
-    - port: {{ .Values.service.restPort }}
-      targetPort: rest
-      protocol: TCP
-      name: rest
-    - port: {{ .Values.service.grpcPort }}
-      targetPort: grpc
-      protocol: TCP
-      name: grpc
-    - port: {{ .Values.service.raftPort }}
-      targetPort: raft
-      protocol: TCP
-      name: raft
-    - port: {{ .Values.service.gossipPort }}
-      targetPort: gossip
-      protocol: TCP
-      name: gossip
   selector:
     {{- include "limyedb.selectorLabels" . | nindent 4 }}
