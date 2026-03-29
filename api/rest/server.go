@@ -44,7 +44,7 @@ type ServerOptions struct {
 	AuthToken      string
 	TLSCert        string
 	TLSKey         string
-	AllowedOrigins []string // Allowed CORS origins; if empty, no origin is reflected
+	AllowedOrigins []string                 // Allowed CORS origins; if empty, no origin is reflected
 	RateLimits     *EndpointRateLimitConfig // Per-endpoint rate limits; nil disables
 }
 

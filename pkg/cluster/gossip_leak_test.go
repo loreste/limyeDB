@@ -11,8 +11,8 @@ import (
 // mockTransport implements Transport for testing without network I/O.
 type mockTransport struct{}
 
-func (m *mockTransport) Start() error                                                  { return nil }
-func (m *mockTransport) Stop() error                                                   { return nil }
+func (m *mockTransport) Start() error { return nil }
+func (m *mockTransport) Stop() error  { return nil }
 func (m *mockTransport) Send(_ context.Context, _ string, msg *Message) (*Message, error) {
 	// Return an ack so callers don't block.
 	return &Message{Type: "ack"}, nil

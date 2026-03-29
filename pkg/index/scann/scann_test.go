@@ -292,7 +292,7 @@ func TestScaNNSearchAfterTraining(t *testing.T) {
 		t.Error("Expected at least one result")
 	}
 
-	// After exact reranking the nearest neighbour should be the query itself
+	// After exact reranking the nearest neighbor should be the query itself
 	// (distance 0) or very close.  Allow a small tolerance for floating-point
 	// arithmetic in the distance calculator.
 	if results[0].Distance > 0.001 {
