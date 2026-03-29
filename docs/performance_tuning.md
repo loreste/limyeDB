@@ -1,6 +1,20 @@
 # LimyeDB Performance Tuning Guide
 
-This guide covers best practices for optimizing LimyeDB performance across different workloads and deployment scenarios.
+LimyeDB delivers **sub-millisecond P99 latency** out of the box, but understanding its tuning parameters unlocks even better performance for your specific workload. This guide covers optimization strategies for throughput, latency, recall, and cost efficiency.
+
+## Why LimyeDB is Fast
+
+Before diving into tuning, understand why LimyeDB achieves its performance:
+
+| Technology | Benefit |
+|------------|---------|
+| **Zero-Allocation HNSW** | No GC pauses—memory-mapped graph traversal bypasses Go's heap |
+| **SIMD Distance Calculations** | ARM NEON and x86 AVX2/AVX-512 accelerated operations |
+| **Lock-Free Concurrent Reads** | Multiple queries execute simultaneously without contention |
+| **Memory-Mapped NVMe** | Direct I/O to SSD without kernel buffer copies |
+| **DiskANN Vamana Graphs** | Billion-scale search without loading everything into RAM |
+
+---
 
 ## Table of Contents
 

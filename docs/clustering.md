@@ -1,6 +1,21 @@
-# LimyeDB Clustering & Distributed Consensus
+# LimyeDB Clustering & High Availability
 
-LimyeDB utilizes HashiCorp's Raft implementation to achieve strongly-consistent replication across a network of vector database nodes. It provides highly available, fault-tolerant vector storage natively.
+LimyeDB provides **production-grade distributed clustering** without external dependencies. While other vector databases require etcd, ZooKeeper, or Consul for coordination, LimyeDB includes everything you need in a single binary.
+
+## Why LimyeDB Clustering is Different
+
+| Feature | LimyeDB | Alternatives |
+|---------|---------|--------------|
+| **Self-contained** | No external coordinators needed | Requires etcd, ZooKeeper, or Consul |
+| **Raft Consensus** | Built-in strong consistency | Often requires external setup |
+| **SWIM Gossip** | Automatic failure detection | Manual health checks |
+| **Auto-Discovery** | Native Kubernetes DNS integration | Sidecar or operator required |
+| **Replication** | Configurable per collection | Global or none |
+| **Deployment** | Single binary per node | Multiple services to manage |
+
+LimyeDB utilizes a hybrid clustering architecture combining Raft for strong consistency and SWIM gossip for efficient failure detection, achieving highly available, fault-tolerant vector storage with minimal operational overhead.
+
+---
 
 ## The Consensus Model
 

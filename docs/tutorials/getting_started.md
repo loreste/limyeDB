@@ -1,6 +1,18 @@
 # Getting Started with LimyeDB
 
-This tutorial walks you through setting up LimyeDB and performing basic vector operations.
+Welcome to LimyeDB, the **high-performance open-source vector database** designed for AI applications, RAG pipelines, and semantic search. This tutorial walks you through setting up LimyeDB and performing your first vector operations.
+
+## Why LimyeDB for Your AI Application?
+
+Before diving in, here's what makes LimyeDB the ideal choice for your vector search needs:
+
+- **Zero-Configuration Start**: Single binary, no dependencies—run `./limyedb` and you're ready
+- **Sub-Millisecond Latency**: Zero-allocation HNSW delivers consistent P99 performance
+- **Native Hybrid Search**: Combine semantic (dense) and keyword (sparse/BM25) search in one query
+- **Production-Ready Security**: JWT auth, RBAC, TLS, and multi-tenancy built-in
+- **Scale as You Grow**: From laptop prototype to billion-vector cluster without changing your code
+
+---
 
 ## Table of Contents
 

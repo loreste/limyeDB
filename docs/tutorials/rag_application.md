@@ -1,6 +1,21 @@
 # Building RAG Applications with LimyeDB
 
-This tutorial guides you through building a Retrieval-Augmented Generation (RAG) application using LimyeDB as the vector store.
+This tutorial guides you through building a production-grade **Retrieval-Augmented Generation (RAG)** application using LimyeDB as the vector store.
+
+## Why LimyeDB for RAG?
+
+LimyeDB was specifically designed for RAG and LLM applications:
+
+| Feature | RAG Benefit |
+|---------|-------------|
+| **Sub-millisecond latency** | Real-time conversational AI without lag |
+| **Native hybrid search** | Better retrieval combining semantic + keyword matching |
+| **Auto-embedding orchestration** | Skip ETL—send text directly, receive indexed vectors |
+| **Production security** | Multi-tenant isolation for SaaS RAG products |
+| **Billion-scale DiskANN** | Handle enterprise document collections affordably |
+| **Metadata filtering** | Scope retrieval by user, date, category, permissions |
+
+---
 
 ## Table of Contents
 

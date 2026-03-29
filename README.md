@@ -12,6 +12,247 @@ LimyeDB distinguishes itself by natively supporting **Hybrid Search**—combinin
 
 ---
 
+## Why LimyeDB? The Vector Database Built for Production AI
+
+### The Challenge with Existing Vector Databases
+
+The explosive growth of **Large Language Models (LLMs)**, **Retrieval-Augmented Generation (RAG)**, and **AI-powered search** has created unprecedented demand for vector databases. Yet teams building production AI systems consistently face the same frustrations:
+
+#### Vendor Lock-in and Unpredictable Costs
+Proprietary vector database services like **Pinecone** charge based on vector storage and queries, leading to bills that scale unpredictably as your AI application grows. Open-source alternatives often follow an "open core" model where critical features—clustering, security, enterprise support—are paywalled. Organizations building mission-critical AI infrastructure deserve better than hoping their vendor's pricing stays reasonable.
+
+#### Operational Complexity
+Solutions like **Milvus** require deploying etcd, MinIO, Pulsar, and multiple coordinator services before you can store a single vector. **Weaviate** and **Qdrant** simplify deployment but still demand careful tuning for production workloads. Teams end up spending more time managing infrastructure than building AI features.
+
+#### The Performance Trade-off Trap
+Vector databases force painful compromises:
+- **In-memory indexes** (like standard HNSW) deliver sub-millisecond latency but limit dataset size to available RAM
+- **Disk-based solutions** scale larger but introduce 10-100x latency penalties
+- **Managed services** abstract complexity but add network round-trips and throttling
+- **JVM-based systems** suffer garbage collection pauses that destroy P99 latencies
+
+#### Missing Features for Real-World AI Applications
+Production AI systems need more than just vector search:
+- **Hybrid search** combining semantic similarity with keyword matching for better relevance
+- **Multi-tenancy** for SaaS products serving multiple customers
+- **Real-time subscriptions** for reactive user interfaces
+- **Built-in embedding** to avoid separate ETL pipelines
+- **Enterprise security** including RBAC, encryption, and audit logging
+
+Getting all of this typically means stitching together multiple systems—each with its own failure modes, version conflicts, and operational overhead.
+
+---
+
+### Our Mission: Production-Grade AI Infrastructure for Everyone
+
+**LimyeDB was created to prove that powerful doesn't have to mean complicated.**
+
+We built the vector database we wished existed: one that a solo developer can run on a laptop for prototyping, yet scales horizontally to handle billions of vectors across a globally distributed cluster. One that delivers enterprise-grade capabilities without enterprise-grade complexity or cost.
+
+---
+
+### What Makes LimyeDB the Best Open Source Vector Database
+
+#### 🚀 Single Binary Deployment — No Dependencies, No DevOps Nightmare
+
+LimyeDB compiles to a **single statically-linked Go binary**. No JVM tuning. No external PostgreSQL, etcd, or Redis instances. No message queues. No container orchestration required for basic deployments.
+
+```bash
+# That's it. You now have a production-ready vector database.
+./limyedb -data ./my-vectors -rest :8080
+```
+
+This isn't just convenience—it's **operational sanity**. Fewer moving parts means fewer failure modes, simpler debugging, and faster disaster recovery.
+
+#### ⚡ Zero-Allocation HNSW — Consistent Sub-Millisecond Latency
+
+Most vector databases written in Go or Java suffer from **garbage collection pauses** that spike P99 latencies from 2ms to 200ms+ unpredictably. LimyeDB's HNSW implementation takes a radically different approach:
+
+- **Memory-mapped NVMe storage** bypasses Go's heap entirely
+- **Zero-allocation graph traversal** means no GC pressure during searches
+- **Lock-free concurrent reads** enable massive query parallelism
+- **SIMD-accelerated distance calculations** on ARM64 (NEON) and x86-64 (AVX2)
+
+The result: **consistent sub-millisecond P99 latencies** that don't degrade under load. Your real-time AI applications stay responsive.
+
+#### 🔍 Native Hybrid Search — Semantic + Keyword in One Query
+
+While other vector databases bolt on keyword search as an afterthought, **LimyeDB was architected from day one for hybrid retrieval**:
+
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| Dense Vectors | HNSW / DiskANN / IVF / ScaNN | Semantic similarity search |
+| Sparse Vectors | BM25 / SPLADE | Keyword and lexical matching |
+| Fusion | Reciprocal Rank Fusion (RRF) | Mathematically optimal result merging |
+
+This matters because **pure vector search fails on proper nouns, product codes, and exact phrases**. Hybrid search delivers better relevance for real-world queries without requiring multiple systems or post-processing.
+
+```bash
+# Single query combining semantic understanding with keyword precision
+curl -X POST http://localhost:8080/collections/docs/search \
+  -d '{
+    "vector": [0.1, 0.2, ...],
+    "sparse_query": {"indices": [101, 403], "values": [2.4, 0.8]},
+    "limit": 10
+  }'
+```
+
+#### 📊 Billion-Scale Vector Search with DiskANN
+
+Not every organization can afford to keep billions of vectors in RAM. LimyeDB's **DiskANN Vamana implementation** enables:
+
+- **SSD-resident graph indexes** that search billion-vector datasets
+- **10-100x lower infrastructure costs** compared to in-memory solutions
+- **Configurable memory/latency trade-offs** for your specific requirements
+- **Seamless tiering** between hot (RAM) and warm (SSD) data
+
+Run the same vector operations on a $50/month VPS that would require a $5,000/month high-memory instance with RAM-only solutions.
+
+#### 🏢 Enterprise-Ready Multi-Tenancy and RBAC
+
+Building a multi-tenant AI SaaS? LimyeDB provides **first-class tenant isolation**:
+
+- **Tenant-scoped collections** with complete data separation
+- **Role-Based Access Control (RBAC)** with granular permissions
+- **Resource quotas** per tenant (vectors, storage, query rate)
+- **JWT authentication** with configurable claims
+- **API key management** with automatic rotation
+
+No need to deploy separate database instances per customer or build isolation logic in your application layer.
+
+#### 🔒 Security-Hardened from the Ground Up
+
+AI systems increasingly process sensitive data—customer conversations, proprietary documents, personal information. LimyeDB implements **defense-in-depth security**:
+
+| Protection | Implementation |
+|------------|----------------|
+| Authentication | Bearer tokens, API keys, JWT with RBAC |
+| Encryption | TLS 1.3, mTLS for inter-node communication |
+| Timing Attack Prevention | Constant-time token comparison (`crypto/subtle`) |
+| SSRF Protection | Webhook URL validation against private IP ranges |
+| SQL Injection Prevention | Parameterized queries with escaped LIKE patterns |
+| Path Traversal Prevention | Sanitized paths with Zip Slip protection |
+| Decompression Bombs | Size limits on archive extraction |
+| Cryptographic Randomness | `crypto/rand` for all security-sensitive operations |
+
+#### 🤖 Automatic Embedding Orchestration
+
+Skip the ETL pipeline. LimyeDB integrates directly with embedding providers:
+
+```bash
+# Send text, receive indexed vectors
+curl -X POST http://localhost:8080/collections/docs/auto-embed \
+  -d '{
+    "provider": "openai",
+    "model": "text-embedding-3-small",
+    "api_key": "sk-...",
+    "points": [
+      {"id": "doc1", "payload": {"content": "Your text here"}}
+    ]
+  }'
+```
+
+**Supported Providers:**
+- OpenAI (text-embedding-3-small, text-embedding-3-large, ada-002)
+- Cohere (embed-english-v3.0, embed-multilingual-v3.0)
+- Google Vertex AI
+- Local models via HTTP endpoints
+
+#### 🗄️ SQL-Like Query Interface
+
+No proprietary DSL to learn. Query your vectors with familiar SQL syntax:
+
+```sql
+SELECT * FROM documents
+NEAREST TO [0.1, 0.2, 0.3, ...]
+WHERE category = "technology" AND price < 100
+LIMIT 10
+```
+
+#### 🌐 Distributed Clustering for High Availability
+
+Scale horizontally with LimyeDB's **hybrid clustering architecture**:
+
+- **Raft Consensus** for strongly consistent metadata operations
+- **SWIM Gossip Protocol** for efficient failure detection
+- **Consistent Hashing** for data distribution across nodes
+- **Automatic Rebalancing** when nodes join or leave
+- **Configurable Replication** for durability guarantees
+
+Deploy a 3-node cluster for high availability or scale to dozens of nodes for massive throughput.
+
+#### 📈 Production Observability Built-In
+
+Monitor everything with native integrations:
+
+- **Prometheus Metrics** at `/metrics` (latencies, throughput, index stats)
+- **OpenTelemetry Tracing** for distributed request tracking
+- **Structured JSON Logging** with configurable levels
+- **Health and Readiness Endpoints** for Kubernetes probes
+- **Grafana Dashboard** included in the repository
+
+#### 🆓 Truly Open Source — No Bait-and-Switch
+
+LimyeDB is released under **GPL v3**. Everything is open:
+
+- ✅ Clustering and high availability
+- ✅ Multi-tenancy and RBAC
+- ✅ All index types (HNSW, DiskANN, IVF, ScaNN)
+- ✅ Hybrid search with BM25
+- ✅ Auto-embedding orchestration
+- ✅ Backup and restore
+- ✅ TLS and security features
+- ✅ Observability integrations
+
+No "enterprise edition" holding features hostage. No phone call required to get pricing. Fork it, modify it, self-host it.
+
+---
+
+### LimyeDB vs. Other Vector Databases
+
+| Feature | LimyeDB | Pinecone | Qdrant | Milvus | Weaviate |
+|---------|---------|----------|--------|--------|----------|
+| **Open Source** | ✅ GPL v3 | ❌ Proprietary | ✅ Apache 2.0 | ✅ Apache 2.0 | ✅ BSD-3 |
+| **Single Binary** | ✅ | N/A (SaaS) | ✅ | ❌ (etcd, MinIO, Pulsar) | ✅ |
+| **Native Hybrid Search** | ✅ BM25 + Dense | ✅ | ⚠️ Sparse only | ✅ | ✅ |
+| **DiskANN (Billion-scale SSD)** | ✅ | ❌ | ❌ | ✅ | ❌ |
+| **Zero-GC HNSW** | ✅ mmap | N/A | ❌ | ❌ | ❌ |
+| **Built-in Multi-Tenancy** | ✅ | ✅ | ⚠️ Limited | ✅ | ✅ |
+| **Auto-Embedding** | ✅ | ❌ | ❌ | ❌ | ✅ |
+| **SQL Interface** | ✅ | ❌ | ❌ | ✅ | ✅ GraphQL |
+| **ColBERT MaxSim** | ✅ | ❌ | ✅ | ❌ | ❌ |
+| **Self-Hosted** | ✅ | ❌ | ✅ | ✅ | ✅ |
+| **Predictable Pricing** | ✅ Free | ❌ | ✅ | ✅ | ⚠️ |
+
+---
+
+### Who Should Use LimyeDB?
+
+#### AI/ML Engineers Building RAG Pipelines
+You need reliable, low-latency vector retrieval without becoming a database administrator. LimyeDB's single-binary deployment and automatic embedding let you focus on your AI application, not infrastructure.
+
+#### Startups Shipping AI Products
+You can't afford a dedicated DevOps team or unpredictable SaaS bills. LimyeDB gives you production-grade vector search that runs on a single VPS today and scales to a cluster tomorrow.
+
+#### Enterprises Requiring Vendor Independence
+You need to audit your infrastructure, comply with data residency requirements, and avoid lock-in. LimyeDB is fully self-hostable with no call-home telemetry.
+
+#### Platform Teams Building Multi-Tenant AI SaaS
+You need tenant isolation, usage quotas, and RBAC without building it yourself. LimyeDB's native multi-tenancy handles the hard parts.
+
+#### Researchers and Educators
+You want a performant vector database you can understand, modify, and extend. LimyeDB's clean Go codebase and comprehensive documentation make it hackable.
+
+---
+
+### The Bottom Line
+
+LimyeDB exists because **the foundational infrastructure for AI should be accessible to everyone**—not just organizations with deep pockets, large ops teams, or willingness to accept vendor lock-in.
+
+We built the vector database we wished existed. Now it's yours to use.
+
+---
+
 ## Table of Contents
 
 - [Key Features](#key-features)
