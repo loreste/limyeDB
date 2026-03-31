@@ -20,20 +20,20 @@ type Index struct {
 }
 
 // NewIndex creates a new payload index using an SQLite backend
-func NewIndex(dbPath string) *Index {
+func NewIndex(dbPath string) (*Index, error) {
 	if dbPath == "" {
 		dbPath = "file::memory:?cache=shared"
 	} else {
 		// Sanitize path and create directory with restrictive permissions
 		dbPath = filepath.Clean(dbPath)
 		if err := os.MkdirAll(filepath.Dir(dbPath), 0750); err != nil {
-			panic(fmt.Errorf("failed to create payload index directory: %w", err))
+			return nil, fmt.Errorf("failed to create payload index directory: %w", err)
 		}
 	}
 
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
-		panic(fmt.Errorf("failed to open sqlite payload index: %w", err))
+		return nil, fmt.Errorf("failed to open sqlite payload index: %w", err)
 	}
 
 	// Create a generic EAV table containing JSON data universally
@@ -44,13 +44,14 @@ func NewIndex(dbPath string) *Index {
 		);
 	`)
 	if err != nil {
-		panic(fmt.Errorf("failed to initialize payloads table: %w", err))
+		_ = db.Close()
+		return nil, fmt.Errorf("failed to initialize payloads table: %w", err)
 	}
 
 	return &Index{
 		db:            db,
 		indexedFields: make(map[string]IndexType),
-	}
+	}, nil
 }
 
 // Close closes the underlying SQLite database connection.

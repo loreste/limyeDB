@@ -99,13 +99,18 @@ func NewShard(cfg *ShardConfig) (*Shard, error) {
 		return nil, err
 	}
 
+	payloadIdx, err := payload.NewIndex("")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create payload index: %w", err)
+	}
+
 	shard := &Shard{
 		ID:           cfg.ID,
 		CollectionID: cfg.CollectionID,
 		State:        ShardStateInitializing,
 		IsPrimary:    true,
 		index:        index,
-		payloadIndex: payload.NewIndex(""),
+		payloadIndex: payloadIdx,
 		config:       cfg.VectorConfig,
 		createdAt:    time.Now(),
 		updatedAt:    time.Now(),

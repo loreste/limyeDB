@@ -47,10 +47,15 @@ func New(cfg *config.CollectionConfig) (*Collection, error) {
 		return nil, err
 	}
 
+	payloadIdx, err := payload.NewIndex(filepath.Join("./data", cfg.Name, "payload.db"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create payload index: %w", err)
+	}
+
 	c := &Collection{
 		config:       cfg,
 		indices:      make(map[string]*hnsw.HNSW),
-		payloadIndex: payload.NewIndex(filepath.Join("./data", cfg.Name, "payload.db")),
+		payloadIndex: payloadIdx,
 		sparseIdx:    sparse.NewInvertedIndex(),
 		distCalcs:    make(map[string]distance.Calculator),
 		createdAt:    time.Now(),

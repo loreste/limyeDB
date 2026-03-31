@@ -10,7 +10,10 @@ import (
 
 func TestScalarQuantizer(t *testing.T) {
 	dim := 128
-	q := NewScalarQuantizer(dim, 0.99)
+	q, err := NewScalarQuantizer(dim, 0.99)
+	if err != nil {
+		t.Fatalf("NewScalarQuantizer failed: %v", err)
+	}
 
 	// Generate training vectors
 	vectors := make([]point.Vector, 1000)
@@ -22,7 +25,7 @@ func TestScalarQuantizer(t *testing.T) {
 	}
 
 	// Train
-	err := q.Train(vectors)
+	err = q.Train(vectors)
 	if err != nil {
 		t.Fatalf("Train failed: %v", err)
 	}
@@ -63,7 +66,10 @@ func TestScalarQuantizer(t *testing.T) {
 
 func TestBinaryQuantizer(t *testing.T) {
 	dim := 128
-	q := NewBinaryQuantizer(dim)
+	q, err := NewBinaryQuantizer(dim)
+	if err != nil {
+		t.Fatalf("NewBinaryQuantizer failed: %v", err)
+	}
 
 	// Generate training vectors
 	vectors := make([]point.Vector, 1000)
@@ -75,7 +81,7 @@ func TestBinaryQuantizer(t *testing.T) {
 	}
 
 	// Train
-	err := q.Train(vectors)
+	err = q.Train(vectors)
 	if err != nil {
 		t.Fatalf("Train failed: %v", err)
 	}
@@ -175,7 +181,10 @@ func TestProductQuantizer(t *testing.T) {
 
 func TestBatchDistance(t *testing.T) {
 	dim := 128
-	q := NewScalarQuantizer(dim, 0.99)
+	q, err := NewScalarQuantizer(dim, 0.99)
+	if err != nil {
+		t.Fatalf("NewScalarQuantizer failed: %v", err)
+	}
 
 	// Generate training vectors
 	vectors := make([]point.Vector, 100)
@@ -208,9 +217,46 @@ func TestBatchDistance(t *testing.T) {
 	}
 }
 
+func TestNewScalarQuantizerInvalidDimension(t *testing.T) {
+	// Test zero dimension
+	_, err := NewScalarQuantizer(0, 0.99)
+	if err == nil {
+		t.Error("Expected error for zero dimension")
+	}
+
+	// Test negative dimension
+	_, err = NewScalarQuantizer(-1, 0.99)
+	if err == nil {
+		t.Error("Expected error for negative dimension")
+	}
+
+	// Test too large dimension
+	_, err = NewScalarQuantizer(100000, 0.99)
+	if err == nil {
+		t.Error("Expected error for too large dimension")
+	}
+}
+
+func TestNewBinaryQuantizerInvalidDimension(t *testing.T) {
+	// Test zero dimension
+	_, err := NewBinaryQuantizer(0)
+	if err == nil {
+		t.Error("Expected error for zero dimension")
+	}
+
+	// Test negative dimension
+	_, err = NewBinaryQuantizer(-1)
+	if err == nil {
+		t.Error("Expected error for negative dimension")
+	}
+}
+
 func BenchmarkScalarEncode(b *testing.B) {
 	dim := 128
-	q := NewScalarQuantizer(dim, 0.99)
+	q, err := NewScalarQuantizer(dim, 0.99)
+	if err != nil {
+		b.Fatalf("NewScalarQuantizer failed: %v", err)
+	}
 
 	vectors := make([]point.Vector, 1000)
 	for i := range vectors {
@@ -231,7 +277,10 @@ func BenchmarkScalarEncode(b *testing.B) {
 
 func BenchmarkBinaryEncode(b *testing.B) {
 	dim := 128
-	q := NewBinaryQuantizer(dim)
+	q, err := NewBinaryQuantizer(dim)
+	if err != nil {
+		b.Fatalf("NewBinaryQuantizer failed: %v", err)
+	}
 
 	vectors := make([]point.Vector, 1000)
 	for i := range vectors {
@@ -252,7 +301,10 @@ func BenchmarkBinaryEncode(b *testing.B) {
 
 func BenchmarkBinaryDistance(b *testing.B) {
 	dim := 1024 // Higher dimension to show popcount benefits
-	q := NewBinaryQuantizer(dim)
+	q, err := NewBinaryQuantizer(dim)
+	if err != nil {
+		b.Fatalf("NewBinaryQuantizer failed: %v", err)
+	}
 
 	vectors := make([]point.Vector, 1000)
 	for i := range vectors {

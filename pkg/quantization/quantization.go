@@ -83,9 +83,9 @@ func New(cfg *Config, dimension int) (Quantizer, error) {
 	case TypeNone:
 		return NewNoneQuantizer(dimension), nil
 	case TypeScalar:
-		return NewScalarQuantizer(dimension, cfg.ScalarQuantile), nil
+		return NewScalarQuantizer(dimension, cfg.ScalarQuantile)
 	case TypeBinary:
-		return NewBinaryQuantizer(dimension), nil
+		return NewBinaryQuantizer(dimension)
 	case TypePQ:
 		return NewProductQuantizer(dimension, cfg.PQSegments, cfg.PQCentroids), nil
 	default:
@@ -173,10 +173,13 @@ type ScalarQuantizer struct {
 // maxDimension is the maximum allowed vector dimension to prevent uncontrolled allocation.
 const maxDimension = 65536
 
+// ErrInvalidDimension is returned when the dimension is out of valid range
+var ErrInvalidDimension = errors.New("invalid dimension: must be between 1 and 65536")
+
 // NewScalarQuantizer creates a new scalar quantizer
-func NewScalarQuantizer(dimension int, quantile float32) *ScalarQuantizer {
+func NewScalarQuantizer(dimension int, quantile float32) (*ScalarQuantizer, error) {
 	if dimension <= 0 || dimension > maxDimension {
-		panic(fmt.Sprintf("invalid dimension %d: must be between 1 and %d", dimension, maxDimension))
+		return nil, fmt.Errorf("%w: got %d", ErrInvalidDimension, dimension)
 	}
 	return &ScalarQuantizer{
 		dimension: dimension,
@@ -184,7 +187,7 @@ func NewScalarQuantizer(dimension int, quantile float32) *ScalarQuantizer {
 		mins:      make([]float32, dimension),
 		maxs:      make([]float32, dimension),
 		scales:    make([]float32, dimension),
-	}
+	}, nil
 }
 
 // Train calibrates the quantizer on sample vectors
@@ -343,14 +346,14 @@ type BinaryQuantizer struct {
 }
 
 // NewBinaryQuantizer creates a new binary quantizer
-func NewBinaryQuantizer(dimension int) *BinaryQuantizer {
+func NewBinaryQuantizer(dimension int) (*BinaryQuantizer, error) {
 	if dimension <= 0 || dimension > maxDimension {
-		panic(fmt.Sprintf("invalid dimension %d: must be between 1 and %d", dimension, maxDimension))
+		return nil, fmt.Errorf("%w: got %d", ErrInvalidDimension, dimension)
 	}
 	return &BinaryQuantizer{
 		dimension:  dimension,
 		thresholds: make([]float32, dimension),
-	}
+	}, nil
 }
 
 // Train calculates thresholds from sample vectors

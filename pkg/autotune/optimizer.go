@@ -101,11 +101,17 @@ func NewAutoTuner(cfg *AutoTunerConfig) *AutoTuner {
 		cfg = DefaultAutoTunerConfig()
 	}
 
+	// Ensure maxSamples is at least 1 to prevent slice bounds errors
+	maxSamples := cfg.MaxSamples
+	if maxSamples < 1 {
+		maxSamples = 1
+	}
+
 	return &AutoTuner{
 		params:          cfg.InitialParams,
 		stats:           &QueryStats{},
-		latencies:       make([]float64, 0, cfg.MaxSamples),
-		maxSamples:      cfg.MaxSamples,
+		latencies:       make([]float64, 0, maxSamples),
+		maxSamples:      maxSamples,
 		goal:            cfg.Goal,
 		targetLatencyMs: cfg.TargetLatencyMs,
 		minRecall:       cfg.MinRecall,
@@ -119,8 +125,8 @@ func (t *AutoTuner) RecordQuery(latencyMs float64, recall float64) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// Update latencies
-	if len(t.latencies) >= t.maxSamples {
+	// Update latencies (guard against empty slices and invalid maxSamples)
+	if t.maxSamples > 0 && len(t.latencies) >= t.maxSamples && len(t.latencies) > 0 {
 		t.latencies = t.latencies[1:]
 	}
 	t.latencies = append(t.latencies, latencyMs)

@@ -26,7 +26,10 @@ func BenchmarkQuantizationEncode(b *testing.B) {
 
 	for _, dim := range dimensions {
 		b.Run(fmt.Sprintf("Scalar_Dim%d", dim), func(b *testing.B) {
-			q := quantization.NewScalarQuantizer(dim, 0.99)
+			q, err := quantization.NewScalarQuantizer(dim, 0.99)
+			if err != nil {
+				b.Fatalf("NewScalarQuantizer failed: %v", err)
+			}
 
 			// Generate training data
 			rng := rand.New(rand.NewSource(42))
@@ -66,7 +69,10 @@ func BenchmarkQuantizationDecode(b *testing.B) {
 
 	for _, dim := range dimensions {
 		b.Run(fmt.Sprintf("Scalar_Dim%d", dim), func(b *testing.B) {
-			q := quantization.NewScalarQuantizer(dim, 0.99)
+			q, err := quantization.NewScalarQuantizer(dim, 0.99)
+			if err != nil {
+				b.Fatalf("NewScalarQuantizer failed: %v", err)
+			}
 
 			rng := rand.New(rand.NewSource(42))
 			trainingData := make([][]float32, 1000)
@@ -108,7 +114,10 @@ func BenchmarkQuantizationDistance(b *testing.B) {
 
 	for _, dim := range dimensions {
 		b.Run(fmt.Sprintf("Scalar_Dim%d", dim), func(b *testing.B) {
-			q := quantization.NewScalarQuantizer(dim, 0.99)
+			q, err := quantization.NewScalarQuantizer(dim, 0.99)
+			if err != nil {
+				b.Fatalf("NewScalarQuantizer failed: %v", err)
+			}
 
 			rng := rand.New(rand.NewSource(42))
 			trainingData := make([][]float32, 1000)
@@ -201,7 +210,10 @@ func BenchmarkQuantizedVsUnquantizedSearch(b *testing.B) {
 	})
 
 	b.Run("ScalarQuantized", func(b *testing.B) {
-		q := quantization.NewScalarQuantizer(dimension, 0.99)
+		q, err := quantization.NewScalarQuantizer(dimension, 0.99)
+		if err != nil {
+			b.Fatalf("NewScalarQuantizer failed: %v", err)
+		}
 
 		// Train quantizer
 		trainingData := toPointVectors(vectors[:min(10000, len(vectors))])
@@ -271,7 +283,10 @@ func BenchmarkQuantizationMemory(b *testing.B) {
 	})
 
 	b.Run("ScalarQuantized", func(b *testing.B) {
-		q := quantization.NewScalarQuantizer(dimension, 0.99)
+		q, err := quantization.NewScalarQuantizer(dimension, 0.99)
+		if err != nil {
+			b.Fatalf("NewScalarQuantizer failed: %v", err)
+		}
 
 		trainingData := toPointVectors(vectors[:min(1000, len(vectors))])
 		if err := q.Train(trainingData); err != nil {

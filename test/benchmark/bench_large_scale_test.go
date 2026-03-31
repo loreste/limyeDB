@@ -302,7 +302,10 @@ func BenchmarkLargeScaleQuantized(b *testing.B) {
 	})
 
 	b.Run("ScalarQuantization", func(b *testing.B) {
-		q := quantization.NewScalarQuantizer(dimension, 0.99)
+		q, err := quantization.NewScalarQuantizer(dimension, 0.99)
+		if err != nil {
+			b.Fatalf("NewScalarQuantizer failed: %v", err)
+		}
 		trainingSlice := vectors[:min(10000, len(vectors))]
 		trainingData := make([]point.Vector, len(trainingSlice))
 		for i, v := range trainingSlice {

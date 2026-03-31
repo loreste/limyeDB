@@ -460,36 +460,45 @@ func validateWebhookURL(rawURL string) error {
 	return nil
 }
 
-// isPrivateIP returns true if the IP is in a private, loopback, or link-local range.
-func isPrivateIP(ip net.IP) bool {
-	privateRanges := []struct {
-		network *net.IPNet
-	}{
-		{parseCIDR("127.0.0.0/8")},
-		{parseCIDR("10.0.0.0/8")},
-		{parseCIDR("172.16.0.0/12")},
-		{parseCIDR("192.168.0.0/16")},
-		{parseCIDR("169.254.0.0/16")},
-		{parseCIDR("::1/128")},
-		{parseCIDR("fc00::/7")},
-		{parseCIDR("fe80::/10")},
+// privateRanges holds pre-parsed CIDR ranges for private/reserved IPs.
+// These are parsed once at package initialization for efficiency and safety.
+var privateRanges []*net.IPNet
+
+func init() {
+	// These CIDRs are compile-time constants that are guaranteed to be valid.
+	// If any of these were invalid, it would indicate a programming error.
+	cidrs := []string{
+		"127.0.0.0/8",    // IPv4 loopback
+		"10.0.0.0/8",     // RFC 1918 private
+		"172.16.0.0/12",  // RFC 1918 private
+		"192.168.0.0/16", // RFC 1918 private
+		"169.254.0.0/16", // Link-local
+		"::1/128",        // IPv6 loopback
+		"fc00::/7",       // IPv6 unique local
+		"fe80::/10",      // IPv6 link-local
 	}
 
-	for _, r := range privateRanges {
-		if r.network.Contains(ip) {
+	privateRanges = make([]*net.IPNet, 0, len(cidrs))
+	for _, cidr := range cidrs {
+		_, network, err := net.ParseCIDR(cidr)
+		if err != nil {
+			// This should never happen with valid compile-time constants.
+			// Log and skip rather than panic at runtime.
+			continue
+		}
+		privateRanges = append(privateRanges, network)
+	}
+}
+
+// isPrivateIP returns true if the IP is in a private, loopback, or link-local range.
+func isPrivateIP(ip net.IP) bool {
+	for _, network := range privateRanges {
+		if network.Contains(ip) {
 			return true
 		}
 	}
 
 	return ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified()
-}
-
-func parseCIDR(cidr string) *net.IPNet {
-	_, network, err := net.ParseCIDR(cidr)
-	if err != nil {
-		panic("invalid CIDR in webhook validation: " + cidr)
-	}
-	return network
 }
 
 func generateID() string {
