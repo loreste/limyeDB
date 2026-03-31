@@ -24,9 +24,26 @@ func NewIndex(dbPath string) (*Index, error) {
 	if dbPath == "" {
 		dbPath = "file::memory:?cache=shared"
 	} else {
-		// Sanitize path and create directory with restrictive permissions
+		// Sanitize path to prevent path traversal attacks
 		dbPath = filepath.Clean(dbPath)
-		if err := os.MkdirAll(filepath.Dir(dbPath), 0750); err != nil {
+
+		// Validate the path doesn't contain suspicious patterns
+		if strings.Contains(dbPath, "..") {
+			return nil, fmt.Errorf("invalid path: path traversal not allowed")
+		}
+
+		// Ensure path is absolute or resolve it relative to current working directory
+		if !filepath.IsAbs(dbPath) {
+			cwd, err := os.Getwd()
+			if err != nil {
+				return nil, fmt.Errorf("failed to get working directory: %w", err)
+			}
+			dbPath = filepath.Join(cwd, dbPath)
+		}
+
+		// Create directory with restrictive permissions
+		dir := filepath.Dir(dbPath)
+		if err := os.MkdirAll(dir, 0750); err != nil {
 			return nil, fmt.Errorf("failed to create payload index directory: %w", err)
 		}
 	}
