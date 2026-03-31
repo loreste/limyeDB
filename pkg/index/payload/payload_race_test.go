@@ -85,7 +85,7 @@ func TestRaceFilter(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < ops; i++ {
-				filter := Field("category", Eq(i % 5))
+				filter := Field("category", Eq(i%5))
 				_ = idx.Filter(filter)
 			}
 		}()

@@ -12,15 +12,14 @@ import (
 type GraphStorage struct {
 	path      string
 	file      *os.File
-	data      []byte
 	mu        sync.RWMutex
 	dimension int
 	maxDegree int
 
 	// Header offsets
-	headerSize  int
-	nodeSize    int
-	vectorSize  int
+	headerSize   int
+	nodeSize     int
+	vectorSize   int
 	neighborsOff int
 }
 
@@ -42,12 +41,12 @@ type StorageConfig struct {
 // 32+:   Node data
 
 const (
-	magicNumber     = 0x44414E4E
-	storageVersion  = 1
-	headerSize      = 64
-	nodeIDSize      = 4
-	vectorElemSize  = 4
-	neighborSize    = 4
+	magicNumber    = 0x44414E4E
+	storageVersion = 1
+	headerSize     = 64
+	nodeIDSize     = 4
+	vectorElemSize = 4
+	neighborSize   = 4
 )
 
 // OpenStorage opens or creates graph storage

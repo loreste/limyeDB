@@ -50,7 +50,8 @@ func (g *VamanaGraph) BeamSearch(query point.Vector, L int) []Candidate {
 
 	for candidates.Len() > 0 {
 		// Get closest unvisited candidate
-		curr := heap.Pop(candidates).(Candidate)
+		currVal := heap.Pop(candidates)
+		curr, _ := currVal.(Candidate)
 
 		// Early termination: if current is worse than worst in results and we have L results
 		if results.Len() >= L && curr.Distance > (*results)[0].Distance {
@@ -89,7 +90,8 @@ func (g *VamanaGraph) BeamSearch(query point.Vector, L int) []Candidate {
 	// Convert max-heap to sorted slice
 	result := make([]Candidate, results.Len())
 	for i := len(result) - 1; i >= 0; i-- {
-		result[i] = heap.Pop(results).(Candidate)
+		val := heap.Pop(results)
+		result[i], _ = val.(Candidate)
 	}
 
 	return result
@@ -128,7 +130,8 @@ func (g *VamanaGraph) SearchWithFilter(query point.Vector, params *SearchParams)
 	heap.Push(results, Candidate{ID: g.entryNode, Distance: entryDist})
 
 	for candidates.Len() > 0 && len(filteredResults) < params.K*2 {
-		curr := heap.Pop(candidates).(Candidate)
+		currVal := heap.Pop(candidates)
+		curr, _ := currVal.(Candidate)
 
 		// Check filter
 		node := g.nodes[curr.ID]

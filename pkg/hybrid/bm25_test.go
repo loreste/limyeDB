@@ -267,8 +267,8 @@ func TestBM25SearchScoreOrder(t *testing.T) {
 
 	docs := []*Document{
 		{ID: "doc1", Content: "fox fox fox fox fox"}, // Most occurrences
-		{ID: "doc2", Content: "fox fox fox"},          // Medium
-		{ID: "doc3", Content: "fox"},                  // Least
+		{ID: "doc2", Content: "fox fox fox"},         // Medium
+		{ID: "doc3", Content: "fox"},                 // Least
 	}
 
 	for _, doc := range docs {
