@@ -294,6 +294,7 @@ We built the vector database we wished existed. Now it's yours to use.
 | **DiskANN Vamana Topologies** | Establish highly-connected pure SSD single-layer routing graphs dropping HNSW hierarchical scaling limits perfectly |
 | **Event-Driven Mutators** | Live WebSocket data-streams reacting to vector insertion and clustering algorithms dynamically |
 | **Real-Time Auto-Tuning** | Adapts index parameters dynamically ensuring top 99P recall guarantees continuously in production |
+| **Crash-Safe Persistence** | WAL-based durability with automatic recovery, HNSW metadata persistence, and graceful shutdown |
 
 ### Technical Highlights
 
@@ -1187,6 +1188,48 @@ ws.onmessage = (event) => {
   console.log('Event:', data.type, data.point);
 };
 ```
+
+### Persistence & Recovery
+
+LimyeDB provides crash-safe persistence with minimal data loss:
+
+#### Data Flow
+
+```
+WRITE PATH:
+  Client Insert → WAL.Write() → Collection.Insert() → HNSW.Insert()
+
+STARTUP PATH:
+  main() → LoadCollections() → LoadIndexMetadata() → ReplayWAL() → Ready
+
+SHUTDOWN PATH:
+  Signal → StopServers → SyncWAL → SaveIndexMetadata → Close
+```
+
+#### Configuration
+
+```yaml
+storage:
+  wal:
+    enabled: true
+    dir: "./data/wal"
+    segment_size_mb: 64
+    sync_on_write: true  # fsync after each write for maximum durability
+```
+
+#### Data Loss Analysis
+
+| Scenario | Data Loss |
+|----------|-----------|
+| Clean shutdown | None |
+| Kill -9 (crash) | Last ~1 second (unflushed WAL buffer) |
+| With `sync_on_write: true` | Minimal (OS buffer only) |
+
+#### What Gets Persisted
+
+- **WAL Records**: Every Insert, Delete, and Upsert operation
+- **HNSW Metadata**: Entry point, max level, node connections, deleted flags, ID-to-index mapping
+- **Collection Config**: Stored in `meta.json` per collection
 
 ### Auto-Tuning
 

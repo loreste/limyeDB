@@ -1,6 +1,7 @@
 package collection
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -21,6 +22,7 @@ import (
 	"github.com/limyedb/limyedb/pkg/point"
 	"github.com/limyedb/limyedb/pkg/quantization"
 	"github.com/limyedb/limyedb/pkg/storage/mmap"
+	"github.com/limyedb/limyedb/pkg/storage/wal"
 )
 
 // Collection represents a vector collection
@@ -32,6 +34,7 @@ type Collection struct {
 	sparseIdx    *sparse.InvertedIndex
 	distCalc     distance.Calculator
 	distCalcs    map[string]distance.Calculator // Distance calculators per vector
+	wal          *wal.WAL                       // Write-ahead log for durability
 
 	// Metadata
 	createdAt time.Time
@@ -246,12 +249,33 @@ func (c *Collection) Config() *config.CollectionConfig {
 
 // Insert adds a point to the collection
 func (c *Collection) Insert(p *point.Point) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if err := p.Validate(); err != nil {
 		return err
 	}
+
+	// Write to WAL first (before acquiring lock for better concurrency)
+	if c.wal != nil {
+		data, err := serializePoint(p)
+		if err != nil {
+			return fmt.Errorf("failed to serialize point for WAL: %w", err)
+		}
+		record := &wal.Record{
+			Type:       wal.RecordTypeInsert,
+			Collection: c.config.Name,
+			Data:       data,
+		}
+		if err := c.wal.Write(record); err != nil {
+			return fmt.Errorf("WAL write failed: %w", err)
+		}
+	}
+
+	return c.insertInternal(p)
+}
+
+// insertInternal performs the actual insert without WAL write (used during recovery)
+func (c *Collection) insertInternal(p *point.Point) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	// Default vector (legacy)
 	if c.index != nil && len(p.Vector) > 0 {
@@ -684,9 +708,6 @@ func (c *Collection) SearchV2WithParams(query point.Vector, vectorName string, p
 
 // Upsert inserts or updates a point
 func (c *Collection) Upsert(p *point.Point) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if err := p.Validate(); err != nil {
 		return err
 	}
@@ -694,6 +715,30 @@ func (c *Collection) Upsert(p *point.Point) error {
 	if len(p.Vector) != c.config.Dimension {
 		return ErrDimensionMismatch
 	}
+
+	// Write to WAL first (use Update type for upsert)
+	if c.wal != nil {
+		data, err := serializePoint(p)
+		if err != nil {
+			return fmt.Errorf("failed to serialize point for WAL: %w", err)
+		}
+		record := &wal.Record{
+			Type:       wal.RecordTypeUpdate,
+			Collection: c.config.Name,
+			Data:       data,
+		}
+		if err := c.wal.Write(record); err != nil {
+			return fmt.Errorf("WAL write failed: %w", err)
+		}
+	}
+
+	return c.upsertInternal(p)
+}
+
+// upsertInternal performs the actual upsert without WAL write (used during recovery)
+func (c *Collection) upsertInternal(p *point.Point) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	// Normalize for cosine similarity
 	if c.config.Metric == config.MetricCosine {
@@ -735,6 +780,23 @@ func (c *Collection) Get(id string) (*point.Point, error) {
 
 // Delete removes a point by ID
 func (c *Collection) Delete(id string) error {
+	// Write to WAL first
+	if c.wal != nil {
+		record := &wal.Record{
+			Type:       wal.RecordTypeDelete,
+			Collection: c.config.Name,
+			Data:       []byte(id),
+		}
+		if err := c.wal.Write(record); err != nil {
+			return fmt.Errorf("WAL write failed: %w", err)
+		}
+	}
+
+	return c.deleteInternal(id)
+}
+
+// deleteInternal performs the actual delete without WAL write (used during recovery)
+func (c *Collection) deleteInternal(id string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -1177,4 +1239,79 @@ func (c *Collection) Scroll(params *ScrollParams) (*ScrollResult, error) {
 	}
 
 	return result, nil
+}
+
+// SetWAL sets the WAL instance for the collection
+func (c *Collection) SetWAL(w *wal.WAL) {
+	c.wal = w
+}
+
+// SaveIndexMetadata saves the HNSW index metadata to disk
+func (c *Collection) SaveIndexMetadata(dataDir string) error {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.config.HasNamedVectors() {
+		// Save metadata for each named vector index
+		for name, idx := range c.indices {
+			metaPath := filepath.Join(dataDir, c.config.Name, name, "index.meta")
+			if err := idx.SaveMetadata(metaPath); err != nil {
+				return fmt.Errorf("failed to save index metadata for %s/%s: %w", c.config.Name, name, err)
+			}
+		}
+	} else if c.index != nil {
+		// Save metadata for default index
+		metaPath := filepath.Join(dataDir, c.config.Name, "index.meta")
+		if err := c.index.SaveMetadata(metaPath); err != nil {
+			return fmt.Errorf("failed to save index metadata for %s: %w", c.config.Name, err)
+		}
+	}
+
+	return nil
+}
+
+// LoadIndexMetadata loads the HNSW index metadata from disk
+func (c *Collection) LoadIndexMetadata(dataDir string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.config.HasNamedVectors() {
+		// Load metadata for each named vector index
+		for name, idx := range c.indices {
+			metaPath := filepath.Join(dataDir, c.config.Name, name, "index.meta")
+			if hnsw.HasMetadata(metaPath) {
+				if err := idx.LoadMetadata(metaPath); err != nil {
+					return fmt.Errorf("failed to load index metadata for %s/%s: %w", c.config.Name, name, err)
+				}
+			}
+		}
+	} else if c.index != nil {
+		// Load metadata for default index
+		metaPath := filepath.Join(dataDir, c.config.Name, "index.meta")
+		if hnsw.HasMetadata(metaPath) {
+			if err := c.index.LoadMetadata(metaPath); err != nil {
+				return fmt.Errorf("failed to load index metadata for %s: %w", c.config.Name, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// serializePoint serializes a point to binary format for WAL storage
+func serializePoint(p *point.Point) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := p.Encode(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// deserializePoint deserializes a point from binary format
+func deserializePoint(data []byte) (*point.Point, error) {
+	p := &point.Point{}
+	if err := p.Decode(bytes.NewReader(data)); err != nil {
+		return nil, err
+	}
+	return p, nil
 }

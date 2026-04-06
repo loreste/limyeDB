@@ -535,6 +535,11 @@ func (h *HNSW) Delete(id string) error {
 	node := h.nodes[nodeID]
 	h.mu.RUnlock()
 
+	// Check if already deleted to avoid double-counting
+	if node.IsDeleted() {
+		return nil
+	}
+
 	node.MarkDeleted()
 	h.deletedCount.Add(1)
 

@@ -19,6 +19,7 @@ import (
 	"github.com/limyedb/limyedb/pkg/collection"
 	"github.com/limyedb/limyedb/pkg/config"
 	"github.com/limyedb/limyedb/pkg/storage/snapshot"
+	"github.com/limyedb/limyedb/pkg/storage/wal"
 	"github.com/limyedb/limyedb/pkg/version"
 )
 
@@ -97,12 +98,38 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Initialize WAL if enabled
+	var walInstance *wal.WAL
+	if cfg.WAL.Enabled {
+		walDir := cfg.WAL.Dir
+		if walDir == "" {
+			walDir = cfg.Storage.DataDir + "/wal"
+		}
+		walInstance, err = wal.Open(&wal.Config{
+			Dir:         walDir,
+			SegmentSize: int64(cfg.WAL.SegmentSizeMB) * 1024 * 1024,
+			SyncOnWrite: cfg.WAL.SyncOnWrite,
+		})
+		if err != nil {
+			slog.Error("Failed to initialize WAL", "error", err)
+			os.Exit(1)
+		}
+		slog.Info("WAL initialized", "dir", walDir, "syncOnWrite", cfg.WAL.SyncOnWrite)
+	}
+
 	collMgr, err := collection.NewManager(&collection.ManagerConfig{
 		DataDir:        cfg.Storage.DataDir + "/collections",
 		MaxCollections: cfg.Storage.MaxCollections,
+		WAL:            walInstance,
 	})
 	if err != nil {
 		slog.Error("Failed to initialize collection manager", "error", err)
+		os.Exit(1)
+	}
+
+	// Run recovery BEFORE starting servers
+	if err := collMgr.Recover(); err != nil {
+		slog.Error("Recovery failed", "error", err)
 		os.Exit(1)
 	}
 
@@ -201,18 +228,40 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.WriteTimeout)
 	defer cancel()
 
-	// Stop servers
+	// Step 1: Stop accepting new requests
 	if err := restServer.Stop(ctx); err != nil {
 		slog.Error("REST server shutdown error", "error", err)
 	}
 	grpcServer.Stop()
 
-	// Flush and close collection manager
+	// Step 2: Sync WAL to disk
+	if walInstance != nil {
+		slog.Info("Syncing WAL to disk")
+		if err := walInstance.Sync(); err != nil {
+			slog.Error("Failed to sync WAL", "error", err)
+		}
+	}
+
+	// Step 3: Save index metadata for all collections
+	slog.Info("Saving index metadata")
+	if err := collMgr.SaveAllIndexMetadata(); err != nil {
+		slog.Error("Failed to save index metadata", "error", err)
+	}
+
+	// Step 4: Flush and close collection manager
 	if err := collMgr.Flush(); err != nil {
 		slog.Error("Failed to flush collections", "error", err)
 	}
 	if err := collMgr.Close(); err != nil {
 		slog.Error("Failed to close collection manager", "error", err)
+	}
+
+	// Step 5: Close WAL
+	if walInstance != nil {
+		slog.Info("Closing WAL")
+		if err := walInstance.Close(); err != nil {
+			slog.Error("Failed to close WAL", "error", err)
+		}
 	}
 
 	slog.Info("LimyeDB shutdown complete")

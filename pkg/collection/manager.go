@@ -15,6 +15,7 @@ import (
 	"github.com/limyedb/limyedb/pkg/point"
 	"github.com/limyedb/limyedb/pkg/storage/s3"
 	"github.com/limyedb/limyedb/pkg/storage/snapshot"
+	"github.com/limyedb/limyedb/pkg/storage/wal"
 )
 
 // validNamePattern defines allowed characters for collection names
@@ -44,6 +45,7 @@ type Manager struct {
 	collections    map[string]*Collection
 	dataDir        string
 	maxCollections int
+	wal            *wal.WAL
 
 	mu sync.RWMutex
 }
@@ -52,6 +54,7 @@ type Manager struct {
 type ManagerConfig struct {
 	DataDir        string
 	MaxCollections int
+	WAL            *wal.WAL
 }
 
 // DefaultManagerConfig returns default manager configuration
@@ -72,6 +75,7 @@ func NewManager(cfg *ManagerConfig) (*Manager, error) {
 		collections:    make(map[string]*Collection),
 		dataDir:        cfg.DataDir,
 		maxCollections: cfg.MaxCollections,
+		wal:            cfg.WAL,
 	}
 
 	// Load existing collections
@@ -80,6 +84,16 @@ func NewManager(cfg *ManagerConfig) (*Manager, error) {
 	}
 
 	return m, nil
+}
+
+// GetWAL returns the WAL instance (for use by collections)
+func (m *Manager) GetWAL() *wal.WAL {
+	return m.wal
+}
+
+// GetDataDir returns the data directory
+func (m *Manager) GetDataDir() string {
+	return m.dataDir
 }
 
 // loadCollections loads collection metadata from disk
@@ -171,6 +185,11 @@ func (m *Manager) Create(cfg *config.CollectionConfig) (*Collection, error) {
 	if err := m.saveMetadata(cfg); err != nil {
 		_ = os.RemoveAll(collDir) // Best effort cleanup
 		return nil, err
+	}
+
+	// Set WAL for the new collection
+	if m.wal != nil {
+		coll.SetWAL(m.wal)
 	}
 
 	m.collections[cfg.Name] = coll
@@ -522,4 +541,28 @@ func (m *Manager) ArchiveCollection(ctx context.Context, name string, s3Store *s
 
 	delete(m.collections, name)
 	return os.RemoveAll(collDir)
+}
+
+// SaveAllIndexMetadata saves index metadata for all collections
+func (m *Manager) SaveAllIndexMetadata() error {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var lastErr error
+	for _, coll := range m.collections {
+		if err := coll.SaveIndexMetadata(m.dataDir); err != nil {
+			lastErr = err
+		}
+	}
+	return lastErr
+}
+
+// SetWALForCollections sets the WAL instance for all loaded collections
+func (m *Manager) SetWALForCollections() {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for _, coll := range m.collections {
+		coll.SetWAL(m.wal)
+	}
 }

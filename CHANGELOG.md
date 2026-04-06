@@ -5,6 +5,30 @@ All notable changes to LimyeDB are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-04-06
+
+### Added
+- **Full Database Persistence**: LimyeDB now survives reboots with minimal data loss
+  - WAL (Write-Ahead Log) integration with Insert, Delete, and Upsert operations
+  - HNSW index metadata persistence (entry point, connections, deleted flags, id-to-index mapping)
+  - Automatic recovery on startup: loads collections, restores index state, replays WAL
+  - Graceful shutdown: syncs WAL, saves index metadata before exit
+- New `pkg/index/hnsw/metadata.go` with `SaveMetadata()` and `LoadMetadata()` methods
+- New `pkg/collection/recovery.go` with `Recover()` and `replayWAL()` methods
+- Internal methods `insertInternal()`, `deleteInternal()`, `upsertInternal()` for WAL replay
+- Point serialization helpers for binary WAL records
+- Recovery tests for persistence verification
+
+### Fixed
+- HNSW `Delete()` now checks if point is already deleted to prevent double-counting during recovery
+- WAL replay correctly handles idempotent operations
+
+### Changed
+- `Manager` struct now accepts optional WAL instance via `ManagerConfig`
+- `Collection` struct now holds WAL reference for write operations
+- Startup flow: recovery runs before servers start accepting requests
+- Shutdown flow: WAL sync and index metadata save before closing
+
 ## [0.2.0] - 2026-03-28
 
 ### Added
@@ -90,5 +114,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI tool (`limyedb-cli`) for management and data import/export
 - Docker and Docker Compose support
 
+[0.3.0]: https://github.com/loreste/limyeDB/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/loreste/limyeDB/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/loreste/limyeDB/releases/tag/v0.1.0
