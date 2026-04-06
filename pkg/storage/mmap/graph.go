@@ -89,6 +89,7 @@ func NewGraphMmap(path string, m int) (_ *GraphMmap, retErr error) {
 		return nil, fmt.Errorf("invalid graph path: %w", err)
 	}
 
+	// #nosec G304 - cleanPath is validated by validateGraphPath above
 	file, err := os.OpenFile(cleanPath, os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
 		return nil, err

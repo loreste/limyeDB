@@ -156,6 +156,7 @@ func (b *Backup) Create(outputPath string, opts BackupOptions) (*BackupMetadata,
 		}
 
 		// Write file content using the safe path (G304, G122)
+		// #nosec G304 - safePath is validated above with HasPrefix check
 		file, err := os.Open(safePath)
 		if err != nil {
 			return err

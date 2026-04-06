@@ -102,6 +102,7 @@ func (h *HNSW) SaveMetadata(path string) error {
 	}
 
 	// Write atomically using temp file
+	// #nosec G304 - path is constructed from validated collection names in internal code
 	tmpPath := path + ".tmp"
 	if err := os.WriteFile(tmpPath, data, 0600); err != nil {
 		return fmt.Errorf("failed to write metadata: %w", err)
@@ -119,6 +120,7 @@ func (h *HNSW) SaveMetadata(path string) error {
 // LoadMetadata restores the HNSW index metadata from disk
 func (h *HNSW) LoadMetadata(path string) error {
 	// Read metadata file
+	// #nosec G304 - path is constructed from validated collection names in internal code
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
