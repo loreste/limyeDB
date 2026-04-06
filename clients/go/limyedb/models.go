@@ -33,9 +33,12 @@ type ContextPair struct {
 }
 
 type DiscoverParams struct {
-	Target  []float32              `json:"target,omitempty"`
-	Context *ContextPair           `json:"context,omitempty"`
-	Limit   int                    `json:"limit,omitempty"`
-	Ef      int                    `json:"ef,omitempty"`
-	Filter  map[string]interface{} `json:"filter,omitempty"`
+	Target      []float32              `json:"target,omitempty"`
+	Context     *ContextPair           `json:"context,omitempty"`
+	Limit       int                    `json:"limit,omitempty"`
+	Ef          int                    `json:"ef,omitempty"`
+	Filter      map[string]interface{} `json:"filter,omitempty"`
+	VectorName  string                 `json:"vector_name,omitempty"`
+	WithVector  bool                   `json:"with_vector,omitempty"`
+	WithPayload bool                   `json:"with_payload,omitempty"`
 }
