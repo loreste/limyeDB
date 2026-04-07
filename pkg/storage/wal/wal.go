@@ -47,6 +47,18 @@ func safeUint64ToInt64(v uint64) int64 {
 	return int64(v)
 }
 
+// safeRecordBufferSize safely calculates the buffer size for a WAL record.
+// Returns an error if the calculation would overflow int.
+func safeRecordBufferSize(totalLen uint32) (int, error) {
+	// Buffer = 4 bytes (length prefix) + totalLen + 4 bytes (CRC)
+	const overhead = 8
+	// Check for overflow: totalLen + overhead must fit in int
+	if uint64(totalLen) > uint64(math.MaxInt-overhead) {
+		return 0, errors.New("record buffer size would overflow")
+	}
+	return overhead + int(totalLen), nil
+}
+
 // WAL represents a write-ahead log
 type WAL struct {
 	dir         string
@@ -442,7 +454,12 @@ func encodeRecord(r *Record) ([]byte, error) {
 		return nil, fmt.Errorf("record too large: %w", err)
 	}
 
-	buf := make([]byte, 4+int(totalLen)+4) // length + payload + crc
+	// Calculate buffer size with overflow protection
+	bufSize, err := safeRecordBufferSize(totalLen)
+	if err != nil {
+		return nil, fmt.Errorf("record too large: %w", err)
+	}
+	buf := make([]byte, bufSize) // length + payload + crc
 
 	// Length (excluding length field and CRC)
 	binary.LittleEndian.PutUint32(buf[0:4], totalLen)
