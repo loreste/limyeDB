@@ -393,6 +393,9 @@ curl -LO https://github.com/loreste/limyeDB/releases/latest/download/limyedb_$(c
 # Extract and run
 tar xzf limyedb_*_linux_amd64.tar.gz
 ./limyedb -rest :8080
+
+# To stop gracefully, press Ctrl+C or send SIGTERM
+# This ensures all data is safely persisted to disk
 ```
 
 Available platforms: `linux_amd64`, `linux_arm64`, `darwin_amd64`, `darwin_arm64`
@@ -1206,6 +1209,37 @@ SHUTDOWN PATH:
   Signal → StopServers → SyncWAL → SaveIndexMetadata → Close
 ```
 
+#### Graceful Shutdown
+
+LimyeDB handles shutdown signals gracefully to ensure data integrity. Always use proper shutdown methods:
+
+```bash
+# Recommended: Send SIGTERM or SIGINT
+kill -TERM <pid>
+
+# Or press Ctrl+C if running in foreground
+^C
+
+# Docker
+docker stop limyedb
+
+# Docker Compose
+docker-compose stop
+
+# Kubernetes
+kubectl delete pod limyedb-0
+```
+
+**What happens during graceful shutdown:**
+
+1. **Stop accepting requests** - REST and gRPC servers stop accepting new connections
+2. **Drain in-flight requests** - Existing requests complete (up to configured timeout)
+3. **Sync WAL** - Write-ahead log is flushed to disk
+4. **Save index metadata** - HNSW entry points, connections, and ID mappings are persisted
+5. **Close resources** - File handles, mmap regions, and network connections are released
+
+**Warning:** Avoid using `kill -9` (SIGKILL) as it prevents graceful shutdown and may result in data loss of recent writes.
+
 #### Configuration
 
 ```yaml
@@ -1221,15 +1255,19 @@ storage:
 
 | Scenario | Data Loss |
 |----------|-----------|
-| Clean shutdown | None |
-| Kill -9 (crash) | Last ~1 second (unflushed WAL buffer) |
+| Graceful shutdown (Ctrl+C, SIGTERM) | None |
+| Kill -9 / SIGKILL | Last ~1 second (unflushed WAL buffer) |
 | With `sync_on_write: true` | Minimal (OS buffer only) |
+| Power failure | Up to last WAL segment |
 
 #### What Gets Persisted
 
-- **WAL Records**: Every Insert, Delete, and Upsert operation
-- **HNSW Metadata**: Entry point, max level, node connections, deleted flags, ID-to-index mapping
-- **Collection Config**: Stored in `meta.json` per collection
+| Component | Location | Contents |
+|-----------|----------|----------|
+| WAL Records | `./data/wal/` | Every Insert, Delete, and Upsert operation |
+| Index Metadata | `./data/collections/{name}/index.meta` | Entry point, max level, node connections, deleted flags, ID-to-index mapping |
+| Collection Config | `./data/collections/{name}/meta.json` | Dimension, metric, HNSW config |
+| Graph Mmap | `./data/collections/{name}/graph.mmap` | Memory-mapped HNSW connections (if mmap enabled) |
 
 ### Auto-Tuning
 
