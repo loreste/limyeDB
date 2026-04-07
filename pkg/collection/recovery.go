@@ -84,12 +84,13 @@ func (m *Manager) replayWAL() (int, error) {
 
 	err := m.wal.Replay(func(record *wal.Record) error {
 		// Get collection (skip if collection was deleted)
-		coll, err := m.Get(record.Collection)
-		if err != nil {
+		coll, getErr := m.Get(record.Collection)
+		if getErr != nil {
 			slog.Debug("Skipping WAL record for missing collection",
 				"collection", record.Collection,
-				"type", record.Type)
-			return nil
+				"type", record.Type,
+				"reason", getErr.Error())
+			return nil // Intentionally continue - collection may have been deleted
 		}
 
 		switch record.Type {
