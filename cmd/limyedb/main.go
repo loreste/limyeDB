@@ -106,15 +106,18 @@ func main() {
 			walDir = cfg.Storage.DataDir + "/wal"
 		}
 		walInstance, err = wal.Open(&wal.Config{
-			Dir:         walDir,
-			SegmentSize: int64(cfg.WAL.SegmentSizeMB) * 1024 * 1024,
-			SyncOnWrite: cfg.WAL.SyncOnWrite,
+			Dir:            walDir,
+			SegmentSize:    int64(cfg.WAL.SegmentSizeMB) * 1024 * 1024,
+			SyncOnWrite:    cfg.WAL.SyncOnWrite,
+			AsyncEnabled:   cfg.WAL.AsyncEnabled,
+			AsyncBatchSize: cfg.WAL.AsyncBatchSize,
+			AsyncInterval:  time.Duration(cfg.WAL.AsyncIntervalMs) * time.Millisecond,
 		})
 		if err != nil {
 			slog.Error("Failed to initialize WAL", "error", err)
 			os.Exit(1)
 		}
-		slog.Info("WAL initialized", "dir", walDir, "syncOnWrite", cfg.WAL.SyncOnWrite)
+		slog.Info("WAL initialized", "dir", walDir, "syncOnWrite", cfg.WAL.SyncOnWrite, "asyncEnabled", cfg.WAL.AsyncEnabled)
 	}
 
 	collMgr, err := collection.NewManager(&collection.ManagerConfig{

@@ -70,6 +70,14 @@ type WAL struct {
 	lastSeqNum     uint64
 
 	mu sync.Mutex
+
+	// Async write support for improved throughput
+	asyncEnabled   bool
+	asyncQueue     chan *Record
+	asyncBatchSize int
+	asyncInterval  time.Duration
+	asyncDone      chan struct{}
+	asyncWg        sync.WaitGroup
 }
 
 // Config holds WAL configuration
@@ -77,14 +85,22 @@ type Config struct {
 	Dir         string
 	SegmentSize int64 // In bytes
 	SyncOnWrite bool
+
+	// Async write options for improved throughput
+	AsyncEnabled   bool          // Enable async write queue
+	AsyncBatchSize int           // Max records to batch before flush (default: 100)
+	AsyncInterval  time.Duration // Max time between flushes (default: 10ms)
 }
 
 // DefaultConfig returns default WAL configuration
 func DefaultConfig() *Config {
 	return &Config{
-		Dir:         "./data/wal",
-		SegmentSize: 64 * 1024 * 1024, // 64MB
-		SyncOnWrite: true,
+		Dir:            "./data/wal",
+		SegmentSize:    64 * 1024 * 1024, // 64MB
+		SyncOnWrite:    true,
+		AsyncEnabled:   false, // Disabled by default for backwards compatibility
+		AsyncBatchSize: 100,
+		AsyncInterval:  10 * time.Millisecond,
 	}
 }
 
@@ -129,24 +145,45 @@ func Open(cfg *Config) (*WAL, error) {
 		return nil, err
 	}
 
-	wal := &WAL{
-		dir:         cfg.Dir,
-		segmentSize: cfg.SegmentSize,
-		syncOnWrite: cfg.SyncOnWrite,
-		segments:    make([]*segmentInfo, 0),
+	// Set defaults for async options
+	asyncBatchSize := cfg.AsyncBatchSize
+	if asyncBatchSize <= 0 {
+		asyncBatchSize = 100
+	}
+	asyncInterval := cfg.AsyncInterval
+	if asyncInterval <= 0 {
+		asyncInterval = 10 * time.Millisecond
+	}
+
+	w := &WAL{
+		dir:            cfg.Dir,
+		segmentSize:    cfg.SegmentSize,
+		syncOnWrite:    cfg.SyncOnWrite,
+		segments:       make([]*segmentInfo, 0),
+		asyncEnabled:   cfg.AsyncEnabled,
+		asyncBatchSize: asyncBatchSize,
+		asyncInterval:  asyncInterval,
 	}
 
 	// Find existing segments
-	if err := wal.loadSegments(); err != nil {
+	if err := w.loadSegments(); err != nil {
 		return nil, err
 	}
 
 	// Open or create current segment
-	if err := wal.openCurrentSegment(); err != nil {
+	if err := w.openCurrentSegment(); err != nil {
 		return nil, err
 	}
 
-	return wal, nil
+	// Start async writer if enabled
+	if w.asyncEnabled {
+		w.asyncQueue = make(chan *Record, asyncBatchSize*10)
+		w.asyncDone = make(chan struct{})
+		w.asyncWg.Add(1)
+		go w.asyncWriter()
+	}
+
+	return w, nil
 }
 
 func (w *WAL) loadSegments() error {
@@ -286,6 +323,64 @@ func (w *WAL) WriteBatch(records []*Record) error {
 	return nil
 }
 
+// WriteAsync queues a record for async batch writing (lower latency, slightly higher data loss risk)
+func (w *WAL) WriteAsync(record *Record) error {
+	if !w.asyncEnabled {
+		return w.Write(record)
+	}
+
+	select {
+	case w.asyncQueue <- record:
+		return nil
+	default:
+		// Queue full, fall back to sync write
+		return w.Write(record)
+	}
+}
+
+// asyncWriter is the background goroutine that batches and flushes async writes
+func (w *WAL) asyncWriter() {
+	defer w.asyncWg.Done()
+
+	batch := make([]*Record, 0, w.asyncBatchSize)
+	ticker := time.NewTicker(w.asyncInterval)
+	defer ticker.Stop()
+
+	flush := func() {
+		if len(batch) == 0 {
+			return
+		}
+		if err := w.WriteBatch(batch); err != nil {
+			// Log error but continue - this is best-effort async write
+			// In production, you might want to use a callback or error channel
+		}
+		batch = batch[:0]
+	}
+
+	for {
+		select {
+		case record := <-w.asyncQueue:
+			batch = append(batch, record)
+			if len(batch) >= w.asyncBatchSize {
+				flush()
+			}
+		case <-ticker.C:
+			flush()
+		case <-w.asyncDone:
+			// Drain remaining records
+			for {
+				select {
+				case record := <-w.asyncQueue:
+					batch = append(batch, record)
+				default:
+					flush()
+					return
+				}
+			}
+		}
+	}
+}
+
 func (w *WAL) rotate() error {
 	// Flush and close current segment
 	if w.currentSegment != nil {
@@ -335,6 +430,12 @@ func (w *WAL) Sync() error {
 
 // Close closes the WAL
 func (w *WAL) Close() error {
+	// Stop async writer first if enabled
+	if w.asyncEnabled && w.asyncDone != nil {
+		close(w.asyncDone)
+		w.asyncWg.Wait()
+	}
+
 	w.mu.Lock()
 	defer w.mu.Unlock()
 

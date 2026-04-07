@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/limyedb/limyedb/pkg/cache"
 	"github.com/limyedb/limyedb/pkg/cdc"
 	"github.com/limyedb/limyedb/pkg/config"
 	"github.com/limyedb/limyedb/pkg/distance"
@@ -35,6 +36,9 @@ type Collection struct {
 	distCalc     distance.Calculator
 	distCalcs    map[string]distance.Calculator // Distance calculators per vector
 	wal          *wal.WAL                       // Write-ahead log for durability
+
+	// Performance: Search result caching
+	searchCache *cache.SearchCache
 
 	// Metadata
 	createdAt time.Time
@@ -61,6 +65,7 @@ func New(cfg *config.CollectionConfig) (*Collection, error) {
 		payloadIndex: payloadIdx,
 		sparseIdx:    sparse.NewInvertedIndex(),
 		distCalcs:    make(map[string]distance.Calculator),
+		searchCache:  cache.NewSearchCache(10000, 5*time.Minute), // Cache 10K queries for 5 min
 		createdAt:    time.Now(),
 	}
 
@@ -269,7 +274,16 @@ func (c *Collection) Insert(p *point.Point) error {
 		}
 	}
 
-	return c.insertInternal(p)
+	if err := c.insertInternal(p); err != nil {
+		return err
+	}
+
+	// Invalidate search cache after successful write
+	if c.searchCache != nil {
+		c.searchCache.InvalidateCollection(c.config.Name)
+	}
+
+	return nil
 }
 
 // insertInternal performs the actual insert without WAL write (used during recovery)
@@ -335,22 +349,66 @@ func (c *Collection) insertInternal(p *point.Point) error {
 	return nil
 }
 
-// InsertBatch adds multiple points to the collection
+// InsertBatch adds multiple points to the collection with optimized batch WAL writes
 func (c *Collection) InsertBatch(points []*point.Point) (*BatchResult, error) {
 	result := &BatchResult{
 		Total: len(points),
 	}
 
+	if len(points) == 0 {
+		return result, nil
+	}
+
+	// Step 1: Validate all points first (fail fast)
+	validPoints := make([]*point.Point, 0, len(points))
 	for _, p := range points {
-		if err := c.Insert(p); err != nil {
+		if err := p.Validate(); err != nil {
 			result.Failed++
-			result.Errors = append(result.Errors, BatchError{
-				ID:  p.ID,
-				Err: err,
+			result.Errors = append(result.Errors, BatchError{ID: p.ID, Err: err})
+			continue
+		}
+		if len(p.Vector) != c.config.Dimension {
+			result.Failed++
+			result.Errors = append(result.Errors, BatchError{ID: p.ID, Err: ErrDimensionMismatch})
+			continue
+		}
+		validPoints = append(validPoints, p)
+	}
+
+	// Step 2: Batch WAL write (single fsync for all records)
+	if c.wal != nil && len(validPoints) > 0 {
+		records := make([]*wal.Record, 0, len(validPoints))
+		for _, p := range validPoints {
+			data, err := serializePoint(p)
+			if err != nil {
+				result.Failed++
+				result.Errors = append(result.Errors, BatchError{ID: p.ID, Err: err})
+				continue
+			}
+			records = append(records, &wal.Record{
+				Type:       wal.RecordTypeInsert,
+				Collection: c.config.Name,
+				Data:       data,
 			})
+		}
+		if err := c.wal.WriteBatch(records); err != nil {
+			return result, fmt.Errorf("WAL batch write failed: %w", err)
+		}
+	}
+
+	// Step 3: Apply to indices (use internal method to skip individual WAL writes)
+	for _, p := range validPoints {
+		if err := c.insertInternal(p); err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, BatchError{ID: p.ID, Err: err})
 		} else {
 			result.Succeeded++
 		}
+	}
+
+	// Step 4: Invalidate search cache after batch write
+	if c.searchCache != nil {
+		c.searchCache.InvalidateCollection(c.config.Name)
 	}
 
 	return result, nil
@@ -792,7 +850,16 @@ func (c *Collection) Delete(id string) error {
 		}
 	}
 
-	return c.deleteInternal(id)
+	if err := c.deleteInternal(id); err != nil {
+		return err
+	}
+
+	// Invalidate search cache after successful delete
+	if c.searchCache != nil {
+		c.searchCache.InvalidateCollection(c.config.Name)
+	}
+
+	return nil
 }
 
 // deleteInternal performs the actual delete without WAL write (used during recovery)
@@ -850,6 +917,23 @@ type ScoredPoint struct {
 // SearchWithParams performs search with custom parameters
 func (c *Collection) SearchWithParams(query point.Vector, params *SearchParams) (*SearchResult, error) {
 	start := time.Now()
+
+	// Check cache for simple queries (no filter, no sparse query)
+	var cacheKey string
+	useCache := c.searchCache != nil && params.Filter == nil && params.SparseQuery == nil
+	if useCache {
+		cacheKey = c.searchCache.SearchKey(c.config.Name, query, params.K, nil)
+		if cached, ok := c.searchCache.Get(cacheKey); ok {
+			if result, ok := cached.(*SearchResult); ok {
+				// Return cached result with updated timing
+				cachedResult := &SearchResult{
+					Points: result.Points,
+					TookMs: 0, // Cached response
+				}
+				return cachedResult, nil
+			}
+		}
+	}
 
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -958,6 +1042,11 @@ func (c *Collection) SearchWithParams(query point.Vector, params *SearchParams) 
 			fused = append(fused, sp)
 		}
 		result.Points = fused
+	}
+
+	// Cache the result for simple queries
+	if useCache && cacheKey != "" {
+		c.searchCache.Set(cacheKey, result)
 	}
 
 	return result, nil

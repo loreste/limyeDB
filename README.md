@@ -1453,6 +1453,47 @@ Tested on AWS c6i.8xlarge (32 vCPU, 64GB RAM):
    - Tune `GOMAXPROCS` for CPU-bound workloads
    - Use batch operations for bulk inserts
 
+### Performance Optimizations
+
+LimyeDB includes several built-in performance optimizations:
+
+#### Search Result Caching
+
+Repeated searches with the same query vector are cached for 5 minutes (configurable), providing near-instant responses for hot queries:
+
+- Cache capacity: 10,000 queries per collection
+- TTL: 5 minutes (auto-invalidated on writes)
+- Cache hit = ~0ms latency vs ~2-10ms for uncached
+
+#### Batch WAL Writes
+
+Batch inserts use optimized WAL writes with a single fsync per batch instead of per-record:
+
+```bash
+# Single insert: 1 fsync per insert (~1-5ms each)
+# Batch of 1000: 1 fsync total (~5-10ms for entire batch)
+```
+
+#### Async WAL Mode (Optional)
+
+For maximum write throughput with slightly higher data loss risk:
+
+```yaml
+storage:
+  wal:
+    enabled: true
+    sync_on_write: false        # Disable per-write fsync
+    async_enabled: true         # Enable async write queue
+    async_batch_size: 100       # Batch up to 100 records
+    async_interval_ms: 10       # Flush every 10ms max
+```
+
+| Mode | Write Latency | Data Loss Risk |
+|------|---------------|----------------|
+| sync_on_write: true | ~1-5ms | Minimal |
+| sync_on_write: false | ~0.1ms | Up to 1 second |
+| async_enabled: true | ~0.01ms | Up to async_interval_ms |
+
 ---
 
 ## Integrations

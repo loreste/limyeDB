@@ -48,6 +48,11 @@ type WALConfig struct {
 	Dir           string `json:"dir"`
 	SegmentSizeMB int    `json:"segment_size_mb"`
 	SyncOnWrite   bool   `json:"sync_on_write"`
+
+	// Async write options for improved throughput (higher risk of data loss)
+	AsyncEnabled    bool `json:"async_enabled"`     // Enable async write queue
+	AsyncBatchSize  int  `json:"async_batch_size"`  // Max records to batch (default: 100)
+	AsyncIntervalMs int  `json:"async_interval_ms"` // Max ms between flushes (default: 10)
 }
 
 // SnapshotConfig holds snapshot configuration
