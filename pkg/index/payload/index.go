@@ -232,9 +232,11 @@ func buildWhereClause(f *Filter) (string, []interface{}) {
 		case OpEndsWith:
 			return "json_extract(data, ?) LIKE ? ESCAPE '\\'", []interface{}{fieldPath, "%" + escapeLikePattern(fmt.Sprint(c.Value))}
 		case OpIsNull:
-			return "json_extract(data, ?) IS NULL", []interface{}{fieldPath}
+			// Check if field is missing OR explicitly set to JSON null
+			return "(json_extract(data, ?) IS NULL OR json_type(data, ?) = 'null')", []interface{}{fieldPath, fieldPath}
 		case OpIsNotNull:
-			return "json_extract(data, ?) IS NOT NULL", []interface{}{fieldPath}
+			// Field must exist AND not be JSON null
+			return "(json_extract(data, ?) IS NOT NULL AND json_type(data, ?) != 'null')", []interface{}{fieldPath, fieldPath}
 		case OpRange:
 			return "(json_extract(data, ?) >= ? AND json_extract(data, ?) <= ?)", []interface{}{fieldPath, c.Min, fieldPath, c.Max}
 		}

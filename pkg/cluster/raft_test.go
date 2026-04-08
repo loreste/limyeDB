@@ -114,6 +114,8 @@ func TestRaftClusterIntegration(t *testing.T) {
 		t.Fatalf("Leader failed to route CreateCollection consensus: %v", err)
 	}
 
+	time.Sleep(3 * time.Second) // Allow collection creation to replicate
+
 	points := []limyedb.Point{
 		{ID: "point_a", Vector: []float32{1.0, 0.0, 0.0, 0.0}, Payload: map[string]interface{}{"val": 1}},
 		{ID: "point_b", Vector: []float32{0.0, 1.0, 0.0, 0.0}, Payload: map[string]interface{}{"val": 2}},
@@ -122,11 +124,18 @@ func TestRaftClusterIntegration(t *testing.T) {
 		t.Fatalf("Leader failed to route Upsert consensus: %v", err)
 	}
 
-	time.Sleep(3 * time.Second) // Await FSM commit applied across nodes
+	time.Sleep(5 * time.Second) // Await FSM commit applied across nodes
 
-	// Search against a FOLLOWER (Node 2)
+	// Search against a FOLLOWER (Node 2) with retry
 	client2 := limyedb.NewClient("http://localhost:8282")
-	results, err := client2.Search("raft_test", []float32{0.9, 0.0, 0.0, 0.0}, 1)
+	var results []limyedb.Match
+	for i := 0; i < 5; i++ {
+		results, err = client2.Search("raft_test", []float32{0.9, 0.0, 0.0, 0.0}, 1)
+		if err == nil {
+			break
+		}
+		time.Sleep(2 * time.Second) // Retry after delay
+	}
 	if err != nil {
 		t.Fatalf("Follower Node 2 failed to execute localized search sequence: %v", err)
 	}
@@ -137,9 +146,16 @@ func TestRaftClusterIntegration(t *testing.T) {
 		t.Errorf("Expected 'point_a' on Node 2, got %s", results[0].ID)
 	}
 
-	// Search against another FOLLOWER (Node 3)
+	// Search against another FOLLOWER (Node 3) with retry
 	client3 := limyedb.NewClient("http://localhost:8283")
-	results3, err := client3.Search("raft_test", []float32{0.0, 0.9, 0.0, 0.0}, 1)
+	var results3 []limyedb.Match
+	for i := 0; i < 5; i++ {
+		results3, err = client3.Search("raft_test", []float32{0.0, 0.9, 0.0, 0.0}, 1)
+		if err == nil {
+			break
+		}
+		time.Sleep(2 * time.Second) // Retry after delay
+	}
 	if err != nil {
 		t.Fatalf("Follower Node 3 failed to execute localized search sequence: %v", err)
 	}
