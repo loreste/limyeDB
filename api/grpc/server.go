@@ -66,7 +66,7 @@ func NewServer(cfg *config.ServerConfig, collections *collection.Manager, snapsh
 			}
 		}
 
-		ctx = context.WithValue(ctx, "token_claims", claims)
+		ctx = auth.WithClaims(ctx, claims)
 		return handler(ctx, req)
 	}
 

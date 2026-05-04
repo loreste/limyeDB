@@ -36,15 +36,10 @@ type LimyeDBService struct {
 
 // checkPermission verifies if the current request context has adequate JWT roles.
 func checkPermission(ctx context.Context, collection string, action string) bool {
-	claimsRaw := ctx.Value("token_claims")
-	if claimsRaw == nil {
+	claims, ok := auth.ClaimsFromContext(ctx)
+	if !ok {
 		// No auth token configured / passed successfully (meaning auth is disabled)
 		return true
-	}
-
-	claims, ok := claimsRaw.(*auth.TokenClaims)
-	if !ok {
-		return false
 	}
 
 	switch action {
