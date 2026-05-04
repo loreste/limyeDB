@@ -8,12 +8,11 @@ LimyeDB was specifically designed for RAG and LLM applications:
 
 | Feature | RAG Benefit |
 |---------|-------------|
-| **Sub-millisecond latency** | Real-time conversational AI without lag |
-| **Native hybrid search** | Better retrieval combining semantic + keyword matching |
-| **Auto-embedding orchestration** | Skip ETL—send text directly, receive indexed vectors |
-| **Production security** | Multi-tenant isolation for SaaS RAG products |
-| **Billion-scale DiskANN** | Handle enterprise document collections affordably |
-| **Metadata filtering** | Scope retrieval by user, date, category, permissions |
+| **Low-millisecond p99 latency** | Real-time conversational AI without lag (see [benchmarks](../../README.md#benchmarks)) |
+| **Native hybrid search** | Better retrieval combining semantic + keyword matching via `/search/v2` |
+| **Auto-embedding orchestration** | Skip ETL—send text directly to OpenAI/Cohere via the server-side `/auto-embed` route |
+| **JWT-based RBAC** | Per-collection access control; mint scoped tokens for different services |
+| **Metadata filtering** | Scope retrieval by user, date, category, permissions via SQLite-backed payload filters |
 
 ---
 
@@ -344,13 +343,16 @@ def hybrid_retrieve(query: str, top_k: int = 5, alpha: float = 0.7) -> list[dict
     # Dense search
     query_vector = embed_model.encode(query).tolist()
 
+    # The /search/v2 endpoint takes a pre-computed sparse vector;
+    # LimyeDB does not tokenize text server-side. Compute a sparse
+    # representation (BM25 tokens, SPLADE, etc.) on the client first.
+    sparse = compute_sparse_vector(query)  # {"indices": [...], "values": [...]}
     results = limye_client.hybrid_search(
         collection_name="knowledge_base",
         query_vector=query_vector,
-        query_text=query,  # For BM25/sparse
+        sparse_vector=sparse,
         limit=top_k,
-        alpha=alpha,  # Weight towards dense (0=sparse, 1=dense)
-        with_payload=True
+        with_payload=True,
     )
 
     return [

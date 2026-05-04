@@ -526,32 +526,32 @@ Indexes dramatically improve filter performance for frequently queried fields.
 
 ```bash
 # Create keyword index for exact string matches
-curl -X PUT http://localhost:8080/collections/products/index \
-  -d '{"field_name": "category", "field_schema": "keyword"}'
+curl -X POST http://localhost:8080/collections/products/payload-indexes \
+  -d '{"field_name": "category", "field_type": "keyword"}'
 
 # Create integer index for numeric ranges
-curl -X PUT http://localhost:8080/collections/products/index \
-  -d '{"field_name": "price", "field_schema": "integer"}'
+curl -X POST http://localhost:8080/collections/products/payload-indexes \
+  -d '{"field_name": "price", "field_type": "integer"}'
 
 # Create float index
-curl -X PUT http://localhost:8080/collections/products/index \
-  -d '{"field_name": "rating", "field_schema": "float"}'
+curl -X POST http://localhost:8080/collections/products/payload-indexes \
+  -d '{"field_name": "rating", "field_type": "float"}'
 
 # Create boolean index
-curl -X PUT http://localhost:8080/collections/products/index \
-  -d '{"field_name": "in_stock", "field_schema": "bool"}'
+curl -X POST http://localhost:8080/collections/products/payload-indexes \
+  -d '{"field_name": "in_stock", "field_type": "bool"}'
 
 # Create geo index
-curl -X PUT http://localhost:8080/collections/stores/index \
-  -d '{"field_name": "location", "field_schema": "geo"}'
+curl -X POST http://localhost:8080/collections/stores/payload-indexes \
+  -d '{"field_name": "location", "field_type": "geo"}'
 
 # Create text index (for substring search)
-curl -X PUT http://localhost:8080/collections/products/index \
-  -d '{"field_name": "description", "field_schema": "text"}'
+curl -X POST http://localhost:8080/collections/products/payload-indexes \
+  -d '{"field_name": "description", "field_type": "text"}'
 
 # Create datetime index
-curl -X PUT http://localhost:8080/collections/products/index \
-  -d '{"field_name": "created_at", "field_schema": "datetime"}'
+curl -X POST http://localhost:8080/collections/products/payload-indexes \
+  -d '{"field_name": "created_at", "field_type": "datetime"}'
 ```
 
 ### Index Types Reference
@@ -569,13 +569,13 @@ curl -X PUT http://localhost:8080/collections/products/index \
 ### Listing Indexes
 
 ```bash
-curl http://localhost:8080/collections/products/index
+curl http://localhost:8080/collections/products/payload-indexes
 ```
 
 ### Deleting Indexes
 
 ```bash
-curl -X DELETE http://localhost:8080/collections/products/index/category
+curl -X DELETE http://localhost:8080/collections/products/payload-indexes/category
 ```
 
 ---
@@ -600,8 +600,8 @@ Filter selectivity significantly impacts performance:
 
 ```bash
 # Priority: High-frequency, high-selectivity fields
-curl -X PUT http://localhost:8080/collections/docs/index \
-  -d '{"field_name": "tenant_id", "field_schema": "keyword"}'
+curl -X POST http://localhost:8080/collections/docs/payload-indexes \
+  -d '{"field_name": "tenant_id", "field_type": "keyword"}'
 ```
 
 #### 2. Order Conditions by Selectivity
@@ -675,9 +675,14 @@ curl -X PUT http://localhost:8080/collections/docs/index \
 
 ## Common Patterns
 
-### Multi-Tenant Filtering
+### Tenant-style Filtering (payload convention)
 
-Always filter by tenant for data isolation:
+LimyeDB has no built-in tenant primitive — every "tenant_id" filter
+below is just a payload-key convention you implement on the client side
+and enforce in the JWT's per-collection RBAC. Add a payload index on
+`tenant_id` for selective filtering across large collections.
+
+Filter by tenant for data isolation:
 
 ```json
 {
@@ -894,13 +899,13 @@ price_stats = client.stats(
 
 1. **Check if field is indexed**
    ```bash
-   curl http://localhost:8080/collections/name/index
+   curl http://localhost:8080/collections/name/payload-indexes
    ```
 
 2. **Create missing indexes**
    ```bash
-   curl -X PUT http://localhost:8080/collections/name/index \
-     -d '{"field_name": "field", "field_schema": "keyword"}'
+   curl -X POST http://localhost:8080/collections/name/payload-indexes \
+     -d '{"field_name": "field", "field_type": "keyword"}'
    ```
 
 3. **Check filter selectivity** - very selective filters may require full scan

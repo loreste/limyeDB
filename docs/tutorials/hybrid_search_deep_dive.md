@@ -2,15 +2,23 @@
 
 This tutorial explores **hybrid search** in LimyeDB—one of our most powerful differentiating features. Unlike other vector databases that bolt on keyword search as an afterthought, LimyeDB was architected from day one with hybrid retrieval at its core.
 
-## Why LimyeDB's Hybrid Search Stands Out
+## What LimyeDB's hybrid search does
 
-| Feature | LimyeDB | Other Databases |
-|---------|---------|-----------------|
-| **Native BM25 Integration** | Built-in sparse index | External service or plugin |
-| **Reciprocal Rank Fusion** | First-class support | Manual implementation |
-| **Single Query Latency** | <5ms combined | 2 round-trips |
-| **Adaptive Alpha** | Query-time tuning | Fixed weights |
-| **ColBERT MaxSim** | Native multi-vector support | Not available |
+| Feature | Status |
+|---------|--------|
+| **Built-in BM25 sparse index** | ✅ — `pkg/index/sparse` |
+| **Reciprocal Rank Fusion** | ✅ — single `/search/v2` request returns the fused result |
+| **Single round-trip** | ✅ — both ranked lists scored on the server, no second call needed |
+
+> **Sparse vectors are client-supplied.** LimyeDB scores BM25-style on
+> the `{indices, values}` pair you send; it does **not** tokenize text
+> server-side. You can use any sparse encoder (BM25 tokenizer, SPLADE,
+> learned sparse models) — the server treats the result the same way.
+>
+> **ColBERT-style multi-vector search** has internal code in
+> `pkg/collection/SearchColBERT` (brute-force linear scan), but is not
+> exposed through any REST or gRPC handler. Use single-vector hybrid
+> search for now.
 
 Hybrid search dramatically improves retrieval quality for RAG applications, e-commerce search, and any use case where pure semantic search misses exact terms (product codes, names, technical jargon).
 
@@ -369,9 +377,16 @@ results = client.hybrid_search(
 
 ### 1. Late Interaction (ColBERT-style)
 
+> ColBERT-style late-interaction reranking is a **client-side** pattern
+> below. The server returns first-pass HNSW candidates; you re-rank them
+> with token-level embeddings on your own. LimyeDB has no
+> `/search?late_interaction=true` mode and no multi-vector REST field —
+> the server-side `SearchColBERT` function in `pkg/collection` is not
+> exposed through any handler.
+
 ```python
 def late_interaction_search(query: str, top_k: int = 10):
-    """MaxSim-based late interaction search."""
+    """MaxSim-based late interaction search (client-side reranker)."""
     # Get token-level embeddings for query
     query_tokens = get_token_embeddings(query)  # [num_tokens, dim]
 

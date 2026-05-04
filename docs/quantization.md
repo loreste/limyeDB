@@ -102,21 +102,11 @@ PQ (8 seg): 8 bytes (8 centroid indices)
 Compression: 768x
 ```
 
-### Anisotropic Quantization (AQ)
-
-Advanced quantization that preserves directional importance, used in ScaNN.
-
-| Property | Value |
-|----------|-------|
-| Compression | 8x - 32x |
-| Recall Loss | 2-5% |
-| Training Required | Yes (covariance + eigenvectors) |
-| Best For | High-accuracy requirements, ScaNN index |
-
-**How it works:**
-1. Compute covariance matrix of training vectors
-2. Find principal components (eigenvectors)
-3. Project and quantize in importance-weighted space
+> **Anisotropic Quantization** is a technique commonly paired with ScaNN
+> indexes. Code for it lives in `pkg/index/scann/anisotropic.go` but the
+> ScaNN package has no production wiring (`index_type: scann` is not
+> honored by the collection manager today). Skip this section unless
+> you're working on the index itself.
 
 ---
 
@@ -214,22 +204,6 @@ Advanced quantization that preserves directional importance, used in ScaNN.
 }
 ```
 
-### Anisotropic Quantization (ScaNN)
-
-```json
-{
-  "name": "scann_collection",
-  "dimension": 768,
-  "index_type": "scann",
-  "scann": {
-    "num_leaves": 1000,
-    "num_rerank": 100,
-    "quantization_dims": 64,
-    "anisotropic_threshold": 0.2
-  }
-}
-```
-
 ---
 
 ## Training Requirements
@@ -240,7 +214,6 @@ Advanced quantization that preserves directional importance, used in ScaNN.
 
 ### Training Required
 - **Product Quantization**: Needs representative samples
-- **Anisotropic Quantization**: Needs representative samples
 
 ### Training Best Practices
 
@@ -249,29 +222,14 @@ Advanced quantization that preserves directional importance, used in ScaNN.
 3. **Timing**: Train before bulk insert for best results
 4. **Re-training**: Consider re-training if data distribution changes
 
-### Training API
+### Training
 
-```python
-# Python - Train quantization on samples
-client.train_quantization(
-    collection_name="documents",
-    samples=training_vectors,  # List of vectors
-    quantization_type="pq",
-    pq_segments=8
-)
-```
-
-```bash
-# REST API
-curl -X POST http://localhost:8080/collections/documents/quantization/train \
-  -H "Content-Type: application/json" \
-  -d '{
-    "vectors": [...],
-    "type": "pq",
-    "pq_segments": 8,
-    "pq_centroids": 256
-  }'
-```
+PQ training currently happens internally during the first batch insert
+once enough samples are available. There is no public REST endpoint to
+trigger training explicitly — earlier docs referenced
+`POST /collections/:name/quantization/train` but no such route exists in
+`api/rest/server.go`. If you need to retrain after a distribution shift,
+recreate the collection.
 
 ---
 

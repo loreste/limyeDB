@@ -1,18 +1,18 @@
 # LimyeDB Performance Tuning Guide
 
-LimyeDB delivers **sub-millisecond P99 latency** out of the box, but understanding its tuning parameters unlocks even better performance for your specific workload. This guide covers optimization strategies for throughput, latency, recall, and cost efficiency.
+LimyeDB delivers low-millisecond p99 latency out of the box (see the
+[benchmarks in the README](../README.md#benchmarks) for the actual
+numbers). This guide covers tuning parameters for throughput, latency,
+recall, and memory.
 
-## Why LimyeDB is Fast
-
-Before diving into tuning, understand why LimyeDB achieves its performance:
+## Why LimyeDB is fast
 
 | Technology | Benefit |
 |------------|---------|
-| **Zero-Allocation HNSW** | No GC pauses—memory-mapped graph traversal bypasses Go's heap |
-| **SIMD Distance Calculations** | ARM NEON and x86 AVX2/AVX-512 accelerated operations |
-| **Lock-Free Concurrent Reads** | Multiple queries execute simultaneously without contention |
-| **Memory-Mapped NVMe** | Direct I/O to SSD without kernel buffer copies |
-| **DiskANN Vamana Graphs** | Billion-scale search without loading everything into RAM |
+| **mmap-backed HNSW** | Graph connections live in a memory-mapped file; pooled visited-set buffers reduce per-query allocations. |
+| **SIMD distance calculations** | x86 amd64 uses AVX2-accelerated kernels. ARM64 currently routes through the scalar fallback because the hand-written NEON assembly produced incorrect results — fix is tracked. |
+| **Concurrent reads, single build lock for writes** | Multiple queries execute simultaneously; insert is serialized today. |
+| **Algorithm 4 neighbor selection** | The HNSW graph is built with the diversity-aware heuristic from Malkov & Yashunin §4.2, not naive top-M. |
 
 ---
 
@@ -115,88 +115,13 @@ curl -X POST http://localhost:8080/collections/docs/search \
 
 ---
 
-## Index Type Selection
+## Index Type
 
-LimyeDB supports multiple index types. Choose based on your requirements:
-
-### HNSW (Default)
-
-**Best for:**
-- General-purpose vector search
-- Balanced recall and latency
-- Collections up to 10M vectors
-
-**Trade-offs:**
-- Higher memory usage
-- Slower build time
-- Excellent search performance
-
-### IVF (Inverted File Index)
-
-**Best for:**
-- Very large datasets (10M+ vectors)
-- Memory-constrained environments
-- Batch-heavy workloads
-
-**Trade-offs:**
-- Lower recall at same latency
-- Requires training phase
-- Good for approximate results
-
-```json
-{
-  "name": "large_collection",
-  "dimension": 768,
-  "index_type": "ivf",
-  "ivf": {
-    "num_clusters": 1000,
-    "nprobe": 50
-  }
-}
-```
-
-**Tuning `nprobe`:**
-| nprobe | Recall | Latency |
-|--------|--------|---------|
-| 10     | ~70%   | Fast    |
-| 50     | ~90%   | Medium  |
-| 100    | ~95%   | Slower  |
-
-### ScaNN
-
-**Best for:**
-- Ultra-low latency requirements
-- Very large scale (100M+ vectors)
-- When accuracy can be traded for speed
-
-**Trade-offs:**
-- Requires training
-- Two-phase search (approximate + rerank)
-- Best with anisotropic quantization
-
-```json
-{
-  "name": "huge_collection",
-  "dimension": 768,
-  "index_type": "scann",
-  "scann": {
-    "num_leaves": 2000,
-    "num_rerank": 100
-  }
-}
-```
-
-### DiskANN
-
-**Best for:**
-- Datasets larger than available RAM
-- Cost-sensitive deployments
-- SSD/NVMe storage available
-
-**Trade-offs:**
-- Depends on disk I/O performance
-- Higher latency than in-memory indexes
-- Excellent price/performance ratio
+Collections use HNSW today. The repo also contains `pkg/index/diskann`,
+`pkg/index/ivf`, and `pkg/index/scann` packages, but none of them are
+wired into the collection manager — `index_type: diskann|ivf|scann` is
+not honored. Treat them as in-tree experimental code, not selectable
+index types. Tune HNSW for your dataset using the parameters above.
 
 ---
 
@@ -370,8 +295,9 @@ Store vectors on disk, keep graph in memory:
 Create payload indexes for frequently filtered fields:
 
 ```bash
-curl -X PUT http://localhost:8080/collections/docs/index \
-  -d '{"field_name": "category", "field_schema": "keyword"}'
+curl -X POST http://localhost:8080/collections/docs/payload-indexes \
+  -H "Authorization: Bearer $AUTH_TOKEN" \
+  -d '{"field_name": "category", "field_type": "keyword"}'
 ```
 
 ### Supported Index Types

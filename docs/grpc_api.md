@@ -523,14 +523,14 @@ conn, err := grpc.Dial(
 
 ---
 
-## Performance Comparison
+## REST vs gRPC
 
-| Operation     | REST (QPS) | gRPC (QPS) | Improvement |
-|---------------|------------|------------|-------------|
-| Single Search | 2,000      | 5,000      | 2.5x        |
-| Batch Search  | 500        | 2,000      | 4x          |
-| Upsert        | 3,000      | 8,000      | 2.7x        |
-| Streaming     | N/A        | 10,000     | N/A         |
+The REST and gRPC servers are backed by the same collection manager, so
+end-to-end correctness is identical. gRPC is preferred for service-to-
+service traffic because it avoids HTTP/JSON encoding overhead per call
+and supports streaming, but the QPS gap is workload-dependent — there
+are no canonical numbers in the repo. Run `test/benchmark/` against
+your own deployment to compare on your hardware.
 
 ---
 

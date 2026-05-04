@@ -1,623 +1,279 @@
 # LimyeDB Troubleshooting Guide
 
-This guide helps diagnose and resolve common issues with LimyeDB.
+Common problems and what to do about them. Every command below uses real
+flags and routes that exist in the current codebase.
 
 ## Table of Contents
 
-1. [Connection Issues](#connection-issues)
-2. [Search Problems](#search-problems)
-3. [Performance Issues](#performance-issues)
-4. [Memory Problems](#memory-problems)
-5. [Cluster Issues](#cluster-issues)
-6. [Data Recovery](#data-recovery)
-7. [Log Interpretation](#log-interpretation)
-8. [Monitoring Metrics](#monitoring-metrics)
+1. [Server won't start](#server-wont-start)
+2. [Authentication failures](#authentication-failures)
+3. [Connection issues](#connection-issues)
+4. [Search problems](#search-problems)
+5. [Performance issues](#performance-issues)
+6. [Cluster issues](#cluster-issues)
+7. [Data recovery](#data-recovery)
+8. [Logs](#logs)
+9. [Metrics](#metrics)
 
 ---
 
-## Connection Issues
+## Server won't start
 
-### Cannot Connect to Server
+### "authentication is required: pass -auth-token … or -allow-anonymous"
 
-**Symptoms:**
-- `connection refused` errors
-- Timeouts when connecting
+LimyeDB refuses to start without an explicit auth decision. Either:
 
-**Diagnosis:**
 ```bash
-# Check if server is running
+# Production: real secret
+./limyedb -auth-token "$(openssl rand -hex 32)"
+
+# Development / local-only: opt out
+./limyedb -allow-anonymous
+```
+
+This is intentional and replaces the historical foot-gun where
+`./limyedb` ran wide open by default.
+
+### "address already in use"
+
+Another process is on `:8080` or `:50051`. Either stop it or override:
+
+```bash
+./limyedb -auth-token "$AUTH" -rest :8081 -grpc :50052
+```
+
+### Permission errors on the data directory
+
+LimyeDB creates `./data` (or whatever you pass to `-data`) with `0750`
+permissions. If you point at a directory the user can't write, startup
+will fail with `Failed to create data directory`. Fix the path or run as
+a user with write access.
+
+---
+
+## Authentication failures
+
+### "401 Unauthorized" on every request
+
+You started with `-auth-token` but your client isn't sending the header.
+The server expects:
+
+```
+Authorization: Bearer <your-auth-token>
+```
+
+```bash
+curl -H "Authorization: Bearer $AUTH_TOKEN" http://localhost:8080/health
+```
+
+### "invalid token claims"
+
+You supplied a JWT signed with the wrong secret. The JWT signing key is
+the same value as `-auth-token`. Mint a JWT with HS256 against that
+secret and it will be accepted.
+
+### "permission denied for collection X"
+
+JWTs that carry a `limyedb_permissions` claim are scoped to the
+collections listed under `collections`. A token with
+`{"docs": ["READ_ONLY"]}` cannot write to `docs` and cannot touch
+`embeddings` at all. Mint a new JWT with the right claim, or use the
+master `-auth-token` directly (it grants global admin).
+
+---
+
+## Connection issues
+
+```bash
+# Check the process is alive
 ps aux | grep limyedb
 
-# Check port availability
-lsof -i :8080
-lsof -i :50051
+# Confirm the listener
+lsof -iTCP:8080 -sTCP:LISTEN
+lsof -iTCP:50051 -sTCP:LISTEN
 
-# Test connectivity
+# Liveness check (no auth required)
 curl http://localhost:8080/health
 ```
 
-**Solutions:**
-
-1. **Server not running:**
-   ```bash
-   ./limyedb serve --config config.yaml
-   ```
-
-2. **Port conflict:**
-   ```yaml
-   # Change ports in config.yaml
-   server:
-     rest_address: ":8081"
-     grpc_address: ":50052"
-   ```
-
-3. **Firewall blocking:**
-   ```bash
-   # Linux
-   sudo ufw allow 8080
-   sudo ufw allow 50051
-
-   # macOS
-   sudo pfctl -d  # Disable firewall temporarily for testing
-   ```
-
-### Authentication Failures
-
-**Symptoms:**
-- `401 Unauthorized` responses
-- `invalid API key` errors
-
-**Diagnosis:**
-```bash
-# Test with curl
-curl -H "Authorization: Bearer YOUR_KEY" http://localhost:8080/health
-```
-
-**Solutions:**
-
-1. **Verify API key format:**
-   ```python
-   # Python - correct format
-   client = LimyeDBClient(host="http://localhost:8080", api_key="your-key")
-
-   # Not auth_token
-   ```
-
-2. **Check key in server config:**
-   ```yaml
-   auth:
-     enabled: true
-     keys:
-       - "your-api-key"
-   ```
-
-3. **Regenerate API key** if compromised
+If `/health` returns `200` but your application calls fail, double-check
+the protocol (REST vs gRPC), the auth header, and the URL path against
+the actual REST routes — many old docs and sample apps reference paths
+like `/cluster/snapshot`, `/admin/...`, or `/sql` that **do not exist**
+in the current server. Use the routes listed in `api/rest/server.go` as
+the source of truth.
 
 ---
 
-## Search Problems
+## Search problems
 
-### Low Recall / Missing Results
+### Empty result set
 
-**Symptoms:**
-- Known similar documents not returned
-- Recall lower than expected
+```bash
+# 1. Confirm the points are there
+curl -H "Authorization: Bearer $AUTH_TOKEN" \
+  http://localhost:8080/collections/docs/points/<known-id>
 
-**Diagnosis:**
-```python
-# Check if points exist
-point = client.get_point("collection", "expected-id")
-print(point)
-
-# Search with higher ef
-results = client.search("collection", query, limit=10, ef=500)
+# 2. Check the collection has points
+curl -H "Authorization: Bearer $AUTH_TOKEN" \
+  http://localhost:8080/collections/docs
 ```
 
-**Solutions:**
+If points are present but searches return nothing, the most common
+causes are:
 
-1. **Increase ef_search:**
-   ```python
-   # At query time
-   results = client.search(collection, query, limit=10, ef=200)
-   ```
+- **Vector dimension mismatch** — search vector length differs from the
+  collection's `dimension`. Returns no error, just no matches.
+- **Filter excludes everything** — if you pass `filter`, try the same
+  query without it.
 
-2. **Check vector normalization:**
-   ```python
-   # For cosine similarity, normalize vectors
-   import numpy as np
-   query = query / np.linalg.norm(query)
-   ```
+### Low recall
 
-3. **Verify dimension matches:**
-   ```python
-   collection_info = client.get_collection("my_collection")
-   print(f"Collection dimension: {collection_info['dimension']}")
-   print(f"Query dimension: {len(query)}")
-   ```
+Increase `ef_search` per request:
 
-4. **Rebuild index with higher ef_construction:**
-   ```json
-   {
-     "hnsw": {
-       "ef_construction": 400
-     }
-   }
-   ```
-
-### Slow Searches
-
-**Symptoms:**
-- Search latency >100ms
-- Timeouts on search requests
-
-**Diagnosis:**
-```python
-import time
-
-start = time.time()
-results = client.search(collection, query, limit=10)
-print(f"Search took: {(time.time() - start) * 1000:.2f}ms")
+```json
+{"vector": [0.1, 0.2, ...], "limit": 10, "ef": 200}
 ```
 
-**Solutions:**
+Higher `ef` means more candidates explored at query time, costing
+latency for recall.
 
-1. **Reduce ef_search:**
-   ```python
-   results = client.search(collection, query, limit=10, ef=50)
-   ```
+### Stale read after a write
 
-2. **Enable quantization:**
-   ```json
-   {
-     "quantization": {
-       "type": "scalar",
-       "rescore": true
-     }
-   }
-   ```
+By default reads on a follower can be slightly behind the leader.
+For read-after-write semantics on the same client, append
+`?consistent=true`:
 
-3. **Optimize filters:**
-   - Index frequently filtered fields
-   - Use most selective conditions first
-
-4. **Check server resources:**
-   ```bash
-   top -p $(pgrep limyedb)
-   ```
-
-### Filter Not Working
-
-**Symptoms:**
-- Filter conditions ignored
-- Wrong results returned
-
-**Diagnosis:**
-```python
-# Verify payload exists
-point = client.get_point("collection", "point-id")
-print(point.payload)
-
-# Check filter syntax
-filter = {
-    "must": [
-        {"key": "category", "match": {"value": "news"}}
-    ]
-}
+```bash
+curl -X POST "http://localhost:8080/collections/docs/search?consistent=true" \
+  -H "Authorization: Bearer $AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"vector": [0.1, 0.2, ...], "limit": 5}'
 ```
 
-**Solutions:**
-
-1. **Check field name case:**
-   ```python
-   # Payload field names are case-sensitive
-   filter = {"must": [{"key": "Category", ...}]}  # Matches "Category"
-   filter = {"must": [{"key": "category", ...}]}  # Matches "category"
-   ```
-
-2. **Check value types:**
-   ```python
-   # String vs number
-   filter = {"must": [{"key": "count", "match": {"value": 42}}]}   # number
-   filter = {"must": [{"key": "count", "match": {"value": "42"}}]} # string
-   ```
-
-3. **Use correct range syntax:**
-   ```python
-   filter = {
-       "must": [
-           {
-               "key": "price",
-               "range": {"gte": 10, "lte": 100}  # Not "gt_eq"
-           }
-       ]
-   }
-   ```
+The handler proxies the request to the current Raft leader, whose FSM
+has all committed writes by definition.
 
 ---
 
-## Performance Issues
+## Performance issues
 
-### High CPU Usage
+### Slow inserts
 
-**Symptoms:**
-- CPU at 100%
-- Slow response times
-- Server unresponsive
+- Use the batch endpoint: `POST /collections/:name/points/batch` groups
+  writes into a single WAL fsync.
+- HNSW insert holds a global build lock today (single-threaded). For
+  bulk loads, prefer offline ingestion.
+- Make sure `wal.sync_on_write` is what you want: `true` is durable but
+  forces an fsync per record; `false` is faster but loses the last
+  segment on crash.
 
-**Diagnosis:**
-```bash
-# Check CPU profile
-top -p $(pgrep limyedb)
+### Slow searches
 
-# Generate CPU profile
-curl http://localhost:8080/debug/pprof/profile?seconds=30 > cpu.prof
-go tool pprof cpu.prof
-```
+- Check `ef_search`. Default 100 is a balance; reduce for speed,
+  increase for recall.
+- For heavily filtered queries, add a payload index on the filter field:
+  ```bash
+  curl -X POST http://localhost:8080/collections/docs/payload-indexes \
+    -H "Authorization: Bearer $AUTH_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"field": "tenant_id", "type": "hash"}'
+  ```
 
-**Solutions:**
+### High memory
 
-1. **Reduce concurrent operations:**
-   ```yaml
-   server:
-     max_concurrent_requests: 100
-   ```
-
-2. **Enable rate limiting:**
-   ```yaml
-   rate_limit:
-     enabled: true
-     requests_per_second: 1000
-   ```
-
-3. **Scale horizontally** - Add more nodes to cluster
-
-### High Memory Usage
-
-See [Memory Problems](#memory-problems) section.
-
-### Slow Insertions
-
-**Symptoms:**
-- Insert throughput <1000/s
-- Long wait times for upsert
-
-**Diagnosis:**
-```python
-import time
-
-start = time.time()
-client.upsert("collection", points[:100])
-print(f"100 points took: {(time.time() - start) * 1000:.2f}ms")
-```
-
-**Solutions:**
-
-1. **Use batch upserts:**
-   ```python
-   # Instead of one at a time
-   client.upsert_batch("collection", points, batch_size=100)
-   ```
-
-2. **Disable wait:**
-   ```python
-   client.upsert("collection", points, wait=False)
-   ```
-
-3. **Reduce ef_construction** for faster builds (trade-off with quality)
+HNSW is fully in-memory by design (the graph connections are
+mmap-backed but the working set must fit). Estimate ~40 bytes/edge
+plus the vectors. For very large datasets there is currently no
+production-wired disk-resident index — the `pkg/index/diskann` package
+is unwired.
 
 ---
 
-## Memory Problems
+## Cluster issues
 
-### Out of Memory (OOM)
+### Followers can't see writes
 
-**Symptoms:**
-- Server crashes with OOM
-- `killed` by OS
-- Memory usage at limit
+The Raft replication is asynchronous; followers apply log entries after
+the leader commits. If your client reads from a follower right after a
+write to the leader, it may see stale data. Use `?consistent=true` or
+target the leader directly.
 
-**Diagnosis:**
-```bash
-# Check memory usage
-free -h
+### "not the leader" on writes
 
-# Check container limits
-docker stats limyedb
+The handler reverse-proxies writes to the current leader automatically.
+If you see this error directly, the receiving node could not find the
+leader's REST address yet (the leader hasn't broadcast it). Wait for
+leader election to settle or check that all nodes share the same
+`-auth-token` so the broadcast can authenticate.
 
-# Check Go memory stats
-curl http://localhost:8080/debug/pprof/heap > heap.prof
-go tool pprof heap.prof
-```
+### Adding a node never converges
 
-**Solutions:**
-
-1. **Enable on-disk storage:**
-   ```json
-   {
-     "name": "large_collection",
-     "on_disk": true
-   }
-   ```
-
-2. **Enable quantization:**
-   ```json
-   {
-     "quantization": {
-       "type": "scalar"  // 4x memory reduction
-     }
-   }
-   ```
-
-3. **Increase system memory** or use larger instances
-
-4. **Shard data across nodes**
-
-### Memory Leak Detection
-
-**Symptoms:**
-- Memory grows over time
-- Memory not released after deletes
-
-**Diagnosis:**
-```bash
-# Monitor over time
-watch -n 5 'ps -o rss,vsz -p $(pgrep limyedb)'
-
-# Generate heap profiles at intervals
-for i in 1 2 3; do
-  curl http://localhost:8080/debug/pprof/heap > heap_$i.prof
-  sleep 60
-done
-
-# Compare profiles
-go tool pprof -diff_base=heap_1.prof heap_3.prof
-```
-
-**Solutions:**
-
-1. **Compact deleted points:**
-   ```bash
-   curl -X POST http://localhost:8080/collections/name/compact
-   ```
-
-2. **Restart server** to clear fragmentation
-
-3. **Report issue** with heap profile if leak persists
+A new node joins via `-raft-join http://<leader>:8080`. The bootstrap
+node must have been started with `-raft-bootstrap` and reachable on its
+`-raft-bind` address from the joining node. There is **no** automatic
+peer discovery or DNS-based join; the join URL is required.
 
 ---
 
-## Cluster Issues
+## Data recovery
 
-### Node Not Joining Cluster
+### After a crash
 
-**Symptoms:**
-- `failed to join cluster` errors
-- Node shows as unhealthy
+LimyeDB replays the WAL on startup. Recovery is automatic — there is no
+`limyedb recover` subcommand. Look for log lines like `WAL initialized`
+and `Loaded N collections` to confirm.
 
-**Diagnosis:**
+### Restoring from a snapshot
+
 ```bash
-# Check cluster status
-curl http://localhost:8080/cluster/status
+# List snapshots
+curl -H "Authorization: Bearer $AUTH_TOKEN" \
+  http://localhost:8080/snapshots
 
-# Check network connectivity
-ping other-node-ip
-
-# Check Raft logs
-grep "raft" /var/log/limyedb/limyedb.log
+# Restore one
+curl -X POST -H "Authorization: Bearer $AUTH_TOKEN" \
+  http://localhost:8080/snapshots/<id>/restore
 ```
 
-**Solutions:**
-
-1. **Verify network connectivity:**
-   ```bash
-   telnet other-node 7000  # Raft port
-   ```
-
-2. **Check node IDs are unique:**
-   ```yaml
-   cluster:
-     node_id: "node-1"  # Must be unique
-   ```
-
-3. **Ensure same cluster token:**
-   ```yaml
-   cluster:
-     token: "same-token-on-all-nodes"
-   ```
-
-### Split Brain / Data Inconsistency
-
-**Symptoms:**
-- Different data on different nodes
-- Write conflicts
-
-**Solutions:**
-
-1. **Check leader status:**
-   ```bash
-   curl http://localhost:8080/cluster/leader
-   ```
-
-2. **Force leader election** (careful!):
-   ```bash
-   curl -X POST http://localhost:8080/cluster/step-down
-   ```
-
-3. **Restore from snapshot** if data is corrupted
+Snapshots are written via tmp+fsync+rename and the `.meta` file is the
+publish point — a half-written snapshot cannot be served.
 
 ---
 
-## Data Recovery
+## Logs
 
-### Restoring from Snapshot
+LimyeDB logs JSON to stdout via Go's `slog`. Notable lines:
 
-```bash
-# List available snapshots
-ls /data/snapshots/
+- `WAL initialized` — durable storage online.
+- `Starting REST API server` / `Starting gRPC API server` — listeners up.
+- `running with -allow-anonymous: REST and gRPC are unauthenticated` —
+  reminder you started without auth.
+- `CDC webhook delivery failed for ...` — a registered webhook target
+  is unreachable; the dispatcher drops the event after a timeout.
 
-# Stop server
-systemctl stop limyedb
-
-# Restore snapshot
-limyedb restore --snapshot /data/snapshots/snapshot-20240101.tar.gz
-
-# Start server
-systemctl start limyedb
-```
-
-### Recovering from WAL
-
-```bash
-# If snapshot is corrupted but WAL is intact
-limyedb recover --wal-dir /data/wal/
-```
-
-### Exporting Data
-
-```python
-# Export collection to file
-import json
-
-all_points = []
-offset = None
-
-while True:
-    result = client.scroll("collection", limit=1000, offset=offset)
-    all_points.extend(result["points"])
-    offset = result.get("next_offset")
-    if not offset:
-        break
-
-with open("backup.json", "w") as f:
-    json.dump(all_points, f)
-```
+There is no built-in log-level toggle endpoint; restart with a different
+configuration if you need a different verbosity.
 
 ---
 
-## Log Interpretation
+## Metrics
 
-### Log Levels
-
-| Level | Meaning |
-|-------|---------|
-| DEBUG | Detailed debugging info |
-| INFO  | Normal operations |
-| WARN  | Potential issues |
-| ERROR | Operation failures |
-| FATAL | Server crash |
-
-### Common Log Patterns
-
-**Successful search:**
-```
-INFO  search completed collection=docs k=10 ef=100 took_ms=5
-```
-
-**Slow query warning:**
-```
-WARN  slow query detected collection=docs took_ms=150 threshold_ms=100
-```
-
-**Memory pressure:**
-```
-WARN  memory pressure high usage_percent=85 threshold=80
-```
-
-**Connection error:**
-```
-ERROR failed to connect to peer addr=node2:7000 error="connection refused"
-```
-
-### Enabling Debug Logs
-
-```yaml
-logging:
-  level: debug
-  format: json
-```
-
-Or at runtime:
-```bash
-curl -X POST http://localhost:8080/admin/log-level?level=debug
-```
-
----
-
-## Monitoring Metrics
-
-### Key Metrics to Watch
-
-| Metric | Normal | Warning | Critical |
-|--------|--------|---------|----------|
-| `search_latency_p99` | <50ms | <200ms | >500ms |
-| `memory_usage_percent` | <70% | <85% | >90% |
-| `cpu_usage_percent` | <60% | <80% | >95% |
-| `wal_lag_bytes` | <1MB | <10MB | >100MB |
-| `error_rate` | <0.1% | <1% | >5% |
-
-### Prometheus Metrics Endpoint
+Prometheus metrics are exposed at `/metrics` (no auth):
 
 ```bash
 curl http://localhost:8080/metrics
 ```
 
-### Key Metrics
+Notable series live in `pkg/metrics/metrics.go`:
 
-```prometheus
-# Search performance
-limyedb_search_duration_seconds{quantile="0.99"}
-limyedb_search_total{status="success"}
-limyedb_search_total{status="error"}
+- `limyedb_http_request_duration_seconds` — REST request latency.
+- `limyedb_http_requests_total` — REST request count by route/status.
 
-# Memory
-limyedb_memory_usage_bytes
-limyedb_gc_pause_seconds
+> Some dashboards floating around reference series like
+> `limyedb_gc_pause_seconds` or `limyedb_pending_vectors`. Those are not
+> defined in the current code; do not assume they exist without checking
+> `pkg/metrics/metrics.go`.
 
-# Collections
-limyedb_collection_points_total{collection="docs"}
-limyedb_collection_vectors_bytes{collection="docs"}
-
-# Cluster
-limyedb_cluster_nodes_total
-limyedb_raft_leader
-```
-
-### Alerting Rules (Prometheus)
-
-```yaml
-groups:
-  - name: limyedb
-    rules:
-      - alert: HighSearchLatency
-        expr: limyedb_search_duration_seconds{quantile="0.99"} > 0.5
-        for: 5m
-        labels:
-          severity: warning
-
-      - alert: HighMemoryUsage
-        expr: limyedb_memory_usage_bytes / limyedb_memory_limit_bytes > 0.9
-        for: 5m
-        labels:
-          severity: critical
-
-      - alert: HighErrorRate
-        expr: rate(limyedb_search_total{status="error"}[5m]) / rate(limyedb_search_total[5m]) > 0.05
-        for: 5m
-        labels:
-          severity: critical
-```
-
----
-
-## Getting Help
-
-If you cannot resolve an issue:
-
-1. **Search existing issues:** https://github.com/limyedb/limyedb/issues
-2. **Check documentation:** https://docs.limyedb.io
-3. **Open new issue** with:
-   - LimyeDB version
-   - OS and hardware specs
-   - Relevant logs
-   - Steps to reproduce
-   - Expected vs actual behavior
+For deeper introspection (heap profiles, goroutine counts), the binary
+does not register `/debug/pprof/*` — you'd have to add it locally.
