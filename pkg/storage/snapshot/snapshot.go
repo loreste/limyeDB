@@ -111,6 +111,8 @@ type SnapshotWriter struct {
 	file          *os.File
 	gzWriter      *gzip.Writer
 	meta          *Snapshot
+	tmpPath       string // the .snap.tmp the writer is streaming into
+	finalPath     string // where the snap is renamed to in Finish
 	headerWritten bool
 }
 
@@ -120,17 +122,24 @@ func (m *Manager) CreateSnapshot(collections []string) (*SnapshotWriter, error) 
 	defer m.mu.Unlock()
 
 	id := fmt.Sprintf("snap_%d", time.Now().UnixNano())
-	path := filepath.Join(m.dir, id+".snap")
+	finalPath := filepath.Join(m.dir, id+".snap")
+	tmpPath := finalPath + ".tmp"
 
+	// Stream writes into a .tmp file. On Finish we fsync and atomically
+	// rename to the final path; on Cancel or crash, the .tmp is either
+	// removed or left for cleanup. Either way no consumer of ListSnapshots
+	// can ever observe a partial .snap (it filters on .meta extension and
+	// the .meta is published last).
 	// #nosec G304 - path is constructed internally from m.dir and generated ID
-	file, err := os.Create(path)
+	file, err := os.Create(tmpPath)
 	if err != nil {
 		return nil, err
 	}
 
 	gzWriter, err := gzip.NewWriterLevel(file, m.compressionLevel)
 	if err != nil {
-		_ = file.Close() // Best effort cleanup
+		_ = file.Close()
+		_ = os.Remove(tmpPath)
 		return nil, err
 	}
 
@@ -138,13 +147,15 @@ func (m *Manager) CreateSnapshot(collections []string) (*SnapshotWriter, error) 
 		ID:          id,
 		Timestamp:   time.Now(),
 		Collections: collections,
-		Path:        path,
+		Path:        finalPath,
 	}
 
 	return &SnapshotWriter{
-		file:     file,
-		gzWriter: gzWriter,
-		meta:     meta,
+		file:      file,
+		gzWriter:  gzWriter,
+		meta:      meta,
+		tmpPath:   tmpPath,
+		finalPath: finalPath,
 	}, nil
 }
 
@@ -277,32 +288,74 @@ func (sw *SnapshotWriter) writePoint(p PointData) error {
 	return nil
 }
 
-// Finish completes the snapshot
+// Finish completes the snapshot. The flow is:
+//
+//  1. Flush and close the gzip writer.
+//  2. fsync the .snap.tmp so its bytes are durable.
+//  3. Atomically rename .snap.tmp to .snap.
+//  4. Write the metadata JSON to .meta.tmp, fsync, then rename to .meta.
+//
+// Step (4) is the publish step: ListSnapshots iterates *.meta only, so
+// until the .meta exists nothing observes the snapshot. A crash between
+// (3) and (4) leaves an orphan .snap with no .meta, which is benign and
+// can be swept on startup. A crash before (3) leaves only a .snap.tmp,
+// which Cancel or the next CreateSnapshot will clean up.
 func (sw *SnapshotWriter) Finish() (*Snapshot, error) {
 	if err := sw.gzWriter.Close(); err != nil {
+		_ = os.Remove(sw.tmpPath)
 		return nil, err
 	}
 
-	// Get final size
 	info, err := sw.file.Stat()
 	if err != nil {
-		_ = sw.file.Close() // Best effort cleanup
+		_ = sw.file.Close()
+		_ = os.Remove(sw.tmpPath)
 		return nil, err
 	}
 	sw.meta.Size = info.Size()
 
+	if err := sw.file.Sync(); err != nil {
+		_ = sw.file.Close()
+		_ = os.Remove(sw.tmpPath)
+		return nil, fmt.Errorf("fsync snapshot body: %w", err)
+	}
 	if err := sw.file.Close(); err != nil {
+		_ = os.Remove(sw.tmpPath)
 		return nil, err
 	}
 
-	// Write metadata file
-	metaPath := sw.meta.Path + ".meta"
+	if err := os.Rename(sw.tmpPath, sw.finalPath); err != nil {
+		_ = os.Remove(sw.tmpPath)
+		return nil, fmt.Errorf("publish snapshot body: %w", err)
+	}
+
 	metaBytes, err := json.MarshalIndent(sw.meta, "", "  ")
 	if err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(metaPath, metaBytes, 0600); err != nil {
+	metaPath := sw.finalPath + ".meta"
+	metaTmp := metaPath + ".tmp"
+	mf, err := os.OpenFile(metaTmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600) //nolint:gosec
+	if err != nil {
 		return nil, err
+	}
+	if _, err := mf.Write(metaBytes); err != nil {
+		_ = mf.Close()
+		_ = os.Remove(metaTmp)
+		return nil, err
+	}
+	if err := mf.Sync(); err != nil {
+		_ = mf.Close()
+		_ = os.Remove(metaTmp)
+		return nil, fmt.Errorf("fsync snapshot meta: %w", err)
+	}
+	if err := mf.Close(); err != nil {
+		_ = os.Remove(metaTmp)
+		return nil, err
+	}
+	if err := os.Rename(metaTmp, metaPath); err != nil {
+		_ = os.Remove(metaTmp)
+		return nil, fmt.Errorf("publish snapshot meta: %w", err)
 	}
 
 	return sw.meta, nil
