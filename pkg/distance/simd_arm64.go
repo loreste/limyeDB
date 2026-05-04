@@ -12,9 +12,14 @@ import (
 // All ARM64 processors support NEON, but we validate results.
 var hasSIMD = true
 
-// useNEON controls whether to use NEON assembly.
-// Set to true to enable NEON with NaN fallback protection.
-var useNEON = true
+// useNEON controls whether to use NEON assembly. Currently disabled because
+// the hand-written assembly in simd_arm64.s produces incorrect results for
+// cosineDistanceNEON, euclideanDistanceNEON, and dotProductNEON on
+// non-trivial inputs (verified by TestSIMDvsScalar*). The bug was not
+// caught earlier because simd_test.go is gated to //go:build amd64. Until
+// the assembly is fixed, route everything through the scalar fallback,
+// which is itself correct and SIMD-friendly to the Go compiler.
+var useNEON = false
 
 // minVectorLengthForSIMD is the minimum vector length for SIMD to be beneficial.
 const minVectorLengthForSIMD = 8
