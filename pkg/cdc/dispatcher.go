@@ -66,8 +66,23 @@ func GetDispatcher() *Dispatcher {
 	return globalDispatcher
 }
 
-// Subscribe explicitly binds new users requesting live streaming hooks natively
-func (d *Dispatcher) Subscribe(collection string, sub WebhookSubscription) {
+// Subscribe registers a webhook callback for a collection. The URL is
+// validated against private/loopback IP space, localhost names, and
+// non-HTTP(S) schemes before the subscription is accepted, preventing the
+// CDC dispatcher from being used as an SSRF vector by an authenticated
+// caller of the public webhook subscription endpoint.
+func (d *Dispatcher) Subscribe(collection string, sub WebhookSubscription) error {
+	if err := validateSubscriptionURL(sub.URL); err != nil {
+		return err
+	}
+	d.appendSubscription(collection, sub)
+	return nil
+}
+
+// appendSubscription is the unvalidated form. Used internally by Subscribe
+// after validation, and by tests that need to register loopback httptest
+// URLs which the public Subscribe would (correctly) reject.
+func (d *Dispatcher) appendSubscription(collection string, sub WebhookSubscription) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.subscriptions[collection] = append(d.subscriptions[collection], sub)

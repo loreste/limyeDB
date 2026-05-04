@@ -108,9 +108,9 @@ func TestDispatcherSubscribe(t *testing.T) {
 	sub1 := WebhookSubscription{URL: "http://example.com/hook1"}
 	sub2 := WebhookSubscription{URL: "http://example.com/hook2"}
 
-	d.Subscribe("collection1", sub1)
-	d.Subscribe("collection1", sub2)
-	d.Subscribe("collection2", sub1)
+	d.appendSubscription("collection1", sub1)
+	d.appendSubscription("collection1", sub2)
+	d.appendSubscription("collection2", sub1)
 
 	subs1 := d.Subscriptions("collection1")
 	if len(subs1) != 2 {
@@ -226,7 +226,7 @@ func TestDispatcherWebhookDelivery(t *testing.T) {
 	go d.worker()
 
 	// Subscribe
-	d.Subscribe("test_collection", WebhookSubscription{URL: server.URL})
+	d.appendSubscription("test_collection", WebhookSubscription{URL: server.URL})
 
 	// Publish events
 	for i := 0; i < 5; i++ {
@@ -267,7 +267,7 @@ func TestDispatcherCustomHeaders(t *testing.T) {
 
 	go d.worker()
 
-	d.Subscribe("test", WebhookSubscription{
+	d.appendSubscription("test", WebhookSubscription{
 		URL: server.URL,
 		Headers: map[string]string{
 			"Authorization":   "Bearer secret-token",
@@ -341,8 +341,8 @@ func TestDispatcherMultipleSubscribers(t *testing.T) {
 
 	go d.worker()
 
-	d.Subscribe("multi", WebhookSubscription{URL: server1.URL})
-	d.Subscribe("multi", WebhookSubscription{URL: server2.URL})
+	d.appendSubscription("multi", WebhookSubscription{URL: server1.URL})
+	d.appendSubscription("multi", WebhookSubscription{URL: server2.URL})
 
 	d.Publish(Event{
 		Collection: "multi",
@@ -378,7 +378,7 @@ func TestDispatcherConcurrentPublish(t *testing.T) {
 
 	go d.worker()
 
-	d.Subscribe("concurrent", WebhookSubscription{URL: server.URL})
+	d.appendSubscription("concurrent", WebhookSubscription{URL: server.URL})
 
 	const numGoroutines = 10
 	const eventsPerGoroutine = 10
@@ -422,7 +422,7 @@ func TestDispatcherConcurrentSubscribe(t *testing.T) {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			d.Subscribe("concurrent_sub", WebhookSubscription{
+			d.appendSubscription("concurrent_sub", WebhookSubscription{
 				URL: "http://example.com/hook",
 			})
 		}(g)
@@ -453,7 +453,7 @@ func TestDispatcherWebhookFailure(t *testing.T) {
 
 	go d.worker()
 
-	d.Subscribe("failing", WebhookSubscription{URL: server.URL})
+	d.appendSubscription("failing", WebhookSubscription{URL: server.URL})
 
 	d.Publish(Event{
 		Collection: "failing",
@@ -480,7 +480,7 @@ func TestDispatcherUnreachableWebhook(t *testing.T) {
 	go d.worker()
 
 	// Subscribe to unreachable URL
-	d.Subscribe("unreachable", WebhookSubscription{URL: "http://192.0.2.1:12345/webhook"})
+	d.appendSubscription("unreachable", WebhookSubscription{URL: "http://192.0.2.1:12345/webhook"})
 
 	// This should not hang or panic
 	d.Publish(Event{
@@ -540,6 +540,6 @@ func BenchmarkSubscribe(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		d.Subscribe("benchmark", sub)
+		d.appendSubscription("benchmark", sub)
 	}
 }

@@ -34,7 +34,7 @@ func TestDispatcherNoGoroutineLeak(t *testing.T) {
 	go d.worker()
 
 	// Subscribe
-	d.Subscribe("leak_test", WebhookSubscription{URL: server.URL})
+	d.appendSubscription("leak_test", WebhookSubscription{URL: server.URL})
 
 	// Publish many events
 	for i := 0; i < 100; i++ {
@@ -90,7 +90,7 @@ func TestDispatcherMemoryStability(t *testing.T) {
 	}
 
 	go d.worker()
-	d.Subscribe("memory_test", WebhookSubscription{URL: server.URL})
+	d.appendSubscription("memory_test", WebhookSubscription{URL: server.URL})
 
 	// Get initial memory stats
 	runtime.GC()
@@ -140,7 +140,7 @@ func BenchmarkDispatcherThroughput(b *testing.B) {
 	}
 
 	go d.worker()
-	d.Subscribe("benchmark", WebhookSubscription{URL: server.URL})
+	d.appendSubscription("benchmark", WebhookSubscription{URL: server.URL})
 
 	event := Event{
 		Collection: "benchmark",
@@ -169,7 +169,7 @@ func BenchmarkDispatcherConcurrent(b *testing.B) {
 	}
 
 	go d.worker()
-	d.Subscribe("concurrent_bench", WebhookSubscription{URL: server.URL})
+	d.appendSubscription("concurrent_bench", WebhookSubscription{URL: server.URL})
 
 	event := Event{
 		Collection: "concurrent_bench",

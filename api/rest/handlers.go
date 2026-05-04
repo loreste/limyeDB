@@ -1673,7 +1673,10 @@ func (s *Server) handleCreateWebhook(c *gin.Context) {
 	}
 
 	collectionName := c.Param("name")
-	cdc.GetDispatcher().Subscribe(collectionName, req)
+	if err := cdc.GetDispatcher().Subscribe(collectionName, req); err != nil {
+		respondError(c, http.StatusBadRequest, err)
+		return
+	}
 
 	respondSuccess(c, gin.H{
 		"message":    "webhook subscribed successfully",
