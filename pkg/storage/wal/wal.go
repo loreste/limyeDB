@@ -206,13 +206,55 @@ func (w *WAL) loadSegments() error {
 		if err != nil {
 			continue
 		}
+		// Scan the segment for its last sequence number. Without this,
+		// segmentInfo.lastSeqNum stays at 0 and Truncate(beforeSeqNum) for
+		// any non-zero beforeSeqNum deletes all loaded segments. It also
+		// keeps w.lastSeqNum monotone across restarts so newly written
+		// records don't reuse seq numbers from already-persisted records.
+		lastSeq, scanErr := scanSegmentLastSeqNum(path)
+		if scanErr != nil {
+			return fmt.Errorf("scan WAL segment %s: %w", path, scanErr)
+		}
 		w.segments = append(w.segments, &segmentInfo{
-			path: path,
-			size: info.Size(),
+			path:       path,
+			size:       info.Size(),
+			lastSeqNum: lastSeq,
 		})
+		if lastSeq > w.lastSeqNum {
+			w.lastSeqNum = lastSeq
+		}
 	}
 
 	return nil
+}
+
+// scanSegmentLastSeqNum reads a segment from start to end and returns the
+// highest sequence number observed. A segment that contains no decodable
+// records returns 0 with a nil error. A truncated trailing record (the
+// common case after an unflushed crash) is ignored once decoding stops.
+func scanSegmentLastSeqNum(path string) (uint64, error) {
+	// #nosec G304 - path is from internal directory listing, not user input
+	file, err := os.Open(path)
+	if err != nil {
+		return 0, err
+	}
+	defer file.Close()
+
+	reader := bufio.NewReader(file)
+	var maxSeq uint64
+	for {
+		record, err := decodeRecord(reader)
+		if err != nil {
+			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+				break
+			}
+			return maxSeq, err
+		}
+		if record.SeqNum > maxSeq {
+			maxSeq = record.SeqNum
+		}
+	}
+	return maxSeq, nil
 }
 
 func (w *WAL) openCurrentSegment() error {

@@ -429,6 +429,109 @@ func TestWALReplayAfterCrash(t *testing.T) {
 	}
 }
 
+// TestWALSeqNumPersistsAcrossReopen verifies that the WAL recovers its
+// last sequence number from on-disk segments instead of restarting from 0.
+// Previously loadSegments left segmentInfo.lastSeqNum at zero and the WAL
+// reused already-persisted seq numbers after restart, which also broke
+// Truncate (which compares seg.lastSeqNum to beforeSeqNum).
+func TestWALSeqNumPersistsAcrossReopen(t *testing.T) {
+	dir := t.TempDir()
+	cfg := &Config{Dir: dir, SegmentSize: 1024 * 1024, SyncOnWrite: true}
+
+	wal, err := Open(cfg)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	for i := 0; i < 7; i++ {
+		if err := wal.Write(&Record{Type: RecordTypeInsert, Collection: "c", Data: []byte("x")}); err != nil {
+			t.Fatalf("Write %d: %v", i, err)
+		}
+	}
+	if got := wal.LastSeqNum(); got != 7 {
+		t.Fatalf("LastSeqNum before close = %d, want 7", got)
+	}
+	if err := wal.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	wal2, err := Open(cfg)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer wal2.Close()
+	if got := wal2.LastSeqNum(); got != 7 {
+		t.Errorf("LastSeqNum after reopen = %d, want 7", got)
+	}
+	// New writes must not collide with already-persisted seq numbers.
+	r := &Record{Type: RecordTypeInsert, Collection: "c", Data: []byte("y")}
+	if err := wal2.Write(r); err != nil {
+		t.Fatalf("Write after reopen: %v", err)
+	}
+	if r.SeqNum != 8 {
+		t.Errorf("post-reopen Write SeqNum = %d, want 8", r.SeqNum)
+	}
+}
+
+// TestWALTruncatePreservesNewer verifies Truncate only removes segments
+// whose last seq number is below the threshold. Pre-fix, all segments had
+// lastSeqNum=0 and Truncate(>0) wiped everything.
+func TestWALTruncatePreservesNewer(t *testing.T) {
+	dir := t.TempDir()
+	cfg := &Config{Dir: dir, SegmentSize: 200, SyncOnWrite: true}
+
+	wal, err := Open(cfg)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	// Write enough records to span several segments. With SegmentSize=200
+	// and ~50-byte records this should rotate every couple of records.
+	for i := 0; i < 12; i++ {
+		if err := wal.Write(&Record{Type: RecordTypeInsert, Collection: "c", Data: []byte("filler-record-data")}); err != nil {
+			t.Fatalf("Write %d: %v", i, err)
+		}
+	}
+	if err := wal.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	wal2, err := Open(cfg)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer wal2.Close()
+
+	beforeFiles, _ := filepath.Glob(filepath.Join(dir, "*.wal"))
+	if len(beforeFiles) < 3 {
+		t.Fatalf("expected >=3 .wal segments, got %d", len(beforeFiles))
+	}
+
+	// Truncate everything strictly older than seqnum 6. Pre-fix this
+	// either deleted nothing (if truncation logic happened to skip) or
+	// everything (typical buggy behavior). Post-fix: the segment
+	// containing seq 6 onward must remain replayable.
+	if err := wal2.Truncate(6); err != nil {
+		t.Fatalf("Truncate: %v", err)
+	}
+
+	var maxSeqAfter uint64
+	if err := wal2.Replay(func(r *Record) error {
+		if r.SeqNum > maxSeqAfter {
+			maxSeqAfter = r.SeqNum
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("Replay after Truncate: %v", err)
+	}
+	// We must still see the latest record (seq 12). The pre-fix
+	// implementation typically wiped this segment too because its
+	// lastSeqNum was 0 < 6.
+	if maxSeqAfter < 12 {
+		t.Errorf("Replay after Truncate(6) max seq = %d, want >= 12 "+
+			"(Truncate must not delete segments containing newer records)",
+			maxSeqAfter)
+	}
+}
+
 func TestWALConcurrentWrites(t *testing.T) {
 	dir := t.TempDir()
 
