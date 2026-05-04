@@ -8,9 +8,13 @@ import (
 	"unsafe"
 )
 
-// hasSIMD indicates whether SIMD instructions are available.
-// This would be detected at runtime in production.
-var hasSIMD = true
+// hasSIMD gates the AVX2 assembly path. Currently disabled because the
+// hand-written AVX kernels in simd_amd64.s diverge from the scalar
+// reference for non-trivial inputs (verified by TestSIMDvsScalar* on
+// CI). The arm64 NEON kernels have the same family of bug. Until the
+// assembly is fixed, route everything through the scalar fallback,
+// which is correct and Go-compiler-autovectorizable.
+var hasSIMD = false
 
 // CosineDistanceSIMD calculates cosine distance using SIMD when available.
 func CosineDistanceSIMD(a, b []float32) float32 {
