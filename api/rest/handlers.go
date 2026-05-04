@@ -267,7 +267,13 @@ func (s *Server) handleUpdateCollection(c *gin.Context) {
 		return
 	}
 
-	coll, _ := s.collections.Get(name)
+	// A concurrent Delete between UpdateConfig and Get returns nil; the
+	// previous code dereferenced it and crashed the request goroutine.
+	coll, err := s.collections.Get(name)
+	if err != nil || coll == nil {
+		respondStructuredError(c, http.StatusNotFound, "NOT_FOUND", "collection deleted concurrently")
+		return
+	}
 	respondSuccess(c, coll.Info())
 }
 
