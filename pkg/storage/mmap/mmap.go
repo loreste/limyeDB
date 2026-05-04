@@ -4,12 +4,15 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"sync"
 	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
 
 // Storage provides memory-mapped file storage for vectors
@@ -224,13 +227,24 @@ func (s *Storage) grow(minSize int64) error {
 	return nil
 }
 
-// Sync syncs the mmap to disk
+// Sync flushes dirty mmap pages to disk and fsyncs the file descriptor.
+//
+// file.Sync() alone is not sufficient: writes performed through the mmap
+// region may sit in the kernel's page cache without ever passing through
+// the file descriptor, so an fsync that ignores the mapping cannot guarantee
+// they reach disk. unix.Msync with MS_SYNC blocks until the kernel has
+// written the dirty pages of the mapping, after which file.Sync() flushes
+// the file's metadata. Together they give crash-safe durability for
+// vectors written through the mmap.
 func (s *Storage) Sync() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Note: On macOS/Darwin, use msync via cgo or skip sync
-	// For now, just sync the file
+	if len(s.data) > 0 {
+		if err := unix.Msync(s.data, unix.MS_SYNC); err != nil {
+			return fmt.Errorf("msync: %w", err)
+		}
+	}
 	return s.file.Sync()
 }
 
@@ -255,20 +269,52 @@ type allocatorState struct {
 }
 
 func (s *Storage) saveAllocatorState() error {
-	// Save allocator state to a separate metadata file
-	metaPath := filepath.Clean(s.path + ".meta")
-
+	// Snapshot the allocator state under its own lock so we don't race with
+	// concurrent Allocate/Free callers.
+	s.allocator.mu.Lock()
 	state := allocatorState{
 		NextOffset: s.allocator.nextOffset,
-		FreeList:   s.allocator.freeList,
+		FreeList:   append([]freeBlock(nil), s.allocator.freeList...),
 	}
+	s.allocator.mu.Unlock()
 
 	data, err := json.Marshal(state)
 	if err != nil {
 		return err
 	}
 
-	return os.WriteFile(metaPath, data, 0600)
+	// Write to a temp file in the same directory, fsync, then atomically
+	// rename into place. Without this, a crash mid-write could leave the
+	// .meta file truncated or partially populated with the next snapshot,
+	// and on Open we'd silently fall back to an empty allocator while the
+	// vectors mmap still contained the old data — orphaning every offset
+	// that lived past the truncation point.
+	metaPath := filepath.Clean(s.path + ".meta")
+	tmpPath := metaPath + ".tmp"
+
+	f, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600) //nolint:gosec
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, metaPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	return nil
 }
 
 func (s *Storage) loadAllocatorState() {

@@ -275,3 +275,94 @@ func TestAllocatorFull(t *testing.T) {
 		t.Error("Expected error when allocator is full")
 	}
 }
+
+// TestSyncFlushesDirtyPages exercises the Msync+fsync path. It cannot
+// directly observe whether dirty pages reached the platter, but it does
+// verify that Sync returns no error after writes through the mmap and
+// that the data survives a Close+reopen cycle.
+func TestSyncFlushesDirtyPages(t *testing.T) {
+	s, tmpDir := createTestStorage(t, 4)
+	defer os.RemoveAll(tmpDir)
+
+	vec := []float32{0.5, -1.5, 2.25, 3.0}
+	if err := s.WriteVector(0, vec); err != nil {
+		t.Fatalf("WriteVector: %v", err)
+	}
+	if err := s.Sync(); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	path := s.path
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	// Reopen and confirm the bytes survived.
+	cfg := &Config{Path: path, InitialSize: 1024 * 1024, MaxSize: 10 * 1024 * 1024, Dimension: 4}
+	s2, err := Open(cfg)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer s2.Close()
+	got, err := s2.ReadVector(0)
+	if err != nil {
+		t.Fatalf("ReadVector after reopen: %v", err)
+	}
+	for i := range vec {
+		if got[i] != vec[i] {
+			t.Errorf("vec[%d] = %v after reopen, want %v", i, got[i], vec[i])
+		}
+	}
+}
+
+// TestSaveAllocatorStateAtomicRename verifies that saveAllocatorState
+// performs an atomic rename: the .meta file is the new content, no
+// stale .meta.tmp lingers after success, and a reopen sees the same
+// allocator state.
+func TestSaveAllocatorStateAtomicRename(t *testing.T) {
+	s, tmpDir := createTestStorage(t, 4)
+	defer os.RemoveAll(tmpDir)
+
+	// Allocate a few slots so the allocator state is non-trivial.
+	off1, _ := s.Allocate()
+	off2, _ := s.Allocate()
+	_, _ = s.Allocate()
+	s.Free(off2)
+	beforeNext := s.allocator.nextOffset
+	beforeFreeLen := len(s.allocator.freeList)
+
+	if err := s.saveAllocatorState(); err != nil {
+		t.Fatalf("saveAllocatorState: %v", err)
+	}
+
+	metaPath := s.path + ".meta"
+	tmpPath := metaPath + ".tmp"
+
+	if _, err := os.Stat(tmpPath); !os.IsNotExist(err) {
+		t.Errorf(".meta.tmp must not exist after successful save (err=%v)", err)
+	}
+	info, err := os.Stat(metaPath)
+	if err != nil {
+		t.Fatalf(".meta missing after save: %v", err)
+	}
+	if info.Size() == 0 {
+		t.Error(".meta has zero size")
+	}
+	_ = off1
+
+	// Reopen and confirm allocator state was restored from the .meta.
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	cfg := &Config{Path: s.path, InitialSize: 1024 * 1024, MaxSize: 10 * 1024 * 1024, Dimension: 4}
+	s2, err := Open(cfg)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer s2.Close()
+	if s2.allocator.nextOffset != beforeNext {
+		t.Errorf("reopened nextOffset = %d, want %d", s2.allocator.nextOffset, beforeNext)
+	}
+	if len(s2.allocator.freeList) != beforeFreeLen {
+		t.Errorf("reopened freeList len = %d, want %d", len(s2.allocator.freeList), beforeFreeLen)
+	}
+}
