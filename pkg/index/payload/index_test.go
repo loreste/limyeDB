@@ -89,7 +89,6 @@ func TestRemovePoint(t *testing.T) {
 }
 
 func TestFilter(t *testing.T) {
-	t.Skip("Skipping: SQLite JSON query generation needs fixes - see issue tracker")
 	t.Parallel()
 
 	idx, err := NewIndex("")
@@ -128,7 +127,6 @@ func TestFilterNil(t *testing.T) {
 }
 
 func TestFilterAnd(t *testing.T) {
-	t.Skip("Skipping: SQLite JSON query generation needs fixes")
 	t.Parallel()
 
 	idx, err := NewIndex("")
@@ -156,7 +154,6 @@ func TestFilterAnd(t *testing.T) {
 }
 
 func TestFilterOr(t *testing.T) {
-	t.Skip("Skipping: SQLite JSON query generation needs fixes")
 	t.Parallel()
 
 	idx, err := NewIndex("")
@@ -181,7 +178,6 @@ func TestFilterOr(t *testing.T) {
 }
 
 func TestFilterNot(t *testing.T) {
-	t.Skip("Skipping: SQLite JSON query generation needs fixes")
 	t.Parallel()
 
 	idx, err := NewIndex("")
@@ -203,7 +199,6 @@ func TestFilterNot(t *testing.T) {
 }
 
 func TestFilterRange(t *testing.T) {
-	t.Skip("Skipping: SQLite JSON query generation needs fixes")
 	t.Parallel()
 
 	idx, err := NewIndex("")
@@ -225,7 +220,6 @@ func TestFilterRange(t *testing.T) {
 }
 
 func TestFilterIn(t *testing.T) {
-	t.Skip("Skipping: SQLite JSON query generation needs fixes")
 	t.Parallel()
 
 	idx, err := NewIndex("")
@@ -246,8 +240,28 @@ func TestFilterIn(t *testing.T) {
 	}
 }
 
+func TestFilterNotIn(t *testing.T) {
+	t.Parallel()
+
+	idx, err := NewIndex("")
+	if err != nil {
+		t.Fatalf("NewIndex() failed: %v", err)
+	}
+	defer idx.Close()
+
+	idx.IndexPoint(1, map[string]interface{}{"type": "A"})
+	idx.IndexPoint(2, map[string]interface{}{"type": "B"})
+	idx.IndexPoint(3, map[string]interface{}{"type": "C"})
+
+	filter := Field("type", NotIn("A", "C"))
+	results := idx.Filter(filter)
+
+	if len(results) != 1 {
+		t.Errorf("Expected 1 result, got %d", len(results))
+	}
+}
+
 func TestFilterContains(t *testing.T) {
-	t.Skip("Skipping: SQLite JSON query generation needs fixes")
 	t.Parallel()
 
 	idx, err := NewIndex("")
@@ -269,7 +283,6 @@ func TestFilterContains(t *testing.T) {
 }
 
 func TestFilterStartsWith(t *testing.T) {
-	t.Skip("Skipping: SQLite JSON query generation needs fixes")
 	t.Parallel()
 
 	idx, err := NewIndex("")
@@ -291,7 +304,6 @@ func TestFilterStartsWith(t *testing.T) {
 }
 
 func TestFilterEndsWith(t *testing.T) {
-	t.Skip("Skipping: SQLite JSON query generation needs fixes")
 	t.Parallel()
 
 	idx, err := NewIndex("")
@@ -440,7 +452,6 @@ func TestClose(t *testing.T) {
 }
 
 func TestFilterGreaterLess(t *testing.T) {
-	t.Skip("Skipping: SQLite JSON query generation needs fixes")
 	t.Parallel()
 
 	idx, err := NewIndex("")
@@ -483,7 +494,6 @@ func TestFilterGreaterLess(t *testing.T) {
 }
 
 func TestFilterNotEqual(t *testing.T) {
-	t.Skip("Skipping: SQLite JSON query generation needs fixes")
 	t.Parallel()
 
 	idx, err := NewIndex("")

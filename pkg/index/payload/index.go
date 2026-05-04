@@ -8,9 +8,16 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	_ "modernc.org/sqlite"
 )
+
+// memDBSeq gives each anonymous in-memory index a unique URI name so that
+// multiple Index instances created with NewIndex("") do not share state via
+// SQLite's shared-cache table. cache=shared is still required so connections
+// in a single sql.DB pool see the same in-memory tables.
+var memDBSeq atomic.Uint64
 
 // Index manages payload indexing using modernc.org/sqlite
 type Index struct {
@@ -22,7 +29,7 @@ type Index struct {
 // NewIndex creates a new payload index using an SQLite backend
 func NewIndex(dbPath string) (*Index, error) {
 	if dbPath == "" {
-		dbPath = "file::memory:?cache=shared"
+		dbPath = fmt.Sprintf("file:limyedb-mem-%d?mode=memory&cache=shared", memDBSeq.Add(1))
 	} else {
 		// Sanitize path to prevent path traversal attacks
 		dbPath = filepath.Clean(dbPath)
@@ -225,6 +232,18 @@ func buildWhereClause(f *Filter) (string, []interface{}) {
 				args = append(args, v)
 			}
 			return "json_extract(data, ?) IN (" + strings.Join(placeholders, ",") + ")", args
+		case OpNotIn:
+			if len(c.Values) == 0 {
+				return "1", nil // empty NOT IN is vacuously true
+			}
+			placeholders := make([]string, len(c.Values))
+			args := make([]interface{}, 0, len(c.Values)+1)
+			args = append(args, fieldPath)
+			for i, v := range c.Values {
+				placeholders[i] = "?"
+				args = append(args, v)
+			}
+			return "json_extract(data, ?) NOT IN (" + strings.Join(placeholders, ",") + ")", args
 		case OpContains:
 			return "json_extract(data, ?) LIKE ? ESCAPE '\\'", []interface{}{fieldPath, "%" + escapeLikePattern(fmt.Sprint(c.Value)) + "%"}
 		case OpStartsWith:
