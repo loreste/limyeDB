@@ -501,28 +501,31 @@ func (h *HNSW) addConnection(fromID, toID uint32, layer, maxConn int) {
 		return
 	}
 
-	// Need to prune: find worst connection and replace if new is better
-	// Simple optimization: select closest nodes
-	query := h.getVector(toID)
-	newDist := h.distCalc.Distance(h.getVector(fromID), query)
-
-	worstIdx := -1
-	worstDist := newDist
-	for i, connID := range conns {
-		dist := h.distCalc.Distance(h.getVector(fromID), h.getVector(connID))
-		if dist > worstDist {
-			worstDist = dist
-			worstIdx = i
-		}
+	// Connection list overflowed maxConn. Re-prune using the same
+	// Algorithm 4 heuristic that selectNeighbors uses, so existing
+	// nodes' link lists keep the same diversity property as new
+	// inserts. The prior implementation kept the closest-by-distance
+	// set, which is the plain top-M behavior the audit flagged as the
+	// reason recall on hard datasets degrades.
+	fromVec := h.getVector(fromID)
+	candidates := make([]Candidate, 0, len(conns)+1)
+	for _, connID := range conns {
+		candidates = append(candidates, Candidate{
+			ID:       connID,
+			Distance: h.distCalc.Distance(fromVec, h.getVector(connID)),
+		})
 	}
+	candidates = append(candidates, Candidate{
+		ID:       toID,
+		Distance: h.distCalc.Distance(fromVec, h.getVector(toID)),
+	})
 
-	if worstIdx >= 0 {
-		// Replace worst connection
-		conns[worstIdx] = conns[len(conns)-1]
-		conns = conns[:len(conns)-1]
-		conns = append(conns, toID)
-		h.setConnections(fromID, layer, conns)
+	selected := h.selectNeighborsHeuristic(fromVec, candidates, maxConn)
+	newConns := make([]uint32, len(selected))
+	for i, c := range selected {
+		newConns[i] = c.ID
 	}
+	h.setConnections(fromID, layer, newConns)
 }
 
 // Search performs k-NN search
