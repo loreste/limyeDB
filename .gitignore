@@ -33,6 +33,9 @@ mem.out
 *.swo
 *~
 
+# Claude Code local state
+.claude/
+
 # Data directories
 data/
 *.db
