@@ -1,55 +1,70 @@
 # LimyeDB Installation Guide
 
-LimyeDB is the **open-source vector database** built for production AI applications. Written entirely in Go, it compiles to a single statically-linked binary with zero external dependencies—no JVM, no Python runtime, no external databases required.
+LimyeDB is an open-source vector database written in Go. It compiles to a single statically-linked binary with no external runtime dependencies.
 
-## Why Choose LimyeDB?
+## What ships today
 
-| Feature | Benefit |
-|---------|---------|
-| **Single Binary** | Download and run—no complex deployment topology |
-| **Zero-GC HNSW** | Sub-millisecond P99 latency without garbage collection pauses |
-| **Native Hybrid Search** | BM25 + dense vectors with Reciprocal Rank Fusion built-in |
-| **DiskANN Support** | Billion-scale vector search directly from SSD |
-| **Multi-Tenancy** | RBAC, tenant isolation, and quotas out of the box |
-| **Auto-Embedding** | Direct integration with OpenAI, Cohere, and local models |
-| **Production Security** | mTLS, JWT auth, SSRF protection, parameterized queries |
+| Feature | Status |
+|---------|--------|
+| **Single binary** | ✅ — `cmd/limyedb` and `cmd/limyedb-cli` |
+| **HNSW vector index** | ✅ — mmap-backed graph, low-millisecond p99 (see [benchmarks](../README.md#benchmarks)) |
+| **Hybrid search** | ✅ — dense HNSW + sparse BM25 fused via Reciprocal Rank Fusion at `/collections/:name/search/v2` |
+| **JWT auth + per-collection RBAC** | ✅ — required by default; see [Authentication](#authentication) |
+| **TLS for REST/gRPC** | ✅ — pass `-tls-cert` and `-tls-key` |
+| **Auto-embedding** | ✅ — OpenAI and Cohere providers wired in `pkg/embedder` |
+| **Raft replication** | ✅ — Hashicorp Raft, single Raft group across nodes |
+| **WAL + crash-safe persistence** | ✅ — replay on startup, atomic snapshot publish |
+| **Prometheus metrics** | ✅ — exposed at `/metrics` |
+| **Server-side snapshots** | ✅ — `POST /snapshots`, restore via `POST /snapshots/:id/restore` |
+| **CDC webhooks** | ✅ — SSRF-validated; `POST /collections/:name/webhooks` |
+
+> **Note on index type**: collections use HNSW today. The repo also contains
+> `pkg/index/{diskann,ivf,scann}` packages, but they have no production
+> wiring — `index_type: diskann|ivf|scann` is not honored by the collection
+> manager. Treat them as experimental, in-tree, not yet selectable.
 
 ---
 
 ## Quick Start
 
 ```bash
-# Download and run in 30 seconds
+# Download and run. Auth is required by default; pick a real secret.
 curl -LO https://github.com/loreste/limyeDB/releases/latest/download/limyedb_linux_amd64.tar.gz
 tar xzf limyedb_linux_amd64.tar.gz
-./limyedb -rest :8080
+TOKEN="$(openssl rand -hex 32)"
+./limyedb -rest :8080 -auth-token "$TOKEN"
 
-# Verify it's running
+# Verify
 curl http://localhost:8080/health
+```
+
+To run without authentication (development/local-only — **NOT** for any host
+reachable from an untrusted network), pass `-allow-anonymous` instead:
+
+```bash
+./limyedb -rest :8080 -allow-anonymous
 ```
 
 ---
 
 ## Installation Methods
 
-### 1. Docker (Recommended for Production)
-
-The most resilient way to scale LimyeDB in production is via Docker. The image mounts a local persistence volume to protect HNSW indexes.
+### 1. Docker
 
 ```bash
 docker pull limyedb/limyedb:latest
 
 docker run -d \
-  --name limyedb_core \
+  --name limyedb \
   -p 8080:8080 \
   -p 50051:50051 \
   -v limyedb_data:/data \
-  limyedb/limyedb:latest
+  -e AUTH_TOKEN \
+  limyedb/limyedb:latest \
+  -auth-token "$AUTH_TOKEN"
 ```
 
-## 2. Compile From Source
-
-If you require custom forks or architecture optimizations (e.g., Apple Silicon M4 / AVX-512 extensions), cloning and compiling natively is optimal:
+### 2. Compile From Source
 
 ```bash
 git clone https://github.com/loreste/limyeDB.git
@@ -63,14 +78,17 @@ go build -o bin/limyedb ./cmd/limyedb
 go build -o bin/limyedb-cli ./cmd/limyedb-cli
 
 # Run
-./bin/limyedb -rest :8080 -grpc :50051
+./bin/limyedb -rest :8080 -grpc :50051 -auth-token "$(openssl rand -hex 32)"
 ```
 
-## 3. Kubernetes Deployment (Helm)
+### 3. Kubernetes (Helm)
 
-For distributed HNSW meshes, deploy using Kubernetes.
+A Helm chart is provided in `deploy/helm/`. Each pod must receive an
+`-auth-token` value (typically from a Kubernetes secret). Cluster
+membership is configured manually via `-raft-bootstrap` on the first
+node and `-raft-join http://<leader>:8080` on subsequent nodes — there
+is **no** automatic peer discovery.
 
-Create a `values.yaml`:
 ```yaml
 storage:
   size: 50Gi
@@ -78,137 +96,146 @@ resources:
   requests:
     memory: "16Gi"
     cpu: "4"
+auth:
+  tokenSecretName: limyedb-auth
 ```
-
-*Note: LimyeDB nodes automatically discover each other in K8s using our built-in Consul/K8s DNS resolver on port 7946.*
-
-## 4. Production Security (API, JWT & TLS)
-
-LimyeDB Phase 2 introduced Granular RBAC. You can secure the instance instantly using runtime flags and JSON Web Tokens:
-```bash
-./limyedb \
-    --auth-token="<GLOBAL_ADMIN_JWT_OR_STATIC_SECRET>" \
-    --tls-cert="/etc/ssl/limyedb.crt" \
-    --tls-key="/etc/ssl/limyedb.key"
-```
-
-*Note: For multi-tenant clusters, requests must pass an `Authorization: Bearer <TOKEN>` header where the JWT contains a `limyedb_permissions` claim mapping strings like `READ_ONLY` or `COLLECTION_ADMIN`.*
 
 ---
 
-## 5. Platform-Specific Downloads
+## Platform Downloads
 
 | Platform | Architecture | Download |
 |----------|--------------|----------|
 | Linux | x86_64 (amd64) | `limyedb_linux_amd64.tar.gz` |
 | Linux | ARM64 | `limyedb_linux_arm64.tar.gz` |
-| macOS | Apple Silicon (M1/M2/M3/M4) | `limyedb_darwin_arm64.tar.gz` |
+| macOS | Apple Silicon | `limyedb_darwin_arm64.tar.gz` |
 | macOS | Intel | `limyedb_darwin_amd64.tar.gz` |
-| Windows | x86_64 | `limyedb_windows_amd64.zip` |
 
-All binaries are available at: https://github.com/loreste/limyeDB/releases
+> ARM64 builds run with the SIMD distance kernels disabled (the hand-written
+> NEON assembly produced incorrect results and is currently routed through
+> the scalar fallback). x86 amd64 uses AVX2-accelerated kernels.
+
+All binaries: https://github.com/loreste/limyeDB/releases
 
 ---
 
-## 6. System Requirements
+## System Requirements
 
-### Minimum Requirements
+### Minimum
 - **CPU**: 2 cores
-- **RAM**: 4GB (for small datasets <100K vectors)
-- **Disk**: 10GB SSD
+- **RAM**: 4 GB (small datasets, <100K vectors)
+- **Disk**: 10 GB SSD
 
-### Recommended for Production
-- **CPU**: 8+ cores (HNSW index building is CPU-intensive)
-- **RAM**: 32GB+ (or use DiskANN for larger-than-RAM datasets)
-- **Disk**: NVMe SSD (significantly improves mmap performance)
-- **Network**: Low-latency connection for cluster deployments
+### Recommended for production
+- **CPU**: 8+ cores (HNSW index build is CPU-intensive)
+- **RAM**: large enough for the dense graph (HNSW is in-memory)
+- **Disk**: NVMe SSD (mmap-backed graph benefits significantly)
 
-### Memory Estimation
+### Memory estimation (HNSW, all in-memory)
 
-| Vectors | Dimensions | Estimated RAM (HNSW) | With DiskANN |
-|---------|------------|---------------------|--------------|
-| 100K | 384 | ~500MB | ~50MB |
-| 1M | 384 | ~5GB | ~500MB |
-| 10M | 384 | ~50GB | ~5GB |
-| 100M | 384 | ~500GB | ~50GB |
-| 1B | 384 | N/A (use DiskANN) | ~500GB SSD |
+| Vectors | Dimensions | Estimated RAM |
+|---------|------------|---------------|
+| 100K | 384 | ~500 MB |
+| 1M | 384 | ~5 GB |
+| 10M | 384 | ~50 GB |
 
 ---
 
-## 7. Configuration Options
+## Server flags
 
-### Environment Variables
+`limyedb` is configured via flags or a YAML config file (`-config <path>`).
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `LIMYEDB_REST_ADDR` | REST API bind address | `0.0.0.0:8080` |
-| `LIMYEDB_GRPC_ADDR` | gRPC API bind address | `0.0.0.0:50051` |
-| `LIMYEDB_DATA_DIR` | Data storage directory | `./data` |
-| `LIMYEDB_AUTH_TOKEN` | Master authentication token | (none) |
-| `LIMYEDB_LOG_LEVEL` | Logging level (debug/info/warn/error) | `info` |
-| `LIMYEDB_METRICS_ENABLED` | Enable Prometheus metrics | `true` |
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-config` | Path to YAML configuration file | (none) |
+| `-data` | Data directory | `./data` |
+| `-rest` | REST API listen address | `:8080` |
+| `-grpc` | gRPC API listen address | `:50051` |
+| `-auth-token` | Bearer token for API auth (also JWT signing key). Required unless `-allow-anonymous`. | (none) |
+| `-allow-anonymous` | Run without authentication. NOT recommended. | `false` |
+| `-tls-cert` | TLS certificate path | (none) |
+| `-tls-key` | TLS private key path | (none) |
+| `-raft-bind` | Raft TCP bind address (enables clustering) | (none) |
+| `-raft-data` | Raft data directory | (none) |
+| `-raft-node-id` | Raft node ID | `node0` |
+| `-raft-bootstrap` | Bootstrap this node as the cluster leader | `false` |
+| `-raft-join` | Address of an existing Raft node to join | (none) |
+| `-version` | Print version and exit | `false` |
 
-### Command-Line Flags
+There is no environment-variable layer; every option above goes through a
+flag or the YAML config file.
+
+---
+
+## Authentication
+
+LimyeDB **refuses to start without an explicit auth decision**. You must
+pass `-auth-token <secret>` to enable JWT/Bearer auth, or `-allow-anonymous`
+to opt out (development only).
+
+The same `auth-token` value serves two purposes:
+
+1. **Static bearer token** — `Authorization: Bearer $AUTH_TOKEN` is accepted
+   and grants global admin permissions.
+2. **JWT signing key** — JWTs you mint (HS256) with this secret will be
+   accepted; their `limyedb_permissions` claim governs per-collection
+   read/write access. See the [Security section of the README](../README.md#security)
+   for the claim shape.
+
+For TLS:
 
 ```bash
 ./limyedb \
-  -rest :8080 \                    # REST API address
-  -grpc :50051 \                   # gRPC API address
-  -data ./data \                   # Data directory
-  -auth-token SECRET \             # Authentication token
-  -tls-cert ./cert.pem \           # TLS certificate
-  -tls-key ./key.pem \             # TLS private key
-  -raft-node-id node1 \            # Raft cluster node ID
-  -raft-bind :7000 \               # Raft bind address
-  -raft-bootstrap                  # Bootstrap as cluster leader
+  -tls-cert /etc/ssl/limyedb.crt \
+  -tls-key /etc/ssl/limyedb.key \
+  -auth-token "$AUTH_TOKEN"
 ```
 
 ---
 
-## 8. Verifying Installation
+## Verifying installation
 
-### Health Check
+### Health check (no auth required)
 
 ```bash
 curl http://localhost:8080/health
 ```
 
-Expected response:
-```json
-{
-  "status": "healthy",
-  "version": "1.0.0",
-  "uptime": "5m32s"
-}
-```
-
-### Create a Test Collection
+### Create a test collection
 
 ```bash
 curl -X POST http://localhost:8080/collections \
+  -H "Authorization: Bearer $AUTH_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"name": "test", "dimension": 128, "metric": "cosine"}'
 ```
 
-### Run a Test Search
+### Insert and search
 
 ```bash
-# Insert a vector
+# Insert
 curl -X PUT http://localhost:8080/collections/test/points \
+  -H "Authorization: Bearer $AUTH_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"points": [{"id": "1", "vector": [0.1, 0.2, ...]}]}'
 
 # Search
 curl -X POST http://localhost:8080/collections/test/search \
+  -H "Authorization: Bearer $AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"vector": [0.1, 0.2, ...], "limit": 5}'
+
+# Strong-consistency read (route to Raft leader)
+curl -X POST "http://localhost:8080/collections/test/search?consistent=true" \
+  -H "Authorization: Bearer $AUTH_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"vector": [0.1, 0.2, ...], "limit": 5}'
 ```
 
 ---
 
-## Next Steps
+## Next steps
 
-- [Getting Started Tutorial](tutorials/getting_started.md) - Build your first vector search application
-- [RAG Application Guide](tutorials/rag_application.md) - Create retrieval-augmented generation systems
-- [Clustering Guide](clustering.md) - Deploy a high-availability cluster
-- [Performance Tuning](performance_tuning.md) - Optimize for your workload
+- [Getting Started Tutorial](tutorials/getting_started.md)
+- [Clustering Guide](clustering.md)
+- [Performance Tuning](performance_tuning.md)
