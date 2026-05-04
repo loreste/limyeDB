@@ -123,8 +123,15 @@ func (f *FSM) Apply(logEntry *raft.Log) interface{} {
 		if err != nil {
 			return err
 		}
-		_, err = coll.InsertBatch(data.Points)
-		return err
+		// Surface the BatchResult to the caller of Raft.Apply so the
+		// REST handler can report real per-point success/failure counts
+		// (and per-point errors) instead of pretending every point
+		// succeeded.
+		result, err := coll.InsertBatch(data.Points)
+		if err != nil {
+			return err
+		}
+		return result
 
 	case OpDeletePoints:
 		var data DeletePointsData

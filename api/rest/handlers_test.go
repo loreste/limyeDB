@@ -618,6 +618,109 @@ func TestBatchUpsert(t *testing.T) {
 	}
 }
 
+// TestBatchUpsertPartialFailure verifies that when some points in a batch
+// fail validation (here: wrong vector dimension), the response reports
+// real per-point counts and an errors array — not the historical
+// {succeeded: len(req), failed: 0} placeholder.
+func TestBatchUpsertPartialFailure(t *testing.T) {
+	srv, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	const dim = 4
+	createCollection(t, srv, "partial", dim)
+
+	pts := []map[string]interface{}{
+		{"id": "ok-1", "vector": vec(dim, 0.1)},
+		{"id": "bad-dim", "vector": []float32{1, 2}}, // wrong dimension
+		{"id": "ok-2", "vector": vec(dim, 0.2)},
+		{"id": "bad-empty", "vector": []float32{}}, // wrong dimension
+	}
+
+	w := doJSON(srv, http.MethodPost, "/collections/partial/points/batch", map[string]interface{}{
+		"points": pts,
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d; body: %s", w.Code, w.Body.String())
+	}
+	body := decodeBody(t, w)
+	data, ok := body["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("response missing data field: %v", body)
+	}
+	if got := int(data["succeeded"].(float64)); got != 2 {
+		t.Errorf("succeeded = %d, want 2", got)
+	}
+	if got := int(data["failed"].(float64)); got != 2 {
+		t.Errorf("failed = %d, want 2", got)
+	}
+	errs, ok := data["errors"].([]interface{})
+	if !ok {
+		t.Fatalf("errors array missing from response: %v", data)
+	}
+	if len(errs) != 2 {
+		t.Errorf("errors len = %d, want 2", len(errs))
+	}
+	// Each error entry must include the point id and a non-empty error.
+	seen := map[string]bool{}
+	for _, e := range errs {
+		em := e.(map[string]interface{})
+		id, _ := em["id"].(string)
+		errStr, _ := em["error"].(string)
+		if id == "" || errStr == "" {
+			t.Errorf("error entry malformed: %v", em)
+		}
+		seen[id] = true
+	}
+	if !seen["bad-dim"] || !seen["bad-empty"] {
+		t.Errorf("errors did not include both bad ids: %v", seen)
+	}
+}
+
+// TestConsistentReadFlagWithoutRaft verifies that ?consistent=true is a
+// no-op when the server has no Raft node configured: the read still
+// succeeds locally and returns the same data. This is the common
+// single-node deployment path. The cluster path (proxying to leader)
+// reuses the existing proxyToLeader machinery already covered by the
+// write tests.
+func TestConsistentReadFlagWithoutRaft(t *testing.T) {
+	srv, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	const dim = 4
+	createCollection(t, srv, "consistent", dim)
+
+	w := doJSON(srv, http.MethodPost, "/collections/consistent/points/batch", map[string]interface{}{
+		"points": []map[string]interface{}{
+			{"id": "x", "vector": vec(dim, 0.1)},
+		},
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("upsert failed: %d %s", w.Code, w.Body.String())
+	}
+
+	plainGET := func(path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rr := httptest.NewRecorder()
+		srv.router.ServeHTTP(rr, req)
+		return rr
+	}
+
+	w1 := plainGET("/collections/consistent/points/x")
+	if w1.Code != http.StatusOK {
+		t.Fatalf("plain GET = %d, body %s", w1.Code, w1.Body.String())
+	}
+
+	// Same read with ?consistent=true should also succeed (raft is nil
+	// so the helper returns false and the handler runs locally).
+	w2 := plainGET("/collections/consistent/points/x?consistent=true")
+	if w2.Code != http.StatusOK {
+		t.Errorf("consistent GET = %d, body %s", w2.Code, w2.Body.String())
+	}
+	if w2.Body.String() != w1.Body.String() {
+		t.Errorf("consistent vs plain bodies differ: %q vs %q", w2.Body.String(), w1.Body.String())
+	}
+}
+
 func TestBatchUpsertCollectionNotFound(t *testing.T) {
 	srv, cleanup := setupTestServer(t)
 	defer cleanup()

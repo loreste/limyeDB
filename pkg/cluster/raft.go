@@ -94,7 +94,7 @@ func NewRaftNode(cfg *RaftConfig, manager *collection.Manager, snapMgr *snapshot
 			if isLeader {
 				// Allow Raft consensus to settle prior to inserting the configuration
 				time.Sleep(1 * time.Second)
-				_ = node.Write(OpSetLeaderRest, SetLeaderRestData{RestAddr: cfg.RestAddr})
+				_, _ = node.Write(OpSetLeaderRest, SetLeaderRestData{RestAddr: cfg.RestAddr})
 			}
 		}
 	}()
@@ -128,15 +128,17 @@ func (n *RaftNode) SetLeaderRestAddr(addr string) {
 	n.LeaderRestAddr = addr
 }
 
-// Write appends a JSON-encoded struct log into the Raft replication sequence
-func (n *RaftNode) Write(op OpType, data interface{}) error {
+// Write appends a JSON-encoded struct log into the Raft replication
+// sequence and returns the FSM Apply response (or nil if the FSM returned
+// no value). When the FSM returns an error, that error is propagated.
+func (n *RaftNode) Write(op OpType, data interface{}) (interface{}, error) {
 	if n.Raft.State() != raft.Leader {
-		return fmt.Errorf("not the leader; leader is %s", n.Raft.Leader())
+		return nil, fmt.Errorf("not the leader; leader is %s", n.Raft.Leader())
 	}
 
 	cmdData, err := json.Marshal(data)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	cmd := Command{
@@ -146,15 +148,19 @@ func (n *RaftNode) Write(op OpType, data interface{}) error {
 
 	b, err := json.Marshal(cmd)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	applyFuture := n.Raft.Apply(b, 10*time.Second)
 	if err := applyFuture.Error(); err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	resp := applyFuture.Response()
+	if resErr, ok := resp.(error); ok {
+		return nil, resErr
+	}
+	return resp, nil
 }
 
 // Shutdown gracefully shuts down the Raft node and stops the leadership broadcast goroutine.

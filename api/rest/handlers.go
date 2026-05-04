@@ -80,6 +80,24 @@ type HNSWParams struct {
 	EfSearch       int `json:"ef_search"`
 }
 
+// consistentReadProxy honors the ?consistent=true query param on read
+// endpoints by routing the request to the Raft leader. The default,
+// without the flag, is the existing eventually-consistent local-FSM read
+// behavior. Routing to the leader gives read-after-write semantics for
+// the calling client, because Raft.Apply runs on the leader before the
+// preceding write returned success — so a mutation that succeeded is
+// guaranteed to be visible on the leader's local state.
+//
+// Returns true when the request was proxied (handler must return).
+// Returns false when the request can be served locally (we're already
+// the leader, or the flag was not set, or this server has no Raft).
+func (s *Server) consistentReadProxy(c *gin.Context) bool {
+	if c.Query("consistent") != "true" {
+		return false
+	}
+	return s.proxyToLeader(c)
+}
+
 // proxyToLeader transparently forwards HTTP mutation requests to the active Raft Leader
 func (s *Server) proxyToLeader(c *gin.Context) bool {
 	if s.raft == nil {
@@ -152,7 +170,7 @@ func (s *Server) handleCreateCollection(c *gin.Context) {
 	}
 
 	if s.raft != nil {
-		if err := s.raft.Write(cluster.OpCreateCollection, cluster.CreateCollectionData{Config: cfg}); err != nil {
+		if _, err := s.raft.Write(cluster.OpCreateCollection, cluster.CreateCollectionData{Config: cfg}); err != nil {
 			respondError(c, http.StatusBadRequest, fmt.Errorf("raft write failed: %w", err))
 			return
 		}
@@ -179,6 +197,9 @@ func (s *Server) handleCreateCollection(c *gin.Context) {
 }
 
 func (s *Server) handleListCollections(c *gin.Context) {
+	if s.consistentReadProxy(c) {
+		return
+	}
 	infos := s.collections.ListInfo()
 
 	filtered := make([]*collection.Info, 0, len(infos))
@@ -194,6 +215,9 @@ func (s *Server) handleListCollections(c *gin.Context) {
 }
 
 func (s *Server) handleGetCollection(c *gin.Context) {
+	if s.consistentReadProxy(c) {
+		return
+	}
 	name := c.Param("name")
 
 	coll, err := s.collections.Get(name)
@@ -213,7 +237,7 @@ func (s *Server) handleDeleteCollection(c *gin.Context) {
 	name := c.Param("name")
 
 	if s.raft != nil {
-		if err := s.raft.Write(cluster.OpDeleteCollection, cluster.DeleteCollectionData{Name: name}); err != nil {
+		if _, err := s.raft.Write(cluster.OpDeleteCollection, cluster.DeleteCollectionData{Name: name}); err != nil {
 			respondError(c, http.StatusBadRequest, fmt.Errorf("raft write failed: %w", err))
 			return
 		}
@@ -286,11 +310,19 @@ func (s *Server) handleUpsertPoints(c *gin.Context) {
 	}
 
 	if s.raft != nil {
-		if err := s.raft.Write(cluster.OpUpsertPoints, cluster.UpsertPointsData{
+		resp, err := s.raft.Write(cluster.OpUpsertPoints, cluster.UpsertPointsData{
 			CollectionName: name,
 			Points:         points,
-		}); err != nil {
+		})
+		if err != nil {
 			respondError(c, http.StatusBadRequest, fmt.Errorf("raft write failed: %w", err))
+			return
+		}
+		// FSM.Apply returns the BatchResult on success so we can report
+		// real per-point counts and errors instead of pretending all
+		// points succeeded.
+		if result, ok := resp.(*collection.BatchResult); ok && result != nil {
+			respondSuccess(c, batchResultToResponse(result))
 			return
 		}
 		respondSuccess(c, gin.H{
@@ -306,13 +338,31 @@ func (s *Server) handleUpsertPoints(c *gin.Context) {
 		return
 	}
 
-	respondSuccess(c, gin.H{
-		"succeeded": result.Succeeded,
-		"failed":    result.Failed,
-	})
+	respondSuccess(c, batchResultToResponse(result))
+}
+
+// batchResultToResponse formats a BatchResult into the upsert response
+// shape. The fields are additive vs. the historical {succeeded, failed}
+// payload; old clients that only read those two keys keep working.
+func batchResultToResponse(r *collection.BatchResult) gin.H {
+	out := gin.H{
+		"succeeded": r.Succeeded,
+		"failed":    r.Failed,
+	}
+	if len(r.Errors) > 0 {
+		errs := make([]gin.H, len(r.Errors))
+		for i, e := range r.Errors {
+			errs[i] = gin.H{"id": e.ID, "error": e.Err.Error()}
+		}
+		out["errors"] = errs
+	}
+	return out
 }
 
 func (s *Server) handleGetPoint(c *gin.Context) {
+	if s.consistentReadProxy(c) {
+		return
+	}
 	name := c.Param("name")
 	id := c.Param("id")
 
@@ -350,7 +400,7 @@ func (s *Server) handleDeletePoint(c *gin.Context) {
 	}
 
 	if s.raft != nil {
-		if err := s.raft.Write(cluster.OpDeletePoints, cluster.DeletePointsData{
+		if _, err := s.raft.Write(cluster.OpDeletePoints, cluster.DeletePointsData{
 			CollectionName: name,
 			IDs:            []string{id},
 		}); err != nil {
@@ -420,6 +470,9 @@ type SearchRequest struct {
 }
 
 func (s *Server) handleSearch(c *gin.Context) {
+	if s.consistentReadProxy(c) {
+		return
+	}
 	name := c.Param("name")
 
 	coll, err := s.collections.Get(name)
@@ -630,6 +683,9 @@ type RecommendRequest struct {
 }
 
 func (s *Server) handleRecommend(c *gin.Context) {
+	if s.consistentReadProxy(c) {
+		return
+	}
 	name := c.Param("name")
 
 	coll, err := s.collections.Get(name)
@@ -968,6 +1024,9 @@ type SearchV2Request struct {
 }
 
 func (s *Server) handleSearchV2(c *gin.Context) {
+	if s.consistentReadProxy(c) {
+		return
+	}
 	name := c.Param("name")
 
 	coll, err := s.collections.Get(name)
@@ -1303,6 +1362,9 @@ type RecommendV2Request struct {
 }
 
 func (s *Server) handleRecommendV2(c *gin.Context) {
+	if s.consistentReadProxy(c) {
+		return
+	}
 	name := c.Param("name")
 
 	coll, err := s.collections.Get(name)
