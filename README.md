@@ -8,7 +8,7 @@
 
 **LimyeDB** is a lightning-fast, highly-available **open-source vector database** engineered specifically for the next generation of AI applications. Built entirely from scratch in Go, it is the ultimate semantic storage engine designed to power **Retrieval-Augmented Generation (RAG)**, large language model (LLM) memory arrays, and predictive similarity matching with sub-millisecond retrieval latency.
 
-LimyeDB distinguishes itself by natively supporting **Hybrid Search**—combining zero-allocation memory mapped **NVMe HNSW** (Hierarchical Navigable Small World) Dense vector indexing alongside a blisteringly fast local **BM25/SPLADE Inverted Index** for Sparse vectors. It mathematically fuses these Multi-Modal queries using industry-standard **Reciprocal Rank Fusion (RRF)**. LimyeDB scales effortlessly from lightweight embedded binaries to universally distributed, fault-tolerant clusters.
+LimyeDB distinguishes itself by natively supporting **Hybrid Search**—combining zero-allocation memory-mapped **NVMe HNSW** (Hierarchical Navigable Small World) dense vector indexing alongside a fast local **BM25 inverted index** for sparse vectors. It fuses these multi-modal queries using **Reciprocal Rank Fusion (RRF)**. LimyeDB deploys as a single binary or as a Raft-replicated high-availability cluster.
 
 ---
 
@@ -34,10 +34,9 @@ Vector databases force painful compromises:
 #### Missing Features for Real-World AI Applications
 Production AI systems need more than just vector search:
 - **Hybrid search** combining semantic similarity with keyword matching for better relevance
-- **Multi-tenancy** for SaaS products serving multiple customers
 - **Real-time subscriptions** for reactive user interfaces
 - **Built-in embedding** to avoid separate ETL pipelines
-- **Enterprise security** including RBAC, encryption, and audit logging
+- **Authentication and authorization** with per-collection access control
 
 Getting all of this typically means stitching together multiple systems—each with its own failure modes, version conflicts, and operational overhead.
 
@@ -47,7 +46,7 @@ Getting all of this typically means stitching together multiple systems—each w
 
 **LimyeDB was created to prove that powerful doesn't have to mean complicated.**
 
-We built the vector database we wished existed: one that a solo developer can run on a laptop for prototyping, yet scales horizontally to handle billions of vectors across a globally distributed cluster. One that delivers enterprise-grade capabilities without enterprise-grade complexity or cost.
+We built the vector database we wished existed: one that a solo developer can run on a laptop for prototyping, and that replicates across a Raft-backed high-availability cluster when production calls for it. One that delivers production-grade capabilities without enterprise-grade complexity or cost.
 
 ---
 
@@ -82,7 +81,7 @@ While other vector databases bolt on keyword search as an afterthought, **LimyeD
 | Component | Technology | Purpose |
 |-----------|------------|---------|
 | Dense Vectors | HNSW / DiskANN / IVF / ScaNN | Semantic similarity search |
-| Sparse Vectors | BM25 / SPLADE | Keyword and lexical matching |
+| Sparse Vectors | BM25 | Keyword and lexical matching |
 | Fusion | Reciprocal Rank Fusion (RRF) | Mathematically optimal result merging |
 
 This matters because **pure vector search fails on proper nouns, product codes, and exact phrases**. Hybrid search delivers better relevance for real-world queries without requiring multiple systems or post-processing.
@@ -108,17 +107,16 @@ Not every organization can afford to keep billions of vectors in RAM. LimyeDB's 
 
 Run the same vector operations on a $50/month VPS that would require a $5,000/month high-memory instance with RAM-only solutions.
 
-#### 🏢 Enterprise-Ready Multi-Tenancy and RBAC
+#### 🔐 JWT-Based RBAC with Per-Collection ACLs
 
-Building a multi-tenant AI SaaS? LimyeDB provides **first-class tenant isolation**:
+LimyeDB ships with built-in authentication and authorization:
 
-- **Tenant-scoped collections** with complete data separation
-- **Role-Based Access Control (RBAC)** with granular permissions
-- **Resource quotas** per tenant (vectors, storage, query rate)
-- **JWT authentication** with configurable claims
-- **API key management** with automatic rotation
+- **JWT bearer tokens** with configurable claims (global admin or per-collection ACL)
+- **API key authentication** for service-to-service traffic
+- **Per-collection access control** — read/write permissions scoped to specific collections via JWT claims
+- **Constant-time token comparison** to prevent timing attacks
 
-No need to deploy separate database instances per customer or build isolation logic in your application layer.
+No call-home licensing, no paywalled enterprise edition for auth.
 
 #### 🔒 Security-Hardened from the Ground Up
 
@@ -127,7 +125,7 @@ AI systems increasingly process sensitive data—customer conversations, proprie
 | Protection | Implementation |
 |------------|----------------|
 | Authentication | Bearer tokens, API keys, JWT with RBAC |
-| Encryption | TLS 1.3, mTLS for inter-node communication |
+| Encryption | TLS 1.3 for client connections |
 | Timing Attack Prevention | Constant-time token comparison (`crypto/subtle`) |
 | SSRF Protection | Webhook URL validation against private IP ranges |
 | SQL Injection Prevention | Parameterized queries with escaped LIKE patterns |
@@ -186,8 +184,7 @@ Deploy a 3-node cluster for high availability or scale to dozens of nodes for ma
 Monitor everything with native integrations:
 
 - **Prometheus Metrics** at `/metrics` (latencies, throughput, index stats)
-- **OpenTelemetry Tracing** for distributed request tracking
-- **Structured JSON Logging** with configurable levels
+- **Structured JSON Logging** with configurable levels via `slog`
 - **Health and Readiness Endpoints** for Kubernetes probes
 - **Grafana Dashboard** included in the repository
 
@@ -195,14 +192,14 @@ Monitor everything with native integrations:
 
 LimyeDB is released under **GPL v3**. Everything is open:
 
-- ✅ Clustering and high availability
-- ✅ Multi-tenancy and RBAC
+- ✅ Raft-replicated high availability
+- ✅ JWT-based RBAC and per-collection ACLs
 - ✅ All index types (HNSW, DiskANN, IVF, ScaNN)
 - ✅ Hybrid search with BM25
 - ✅ Auto-embedding orchestration
 - ✅ Backup and restore
 - ✅ TLS and security features
-- ✅ Observability integrations
+- ✅ Prometheus metrics
 
 No "enterprise edition" holding features hostage. No phone call required to get pricing. Fork it, modify it, self-host it.
 
@@ -217,7 +214,6 @@ No "enterprise edition" holding features hostage. No phone call required to get 
 | **Native Hybrid Search** | ✅ BM25 + Dense | ✅ | ⚠️ Sparse only | ✅ | ✅ |
 | **DiskANN (Billion-scale SSD)** | ✅ | ❌ | ❌ | ✅ | ❌ |
 | **Zero-GC HNSW** | ✅ mmap | N/A | ❌ | ❌ | ❌ |
-| **Built-in Multi-Tenancy** | ✅ | ✅ | ⚠️ Limited | ✅ | ✅ |
 | **Auto-Embedding** | ✅ | ❌ | ❌ | ❌ | ✅ |
 | **SQL Interface** | ✅ | ❌ | ❌ | ✅ | ✅ GraphQL |
 | **ColBERT MaxSim** | ✅ | ❌ | ✅ | ❌ | ❌ |
@@ -236,9 +232,6 @@ You can't afford a dedicated DevOps team or unpredictable SaaS bills. LimyeDB gi
 
 #### Enterprises Requiring Vendor Independence
 You need to audit your infrastructure, comply with data residency requirements, and avoid lock-in. LimyeDB is fully self-hostable with no call-home telemetry.
-
-#### Platform Teams Building Multi-Tenant AI SaaS
-You need tenant isolation, usage quotas, and RBAC without building it yourself. LimyeDB's native multi-tenancy handles the hard parts.
 
 #### Researchers and Educators
 You want a performant vector database you can understand, modify, and extend. LimyeDB's clean Go codebase and comprehensive documentation make it hackable.
@@ -285,8 +278,8 @@ We built the vector database we wished existed. Now it's yours to use.
 | **Embedder Orchestrator** | Automated direct text-to-vector integration scaling seamlessly across OpenAI, Cohere, and local models natively |
 | **ColBERT MaxSim Engine** | Advanced Late-Interaction similarity algorithms evaluating precise dot-product MultiVector matrices directly |
 | **SQLite Payload Indexing**| Persistent embedded metadata structures mapping Document Nodes directly into disk-backed B-Trees securely |
-| **Distributed Clustering** | Native Raft consensus and SWIM gossip protocol for masterless high availability and global persistence |
-| **Multi-Tenancy & RBAC** | Strict granular isolation schemas featuring dynamic JSON Web Token (JWT) Authorization across REST and gRPC pipelines |
+| **Raft-Replicated HA** | Hashicorp Raft replicating collection metadata and points across a 3+ node cluster for high availability |
+| **JWT-Based RBAC** | Per-collection access control via JWT claims, enforced consistently across REST and gRPC |
 | **Vector SQL Interface** | Powerful and familiar declarative SQL-like query interfaces explicitly controlling embedded semantic properties |
 | **Product & Binary Quantization** | Sub-space clustering and Hamming distance arrays reducing RAM bloat mathematically by over 32x natively |
 | **Serverless S3 Tiering** | Offload memory-mapped clustered vectors intelligently separating persistent storage from internal compute |
@@ -301,11 +294,10 @@ We built the vector database we wished existed. Now it's yours to use.
 - **Zero-Allocation HNSW Engine & DiskANN:** Eliminates GC pauses with raw memory-mapped NVMe bypass mechanisms and pure multi-terabyte SSD graphs natively handling billions of items.
 - **Advanced AST Payload Filtering:** Execute complex JSON constraints securely backed natively by embedded SQLite B-Tree metadata mappings.
 - **Generative Quantization Protocols:** Compresses multi-modal vector inputs structurally utilizing Subspace Product clustering and 1-bit BQ.
-- **Enterprise Security:** JWT Bearer tokens alongside mTLS verification protocols for deep cross-cluster defense.
-- **Serverless AWS SDK Integration:** Flush compute layers cleanly into Cold Storage AWS Object architectures completely asynchronously.
+- **Authentication:** JWT bearer tokens and API keys with constant-time comparison.
+- **Serverless AWS SDK Integration:** Offload memory-mapped vectors to S3 object storage asynchronously.
 - **Prometheus Metrics:** Native `/metrics` endpoint for monitoring
-- **OpenTelemetry Tracing:** Distributed tracing support
-- **Security Hardened:** Constant-time token comparison, SSRF protection, path traversal prevention, decompression bomb limits, and strict file permissions
+- **Security Hardened:** Constant-time token comparison, SSRF protection on webhooks, path traversal prevention, decompression bomb limits, and strict file permissions
 
 ---
 
@@ -333,21 +325,18 @@ pkg/index/payload/     SQLite-backed payload filtering
 pkg/storage/mmap/      Memory-mapped vector and graph storage
 pkg/storage/wal/       Write-ahead logging
 pkg/storage/s3/        S3 tiered storage
-pkg/cluster/           Raft consensus + SWIM gossip + consistent hashing
-pkg/collection/        Collection management and sharding
-pkg/hybrid/            BM25 + dense RRF fusion
+pkg/cluster/           Hashicorp Raft consensus + gossip membership
+pkg/collection/        Collection and shard management
+pkg/index/sparse/      BM25 sparse index + RRF fusion
 pkg/quantization/      Product, scalar, and binary quantization
 pkg/embedder/          OpenAI, Cohere, Google embedding orchestration
-pkg/security/          API key generation, JWT, encryption
-pkg/tenancy/           Multi-tenant RBAC isolation
+pkg/auth/              JWT + per-collection RBAC
+pkg/security/          API key generation, encryption
 pkg/realtime/          WebSocket event streaming
 pkg/webhook/           CDC webhook dispatch with SSRF protection
 pkg/cache/             Semantic result caching
-pkg/ratelimit/         Token bucket rate limiting
 pkg/backup/            Tar-based backup and restore
-pkg/observability/     OpenTelemetry tracing
 pkg/metrics/           Prometheus metrics
-internal/raft/         Standalone Raft implementation
 internal/pool/         Worker pool for parallel operations
 ```
 
@@ -482,7 +471,6 @@ security:
     enabled: true
     cert_file: "./certs/server.crt"
     key_file: "./certs/server.key"
-    client_ca_file: "./certs/ca.crt"  # For mTLS
 
 cluster:
   node_id: "node1"
@@ -512,20 +500,26 @@ observability:
   metrics:
     enabled: true
     path: "/metrics"
-  tracing:
-    enabled: true
-    endpoint: "http://jaeger:14268/api/traces"
 ```
 
-### Environment Variables
+### Server Flags
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `LIMYEDB_REST_ADDR` | REST API address | `0.0.0.0:8080` |
-| `LIMYEDB_GRPC_ADDR` | gRPC API address | `0.0.0.0:50051` |
-| `LIMYEDB_DATA_DIR` | Data directory | `./data` |
-| `LIMYEDB_AUTH_TOKEN` | Authentication token | (none) |
-| `LIMYEDB_LOG_LEVEL` | Log level | `info` |
+`limyedb` is configured via command-line flags or a YAML config file (`-config <path>`).
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-config` | Path to YAML configuration file | (none) |
+| `-data` | Data directory | `./data` |
+| `-rest` | REST API listen address | `:8080` |
+| `-grpc` | gRPC API listen address | `:50051` |
+| `-auth-token` | Bearer token for API authentication (also used as JWT signing key) | (none, auth disabled) |
+| `-tls-cert` | Path to TLS certificate file | (none) |
+| `-tls-key` | Path to TLS private key file | (none) |
+| `-raft-bind` | Raft TCP bind address (enables clustering) | (none) |
+| `-raft-data` | Raft data directory | (none) |
+| `-raft-node-id` | Raft node ID | `node0` |
+| `-raft-bootstrap` | Bootstrap this node as the cluster leader | `false` |
+| `-raft-join` | Address of an existing Raft node to join | (none) |
 
 ---
 
@@ -558,8 +552,8 @@ limyedb-cli [options] <command> [arguments]
 | `delete <name>` | Delete a collection |
 | `info <name>` | Get collection details (point count, config) |
 | `health` | Check server health status |
-| `backup <output>` | Create a snapshot backup |
-| `restore <input>` | Restore from a snapshot backup |
+| `backup` | Trigger a server-side snapshot; prints the new snapshot ID |
+| `restore <snapshot-id>` | Restore the server from an existing snapshot ID |
 | `version` | Print CLI version |
 
 ### Examples
@@ -580,9 +574,10 @@ limyedb-cli -host https://db.example.com -api-key secret collections
 # Check server health
 limyedb-cli health
 
-# Backup and restore
-limyedb-cli backup /tmp/backup.snapshot
-limyedb-cli restore /tmp/backup.snapshot
+# Backup and restore (server-side snapshot)
+limyedb-cli backup
+# -> "Backup created: snap-1730000000 at 2025-...
+limyedb-cli restore snap-1730000000
 ```
 
 ### Import File Format
@@ -1153,30 +1148,12 @@ curl -X PUT http://localhost:8080/collections/documents/points \
   }'
 ```
 
-### Multi-Tenancy
-
-Create isolated tenants with resource quotas:
-
-```bash
-curl -X POST http://localhost:8080/tenants \
-  -H "Content-Type: application/json" \
-  -d '{
-    "tenant_id": "customer_123",
-    "plan": "professional",
-    "quotas": {
-      "max_collections": 100,
-      "max_vectors": 10000000,
-      "max_storage_gb": 500
-    }
-  }'
-```
-
 ### Real-Time Subscriptions
 
 Connect via WebSocket to receive live updates:
 
 ```javascript
-const ws = new WebSocket('ws://localhost:8080/ws');
+const ws = new WebSocket('ws://localhost:8080/stream');
 
 ws.onopen = () => {
   ws.send(JSON.stringify({
@@ -1322,20 +1299,6 @@ curl -X POST http://grafana:3000/api/dashboards/db \
   -d @deploy/grafana/limyedb-dashboard.json
 ```
 
-### OpenTelemetry Tracing
-
-Configure tracing in your config:
-
-```yaml
-observability:
-  tracing:
-    enabled: true
-    exporter: otlp
-    endpoint: "http://jaeger:4318/v1/traces"
-    service_name: limyedb
-    sample_rate: 0.1
-```
-
 ### Logging
 
 LimyeDB uses Go's `slog` structured logging with JSON output by default. Log level is controlled via configuration.
@@ -1355,47 +1318,32 @@ LimyeDB uses Go's `slog` structured logging with JSON output by default. Log lev
 curl -H "Authorization: Bearer YOUR_SECRET_TOKEN" ...
 ```
 
-#### Multi-Tenant RBAC
+#### JWT with Per-Collection RBAC
 
-Create roles and users:
+JWT claims encode either global admin status or a per-collection action list under the `limyedb_permissions` claim:
 
-```bash
-# Create a role
-curl -X POST http://localhost:8080/admin/roles \
-  -H "Authorization: Bearer ADMIN_TOKEN" \
-  -d '{
-    "name": "reader",
-    "permissions": ["collection.read", "point.read", "search"]
-  }'
-
-# Create a user with role
-curl -X POST http://localhost:8080/admin/users \
-  -H "Authorization: Bearer ADMIN_TOKEN" \
-  -d '{
-    "username": "readonly_user",
-    "api_key": "user_api_key",
-    "roles": ["reader"],
-    "tenant_id": "customer_123"
-  }'
+```json
+{
+  "sub": "service-account-1",
+  "exp": 1735689600,
+  "limyedb_permissions": {
+    "global_admin": false,
+    "collections": {
+      "docs":       ["READ_ONLY"],
+      "embeddings": ["COLLECTION_ADMIN"]
+    }
+  }
+}
 ```
 
-### TLS/mTLS
+Tokens are signed with the same secret as `auth_token` (HS256). Requests against a collection not present in the `collections` map receive 403.
 
-#### TLS (Server Certificate)
+### TLS
 
 ```bash
 ./limyedb \
   -tls-cert /certs/server.crt \
   -tls-key /certs/server.key
-```
-
-#### mTLS (Mutual TLS)
-
-```bash
-./limyedb \
-  -tls-cert /certs/server.crt \
-  -tls-key /certs/server.key \
-  -tls-client-ca /certs/ca.crt
 ```
 
 ### Security Hardening
