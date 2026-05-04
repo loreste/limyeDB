@@ -7,8 +7,10 @@ release/
 *.dll
 *.so
 *.dylib
-limyedb
-vexdb
+# Anchor binary names to the repo root so they don't shadow cmd/limyedb/
+# and cmd/limyedb-cli/ source directories.
+/limyedb
+/vexdb
 
 # Node
 node_modules/

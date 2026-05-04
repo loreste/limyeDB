@@ -58,7 +58,8 @@ LimyeDB compiles to a **single statically-linked Go binary**. No JVM tuning. No 
 
 ```bash
 # That's it. You now have a production-ready vector database.
-./limyedb -data ./my-vectors -rest :8080
+# Auth is required by default; pick a real secret in production.
+./limyedb -data ./my-vectors -rest :8080 -auth-token "$(openssl rand -hex 32)"
 ```
 
 This isn't just convenience—it's **operational sanity**. Fewer moving parts means fewer failure modes, simpler debugging, and faster disaster recovery.
@@ -343,9 +344,9 @@ docker-compose logs -f
 # Download latest release (Linux amd64)
 curl -LO https://github.com/loreste/limyeDB/releases/latest/download/limyedb_$(curl -s https://api.github.com/repos/loreste/limyeDB/releases/latest | grep tag_name | cut -d'"' -f4 | sed 's/v//')_linux_amd64.tar.gz
 
-# Extract and run
+# Extract and run (auth is required by default; see Security section)
 tar xzf limyedb_*_linux_amd64.tar.gz
-./limyedb -rest :8080
+./limyedb -rest :8080 -auth-token "$(openssl rand -hex 32)"
 
 # To stop gracefully, press Ctrl+C or send SIGTERM
 # This ensures all data is safely persisted to disk
@@ -408,7 +409,8 @@ make test
   -data ./data \                     # Data directory (default "./data")
   -rest :8080 \                      # REST API address (default ":8080")
   -grpc :50051 \                     # gRPC API address (default ":50051")
-  -auth-token SECRET \               # Master bearer token for auth
+  -auth-token SECRET \               # Master bearer token + JWT signing secret. REQUIRED unless -allow-anonymous.
+  -allow-anonymous \                 # Run without authentication. NOT recommended.
   -tls-cert ./certs/server.crt \     # TLS certificate path
   -tls-key ./certs/server.key \      # TLS private key path
   -raft-node-id node1 \             # Raft node ID (default "node0")
@@ -977,6 +979,9 @@ LimyeDB uses Hashicorp Raft for cluster coordination:
 
 ### Bootstrap a Cluster
 
+All cluster nodes must share the same `-auth-token`; it is also the JWT
+signing secret, so JWTs minted on one node are accepted by the others.
+
 #### Node 1 (Bootstrap Leader)
 
 ```bash
@@ -986,7 +991,8 @@ LimyeDB uses Hashicorp Raft for cluster coordination:
   -raft-data /data/node1/raft \
   -raft-bootstrap \
   -rest 192.168.1.1:8080 \
-  -data /data/node1
+  -data /data/node1 \
+  -auth-token "$CLUSTER_SECRET"
 ```
 
 #### Node 2 (Join Cluster)
@@ -998,7 +1004,8 @@ LimyeDB uses Hashicorp Raft for cluster coordination:
   -raft-data /data/node2/raft \
   -raft-join http://192.168.1.1:8080 \
   -rest 192.168.1.2:8080 \
-  -data /data/node2
+  -data /data/node2 \
+  -auth-token "$CLUSTER_SECRET"
 ```
 
 #### Node 3 (Join Cluster)
@@ -1010,7 +1017,8 @@ LimyeDB uses Hashicorp Raft for cluster coordination:
   -raft-data /data/node3/raft \
   -raft-join http://192.168.1.1:8080 \
   -rest 192.168.1.3:8080 \
-  -data /data/node3
+  -data /data/node3 \
+  -auth-token "$CLUSTER_SECRET"
 ```
 
 ### Node Discovery
@@ -1197,6 +1205,12 @@ LimyeDB uses Go's `slog` structured logging with JSON output by default. Log lev
 
 ### Authentication
 
+LimyeDB **refuses to start without an explicit auth decision**. You must
+pass either `-auth-token <secret>` to enable JWT/Bearer authentication, or
+`-allow-anonymous` to opt out (not recommended for any host reachable from
+an untrusted network). This is a deliberate choice to prevent the
+historical foot-gun of running an unauthenticated database by accident.
+
 #### API Key Authentication
 
 ```bash
@@ -1231,7 +1245,8 @@ Tokens are signed with the same secret as `auth_token` (HS256). Requests against
 ```bash
 ./limyedb \
   -tls-cert /certs/server.crt \
-  -tls-key /certs/server.key
+  -tls-key /certs/server.key \
+  -auth-token "$AUTH_TOKEN"
 ```
 
 ### Security Hardening

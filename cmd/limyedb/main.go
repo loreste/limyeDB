@@ -49,7 +49,8 @@ func main() {
 	raftJoinAddr := flag.String("raft-join", "", "Address of an existing raft node to join (e.g., http://127.0.0.1:8080)")
 
 	// Security Configuration
-	authToken := flag.String("auth-token", "", "Master bearer token for zero-trust API authentication")
+	authToken := flag.String("auth-token", "", "Master bearer token for API authentication and JWT signing. Required unless -allow-anonymous is passed.")
+	allowAnonymous := flag.Bool("allow-anonymous", false, "Run without authentication. WARNING: every REST and gRPC endpoint becomes publicly mutable. Required to launch when -auth-token is empty.")
 	tlsCert := flag.String("tls-cert", "", "Path to HTTPS TLS certificate file")
 	tlsKey := flag.String("tls-key", "", "Path to HTTPS TLS private key file")
 
@@ -66,6 +67,19 @@ func main() {
 	slog.SetDefault(logger)
 
 	slog.Info(fmt.Sprintf("\n%s\nVersion: %s", banner, version.Version))
+
+	// Refuse to start without an auth decision. Without this guard, the
+	// REST and gRPC servers would run wide open whenever -auth-token was
+	// not supplied (the historical behavior) and any caller on the
+	// network could create, mutate, or delete collections. Operators who
+	// genuinely want an unauthenticated server must opt in explicitly.
+	if *authToken == "" && !*allowAnonymous {
+		slog.Error("authentication is required: pass -auth-token <secret> to enable JWT/Bearer auth, or pass -allow-anonymous to run without authentication (NOT recommended)")
+		os.Exit(1)
+	}
+	if *allowAnonymous && *authToken == "" {
+		slog.Warn("running with -allow-anonymous: REST and gRPC are unauthenticated; do not expose this process to an untrusted network")
+	}
 
 	// Load configuration
 	var cfg *config.Config
