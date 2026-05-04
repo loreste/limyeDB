@@ -6,9 +6,9 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Release](https://img.shields.io/github/v/release/loreste/limyeDB)](https://github.com/loreste/limyeDB/releases/latest)
 
-**LimyeDB** is a lightning-fast, highly-available **open-source vector database** engineered specifically for the next generation of AI applications. Built entirely from scratch in Go, it is the ultimate semantic storage engine designed to power **Retrieval-Augmented Generation (RAG)**, large language model (LLM) memory arrays, and predictive similarity matching with sub-millisecond retrieval latency.
+**LimyeDB** is a fast, highly-available **open-source vector database** engineered specifically for the next generation of AI applications. Built entirely from scratch in Go, it is a semantic storage engine designed to power **Retrieval-Augmented Generation (RAG)**, large language model (LLM) memory arrays, and predictive similarity matching with low-millisecond retrieval latency.
 
-LimyeDB distinguishes itself by natively supporting **Hybrid Search**—combining zero-allocation memory-mapped **NVMe HNSW** (Hierarchical Navigable Small World) dense vector indexing alongside a fast local **BM25 inverted index** for sparse vectors. It fuses these multi-modal queries using **Reciprocal Rank Fusion (RRF)**. LimyeDB deploys as a single binary or as a Raft-replicated high-availability cluster.
+LimyeDB distinguishes itself by natively supporting **Hybrid Search**—combining a memory-mapped **HNSW** (Hierarchical Navigable Small World) dense vector index with a fast local **BM25 inverted index** for sparse vectors. It fuses these multi-modal queries using **Reciprocal Rank Fusion (RRF)**. LimyeDB deploys as a single binary or as a Raft-replicated high-availability cluster.
 
 ---
 
@@ -63,16 +63,16 @@ LimyeDB compiles to a **single statically-linked Go binary**. No JVM tuning. No 
 
 This isn't just convenience—it's **operational sanity**. Fewer moving parts means fewer failure modes, simpler debugging, and faster disaster recovery.
 
-#### ⚡ Zero-Allocation HNSW — Consistent Sub-Millisecond Latency
+#### ⚡ mmap-Backed HNSW — Predictable Latency
 
-Most vector databases written in Go or Java suffer from **garbage collection pauses** that spike P99 latencies from 2ms to 200ms+ unpredictably. LimyeDB's HNSW implementation takes a radically different approach:
+Most vector databases written in Go or Java suffer from **garbage collection pauses** that spike P99 latencies unpredictably. LimyeDB's HNSW implementation reduces GC pressure via:
 
-- **Memory-mapped NVMe storage** bypasses Go's heap entirely
-- **Zero-allocation graph traversal** means no GC pressure during searches
-- **Lock-free concurrent reads** enable massive query parallelism
+- **Memory-mapped graph storage** keeps the connection arrays off the Go heap
+- **Pooled visited-set buffers** during search reduce per-query allocations
+- **Concurrent reads** with a single build lock for inserts
 - **SIMD-accelerated distance calculations** on ARM64 (NEON) and x86-64 (AVX2)
 
-The result: **consistent sub-millisecond P99 latencies** that don't degrade under load. Your real-time AI applications stay responsive.
+The result: low-millisecond P99 search latencies that stay stable under load (see [benchmarks](#benchmarks)).
 
 #### 🔍 Native Hybrid Search — Semantic + Keyword in One Query
 
@@ -80,7 +80,7 @@ While other vector databases bolt on keyword search as an afterthought, **LimyeD
 
 | Component | Technology | Purpose |
 |-----------|------------|---------|
-| Dense Vectors | HNSW / DiskANN / IVF / ScaNN | Semantic similarity search |
+| Dense Vectors | HNSW (mmap-backed graph) | Semantic similarity search |
 | Sparse Vectors | BM25 | Keyword and lexical matching |
 | Fusion | Reciprocal Rank Fusion (RRF) | Mathematically optimal result merging |
 
@@ -88,24 +88,13 @@ This matters because **pure vector search fails on proper nouns, product codes, 
 
 ```bash
 # Single query combining semantic understanding with keyword precision
-curl -X POST http://localhost:8080/collections/docs/search \
+curl -X POST http://localhost:8080/collections/docs/search/v2 \
   -d '{
     "vector": [0.1, 0.2, ...],
-    "sparse_query": {"indices": [101, 403], "values": [2.4, 0.8]},
+    "sparse_vector": {"indices": [101, 403], "values": [2.4, 0.8]},
     "limit": 10
   }'
 ```
-
-#### 📊 Billion-Scale Vector Search with DiskANN
-
-Not every organization can afford to keep billions of vectors in RAM. LimyeDB's **DiskANN Vamana implementation** enables:
-
-- **SSD-resident graph indexes** that search billion-vector datasets
-- **10-100x lower infrastructure costs** compared to in-memory solutions
-- **Configurable memory/latency trade-offs** for your specific requirements
-- **Seamless tiering** between hot (RAM) and warm (SSD) data
-
-Run the same vector operations on a $50/month VPS that would require a $5,000/month high-memory instance with RAM-only solutions.
 
 #### 🔐 JWT-Based RBAC with Per-Collection ACLs
 
@@ -153,31 +142,17 @@ curl -X POST http://localhost:8080/collections/docs/auto-embed \
 **Supported Providers:**
 - OpenAI (text-embedding-3-small, text-embedding-3-large, ada-002)
 - Cohere (embed-english-v3.0, embed-multilingual-v3.0)
-- Google Vertex AI
-- Local models via HTTP endpoints
 
-#### 🗄️ SQL-Like Query Interface
+#### 🌐 Raft-Replicated High Availability
 
-No proprietary DSL to learn. Query your vectors with familiar SQL syntax:
+Run a 3-node cluster for HA via [Hashicorp Raft](https://github.com/hashicorp/raft):
 
-```sql
-SELECT * FROM documents
-NEAREST TO [0.1, 0.2, 0.3, ...]
-WHERE category = "technology" AND price < 100
-LIMIT 10
-```
+- **Strongly consistent writes** through the Raft leader
+- **Leader election and automatic failover** on node loss
+- **FSM-replicated collection metadata and points** across nodes
+- **Snapshot-based recovery** for fast catch-up on rejoin
 
-#### 🌐 Distributed Clustering for High Availability
-
-Scale horizontally with LimyeDB's **hybrid clustering architecture**:
-
-- **Raft Consensus** for strongly consistent metadata operations
-- **SWIM Gossip Protocol** for efficient failure detection
-- **Consistent Hashing** for data distribution across nodes
-- **Automatic Rebalancing** when nodes join or leave
-- **Configurable Replication** for durability guarantees
-
-Deploy a 3-node cluster for high availability or scale to dozens of nodes for massive throughput.
+A single binary deploys as either a standalone node or a member of a Raft cluster.
 
 #### 📈 Production Observability Built-In
 
@@ -194,11 +169,11 @@ LimyeDB is released under **GPL v3**. Everything is open:
 
 - ✅ Raft-replicated high availability
 - ✅ JWT-based RBAC and per-collection ACLs
-- ✅ All index types (HNSW, DiskANN, IVF, ScaNN)
-- ✅ Hybrid search with BM25
-- ✅ Auto-embedding orchestration
-- ✅ Backup and restore
-- ✅ TLS and security features
+- ✅ HNSW vector index (mmap-backed graph)
+- ✅ Hybrid search (dense + BM25 sparse, RRF fusion)
+- ✅ Auto-embedding via OpenAI / Cohere
+- ✅ Server-side snapshots
+- ✅ TLS and security hardening
 - ✅ Prometheus metrics
 
 No "enterprise edition" holding features hostage. No phone call required to get pricing. Fork it, modify it, self-host it.
@@ -212,11 +187,8 @@ No "enterprise edition" holding features hostage. No phone call required to get 
 | **Open Source** | ✅ GPL v3 | ❌ Proprietary | ✅ Apache 2.0 | ✅ Apache 2.0 | ✅ BSD-3 |
 | **Single Binary** | ✅ | N/A (SaaS) | ✅ | ❌ (etcd, MinIO, Pulsar) | ✅ |
 | **Native Hybrid Search** | ✅ BM25 + Dense | ✅ | ⚠️ Sparse only | ✅ | ✅ |
-| **DiskANN (Billion-scale SSD)** | ✅ | ❌ | ❌ | ✅ | ❌ |
-| **Zero-GC HNSW** | ✅ mmap | N/A | ❌ | ❌ | ❌ |
-| **Auto-Embedding** | ✅ | ❌ | ❌ | ❌ | ✅ |
-| **SQL Interface** | ✅ | ❌ | ❌ | ✅ | ✅ GraphQL |
-| **ColBERT MaxSim** | ✅ | ❌ | ✅ | ❌ | ❌ |
+| **mmap-Backed HNSW** | ✅ | N/A | ❌ | ❌ | ❌ |
+| **Auto-Embedding** | ✅ OpenAI / Cohere | ❌ | ❌ | ❌ | ✅ |
 | **Self-Hosted** | ✅ | ❌ | ✅ | ✅ | ✅ |
 | **Predictable Pricing** | ✅ Free | ❌ | ✅ | ✅ | ⚠️ |
 
@@ -273,31 +245,26 @@ We built the vector database we wished existed. Now it's yours to use.
 
 | Feature | Description |
 |---------|-------------|
-| **Hybrid Search via RRF** | Natively fuse dense semantic queries with sparse token frequencies (BM25) via Reciprocal Rank Fusion |
-| **High-Performance HNSW** | O(1) Zero-Allocation Graph-Native memory pools bypassing Go garbage collection for extreme retrieval speeds |
-| **Embedder Orchestrator** | Automated direct text-to-vector integration scaling seamlessly across OpenAI, Cohere, and local models natively |
-| **ColBERT MaxSim Engine** | Advanced Late-Interaction similarity algorithms evaluating precise dot-product MultiVector matrices directly |
-| **SQLite Payload Indexing**| Persistent embedded metadata structures mapping Document Nodes directly into disk-backed B-Trees securely |
-| **Raft-Replicated HA** | Hashicorp Raft replicating collection metadata and points across a 3+ node cluster for high availability |
+| **Hybrid Search via RRF** | Fuse dense semantic queries with sparse BM25 scores using Reciprocal Rank Fusion |
+| **mmap-Backed HNSW** | Memory-mapped graph storage with pooled visited-set buffers; SIMD distance kernels (NEON/AVX2) |
+| **Embedder Orchestrator** | Server-side text-to-vector via OpenAI and Cohere |
+| **SQLite Payload Indexing** | Persistent metadata indexed in SQLite with parameterized JSON-path queries |
+| **Raft-Replicated HA** | Hashicorp Raft replicates collection metadata and points across a 3-node cluster |
 | **JWT-Based RBAC** | Per-collection access control via JWT claims, enforced consistently across REST and gRPC |
-| **Vector SQL Interface** | Powerful and familiar declarative SQL-like query interfaces explicitly controlling embedded semantic properties |
-| **Product & Binary Quantization** | Sub-space clustering and Hamming distance arrays reducing RAM bloat mathematically by over 32x natively |
-| **Serverless S3 Tiering** | Offload memory-mapped clustered vectors intelligently separating persistent storage from internal compute |
-| **CDC Mutation Webhooks** | Dispatcher pipeline publishing raw Insert/Delete events cleanly across decoupled HTTP REST topologies |
-| **DiskANN Vamana Topologies** | Establish highly-connected pure SSD single-layer routing graphs dropping HNSW hierarchical scaling limits perfectly |
-| **Event-Driven Mutators** | Live WebSocket data-streams reacting to vector insertion and clustering algorithms dynamically |
-| **Real-Time Auto-Tuning** | Adapts index parameters dynamically ensuring top 99P recall guarantees continuously in production |
-| **Crash-Safe Persistence** | WAL-based durability with automatic recovery, HNSW metadata persistence, and graceful shutdown |
+| **Product & Binary Quantization** | Product, scalar, and 1-bit binary quantization for memory footprint reduction |
+| **S3 Archive Storage** | Push collection snapshots to S3 for cold storage and restore on demand |
+| **CDC Mutation Webhooks** | HTTP webhook delivery of insert/update/delete events with SSRF-validated URLs |
+| **WAL Persistence** | Write-ahead log captures every mutation; replayed on startup for crash recovery |
 
 ### Technical Highlights
 
-- **Zero-Allocation HNSW Engine & DiskANN:** Eliminates GC pauses with raw memory-mapped NVMe bypass mechanisms and pure multi-terabyte SSD graphs natively handling billions of items.
-- **Advanced AST Payload Filtering:** Execute complex JSON constraints securely backed natively by embedded SQLite B-Tree metadata mappings.
-- **Generative Quantization Protocols:** Compresses multi-modal vector inputs structurally utilizing Subspace Product clustering and 1-bit BQ.
+- **mmap-Backed HNSW Engine:** Reduces GC pressure by storing graph connections in a memory-mapped file; pooled visited-set buffers and SIMD distance kernels.
+- **AST Payload Filtering:** JSON predicate AST compiled into parameterized SQLite queries for safe, complex `WHERE`-style filters.
+- **Quantization:** Product, scalar, and 1-bit binary quantization for memory-footprint reduction.
 - **Authentication:** JWT bearer tokens and API keys with constant-time comparison.
-- **Serverless AWS SDK Integration:** Offload memory-mapped vectors to S3 object storage asynchronously.
-- **Prometheus Metrics:** Native `/metrics` endpoint for monitoring
-- **Security Hardened:** Constant-time token comparison, SSRF protection on webhooks, path traversal prevention, decompression bomb limits, and strict file permissions
+- **AWS SDK Integration:** Push collection snapshots to S3 buckets for archive and disaster recovery.
+- **Prometheus Metrics:** Native `/metrics` endpoint for monitoring.
+- **Security Hardened:** Constant-time token comparison, SSRF protection on webhooks, path traversal prevention, decompression-bomb limits, and strict file permissions.
 
 ---
 
@@ -318,9 +285,6 @@ cmd/limyedb-cli/      CLI entry point
 api/rest/              REST API (Gin) with middleware, auth, CORS
 api/grpc/              gRPC API with streaming support
 pkg/index/hnsw/        HNSW index (concurrent, mmap-backed)
-pkg/index/ivf/         IVF (Inverted File) index
-pkg/index/scann/       ScaNN anisotropic quantization index
-pkg/index/diskann/     DiskANN Vamana graph index
 pkg/index/payload/     SQLite-backed payload filtering
 pkg/storage/mmap/      Memory-mapped vector and graph storage
 pkg/storage/wal/       Write-ahead logging
@@ -740,14 +704,14 @@ curl -X POST http://localhost:8080/collections/documents/search \
 Accelerate RAG retrieval pipelines by fusing keyword frequency with dense contextual embeddings gracefully:
 
 ```bash
-curl -X POST http://localhost:8080/collections/documents/search  \
+curl -X POST http://localhost:8080/collections/documents/search/v2 \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{
     "vector": [0.1, 0.2, 0.3, ...],
-    "sparse_query": { 
-         "indices": [101, 403, 11200], 
-         "values": [2.4, 0.8, 4.1] 
+    "sparse_vector": {
+         "indices": [101, 403, 11200],
+         "values": [2.4, 0.8, 4.1]
     },
     "limit": 10,
     "with_payload": true
@@ -778,42 +742,6 @@ curl -X POST http://localhost:8080/collections/documents/auto-embed \
     ]
   }'
 ```
-
-#### ColBERT Late-Interaction Search (MaxSim)
-
-Evaluate query chunks across entire sequences of documents precisely using native MaxSim Dot-Product evaluations directly inside the HNSW indexes seamlessly parsing `MultiVectors`:
-
-```bash
-curl -X POST http://localhost:8080/collections/documents/search \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{
-    "vector": [0.1, ...],
-    "multi_vector": [[0.1, 0.2], [0.3, 0.4]],
-    "vector_name": "colbert",
-    "limit": 10
-  }'
-```
-
-### SQL Interface
-
-LimyeDB supports a SQL-like query interface:
-
-```bash
-curl -X POST http://localhost:8080/sql \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{
-    "query": "SELECT * FROM documents NEAREST TO [0.1, 0.2, 0.3, ...] LIMIT 10 WHERE category = \"technology\""
-  }'
-```
-
-Supported SQL operations:
-- `CREATE TABLE collection_name (dimension INT, metric STRING)`
-- `DROP TABLE collection_name`
-- `DESCRIBE collection_name`
-- `SHOW TABLES`
-- `SELECT * FROM collection NEAREST TO [vector] LIMIT n WHERE conditions`
 
 ### Batch Operations
 
@@ -1027,11 +955,11 @@ results, err := client.Search(context.Background(), "documents", &limyedb.Search
 
 ### Architecture
 
-LimyeDB uses a hybrid clustering approach:
+LimyeDB uses Hashicorp Raft for cluster coordination:
 
-1. **Raft Consensus**: For strong consistency on metadata and critical operations
-2. **SWIM Gossip**: For efficient failure detection and membership management
-3. **Consistent Hashing**: For data distribution across nodes
+1. **Raft Consensus**: All writes flow through the leader and are committed once a quorum acknowledges
+2. **Snapshot-based Recovery**: Followers catch up via Raft log + snapshot when rejoining
+3. **Member Discovery**: Static peer list or `-raft-join` to bootstrap a follower against an existing leader
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -1106,9 +1034,7 @@ cluster:
 
 ### Replication & Consistency
 
-- **Replication Factor**: Configure per-collection (`replication_factor: 3`)
-- **Write Concern**: `one`, `majority`, `all`
-- **Read Concern**: `local`, `majority`
+LimyeDB uses Hashicorp Raft for replication. Writes are accepted by the leader and committed once a quorum of followers acknowledges; reads currently hit the local FSM on the receiving node and may return slightly stale data on followers (no `VerifyLeader` barrier yet).
 
 ---
 
@@ -1146,27 +1072,6 @@ curl -X PUT http://localhost:8080/collections/documents/points \
       }
     ]
   }'
-```
-
-### Real-Time Subscriptions
-
-Connect via WebSocket to receive live updates:
-
-```javascript
-const ws = new WebSocket('ws://localhost:8080/stream');
-
-ws.onopen = () => {
-  ws.send(JSON.stringify({
-    type: 'subscribe',
-    collection: 'documents',
-    events: ['point.insert', 'point.update', 'point.delete']
-  }));
-};
-
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  console.log('Event:', data.type, data.point);
-};
 ```
 
 ### Persistence & Recovery
@@ -1245,23 +1150,6 @@ storage:
 | Index Metadata | `./data/collections/{name}/index.meta` | Entry point, max level, node connections, deleted flags, ID-to-index mapping |
 | Collection Config | `./data/collections/{name}/meta.json` | Dimension, metric, HNSW config |
 | Graph Mmap | `./data/collections/{name}/graph.mmap` | Memory-mapped HNSW connections (if mmap enabled) |
-
-### Auto-Tuning
-
-Enable automatic parameter optimization:
-
-```bash
-curl -X POST http://localhost:8080/collections/documents/autotune \
-  -H "Content-Type: application/json" \
-  -d '{
-    "enabled": true,
-    "goal": "balanced",
-    "constraints": {
-      "min_recall": 0.95,
-      "max_latency_ms": 50
-    }
-  }'
-```
 
 ---
 
