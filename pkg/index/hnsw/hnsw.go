@@ -108,9 +108,12 @@ func New(cfg *Config) (*HNSW, error) {
 		return nil, errors.New("dimension must be positive")
 	}
 
+	// Per Malkov & Yashunin (HNSW paper §4): Mmax = M for upper layers,
+	// Mmax0 = 2*M for layer 0. Using 2*M for both wastes memory and degrades
+	// upper-layer connectivity quality.
 	h := &HNSW{
 		M:              cfg.M,
-		Mmax:           2 * cfg.M,
+		Mmax:           cfg.M,
 		Mmax0:          2 * cfg.M,
 		efConstruction: cfg.EfConstruction,
 		efSearch:       cfg.EfSearch,
@@ -386,27 +389,24 @@ func (h *HNSW) setConnections(nodeID uint32, layer int, connections []uint32) {
 	}
 }
 
-// selectNeighbors selects the best neighbors for a node
+// selectNeighbors selects the best neighbors for a node and writes the
+// bidirectional connections.
 func (h *HNSW) selectNeighbors(nodeID uint32, candidates []Candidate, layer int) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	maxConn := h.M
+	// During insertion, a new node is given M connections on upper layers
+	// and 2*M on layer 0. Existing neighbors are pruned to Mmax / Mmax0
+	// when their reverse-connection list overflows.
+	ownMax := h.M
+	neighborMax := h.Mmax
 	if layer == 0 {
-		maxConn = h.Mmax0
+		ownMax = h.Mmax0
+		neighborMax = h.Mmax0
 	}
 
-	// Simple heuristic: connect to closest ones
-	var selected []Candidate
-	if len(candidates) > maxConn {
-		// Sort by distance
-		sort.Slice(candidates, func(i, j int) bool {
-			return candidates[i].Distance < candidates[j].Distance
-		})
-		selected = candidates[:maxConn]
-	} else {
-		selected = candidates
-	}
+	queryVec := h.getVector(nodeID)
+	selected := h.selectNeighborsHeuristic(queryVec, candidates, ownMax)
 
 	connections := make([]uint32, len(selected))
 	for i, c := range selected {
@@ -414,10 +414,73 @@ func (h *HNSW) selectNeighbors(nodeID uint32, candidates []Candidate, layer int)
 	}
 	h.setConnections(nodeID, layer, connections)
 
-	// Add reverse connections
+	// Add reverse connections.
 	for _, c := range selected {
-		h.addConnection(c.ID, nodeID, layer, maxConn)
+		h.addConnection(c.ID, nodeID, layer, neighborMax)
 	}
+}
+
+// selectNeighborsHeuristic implements Algorithm 4 from Malkov & Yashunin
+// (2018) "Efficient and robust approximate nearest neighbor search using
+// Hierarchical Navigable Small World graphs", §4.2.
+//
+// Given candidates ranked by distance to q, accept a candidate c only if
+// c is closer to q than to any already-selected neighbor. This produces a
+// more diverse neighbor set than plain top-M and is what gives HNSW its
+// small-world property at high recall. keepPrunedConnections=true: if
+// fewer than maxConn candidates pass the heuristic, backfill from the
+// rejected set in distance order.
+//
+// queryVec is q (the inserting node's vector). Each Candidate.Distance must
+// already be the distance from c to q.
+func (h *HNSW) selectNeighborsHeuristic(queryVec point.Vector, candidates []Candidate, maxConn int) []Candidate {
+	if len(candidates) <= maxConn {
+		out := make([]Candidate, len(candidates))
+		copy(out, candidates)
+		return out
+	}
+
+	working := make([]Candidate, len(candidates))
+	copy(working, candidates)
+	sort.Slice(working, func(i, j int) bool {
+		return working[i].Distance < working[j].Distance
+	})
+
+	selected := make([]Candidate, 0, maxConn)
+	discarded := make([]Candidate, 0, len(working))
+
+	for _, c := range working {
+		if len(selected) >= maxConn {
+			break
+		}
+		cVec := h.getVector(c.ID)
+		if cVec == nil {
+			discarded = append(discarded, c)
+			continue
+		}
+		accept := true
+		for _, s := range selected {
+			sVec := h.getVector(s.ID)
+			if sVec == nil {
+				continue
+			}
+			if h.distCalc.Distance(cVec, sVec) < c.Distance {
+				accept = false
+				break
+			}
+		}
+		if accept {
+			selected = append(selected, c)
+		} else {
+			discarded = append(discarded, c)
+		}
+	}
+
+	// keepPrunedConnections: backfill in distance order until we hit maxConn.
+	for i := 0; len(selected) < maxConn && i < len(discarded); i++ {
+		selected = append(selected, discarded[i])
+	}
+	return selected
 }
 
 // addConnection adds a bidirectional connection

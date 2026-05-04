@@ -3,9 +3,11 @@ package hnsw
 import (
 	"fmt"
 	"math/rand"
+	"sort"
 	"testing"
 
 	"github.com/limyedb/limyedb/pkg/config"
+	"github.com/limyedb/limyedb/pkg/distance"
 	"github.com/limyedb/limyedb/pkg/point"
 )
 
@@ -352,6 +354,104 @@ func createTestIndex(dimension, maxElements int) *HNSW {
 
 	index, _ := New(cfg)
 	return index
+}
+
+// TestHNSWRecallSynthetic measures HNSW's graph-traversal correctness by
+// comparing its results against a brute-force scan that uses the same
+// distance.Calculator. This isolates "did HNSW find the true nearest under
+// its own metric?" from any question about the metric implementation
+// itself.
+//
+// With M=16 / EfConstruction=200 / EfSearch=100 and Algorithm 4 neighbor
+// selection, recall@10 against the brute-force-with-same-metric ground
+// truth should be near perfect. This test exists as a regression guard
+// against future changes to the search/select code.
+func TestHNSWRecallSynthetic(t *testing.T) {
+	const (
+		dim       = 64
+		nPoints   = 1000
+		nQueries  = 50
+		k         = 10
+		minRecall = 0.95
+	)
+
+	rng := rand.New(rand.NewSource(42)) //nolint:gosec // deterministic test fixture
+	randVec := func() point.Vector {
+		v := make(point.Vector, dim)
+		for i := range v {
+			v[i] = rng.Float32()*2 - 1
+		}
+		return v
+	}
+
+	metric := config.MetricCosine
+	calc := distance.New(metric)
+
+	cfg := &Config{
+		M:              16,
+		EfConstruction: 200,
+		EfSearch:       100,
+		MaxElements:    nPoints + nQueries,
+		Metric:         metric,
+		Dimension:      dim,
+	}
+	index, err := New(cfg)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	corpus := make([]point.Vector, nPoints)
+	ids := make([]string, nPoints)
+	for i := 0; i < nPoints; i++ {
+		corpus[i] = randVec()
+		ids[i] = fmt.Sprintf("p%d", i)
+		if err := index.Insert(point.NewPointWithID(ids[i], corpus[i], nil)); err != nil {
+			t.Fatalf("Insert %d: %v", i, err)
+		}
+	}
+
+	bruteforceTopK := func(q point.Vector) map[string]struct{} {
+		type pair struct {
+			id   int
+			dist float32
+		}
+		dists := make([]pair, nPoints)
+		for i, v := range corpus {
+			dists[i] = pair{i, calc.Distance(q, v)}
+		}
+		sort.Slice(dists, func(i, j int) bool { return dists[i].dist < dists[j].dist })
+		out := make(map[string]struct{}, k)
+		for i := 0; i < k; i++ {
+			out[ids[dists[i].id]] = struct{}{}
+		}
+		return out
+	}
+
+	var totalHits int
+	for q := 0; q < nQueries; q++ {
+		query := randVec()
+		want := bruteforceTopK(query)
+
+		got, err := index.Search(query, k)
+		if err != nil {
+			t.Fatalf("Search %d: %v", q, err)
+		}
+		if len(got) != k {
+			t.Fatalf("Search %d returned %d results, want %d", q, len(got), k)
+		}
+		for _, c := range got {
+			node := index.nodes[c.ID]
+			if _, ok := want[node.ID]; ok {
+				totalHits++
+			}
+		}
+	}
+
+	recall := float64(totalHits) / float64(nQueries*k)
+	t.Logf("recall@%d = %.4f over %d queries (metric=%s)", k, recall, nQueries, metric)
+	if recall < minRecall {
+		t.Errorf("recall@%d = %.4f, want >= %.2f", k, recall, minRecall)
+	}
 }
 
 func BenchmarkHNSWInsert(b *testing.B) {
