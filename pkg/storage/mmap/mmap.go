@@ -290,7 +290,7 @@ func (s *Storage) saveAllocatorState() error {
 	// vectors mmap still contained the old data — orphaning every offset
 	// that lived past the truncation point.
 	metaPath := filepath.Clean(s.path + ".meta")
-	tmpPath := metaPath + ".tmp"
+	tmpPath := filepath.Clean(metaPath + ".tmp")
 
 	f, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600) //nolint:gosec
 	if err != nil {

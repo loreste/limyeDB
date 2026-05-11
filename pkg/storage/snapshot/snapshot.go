@@ -333,8 +333,8 @@ func (sw *SnapshotWriter) Finish() (*Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	metaPath := sw.finalPath + ".meta"
-	metaTmp := metaPath + ".tmp"
+	metaPath := filepath.Clean(sw.finalPath + ".meta")
+	metaTmp := filepath.Clean(metaPath + ".tmp")
 	mf, err := os.OpenFile(metaTmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600) //nolint:gosec
 	if err != nil {
 		return nil, err
