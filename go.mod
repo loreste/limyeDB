@@ -16,7 +16,7 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	go.uber.org/goleak v1.3.0
 	golang.org/x/sys v0.43.0
-	google.golang.org/grpc v1.80.0
+	google.golang.org/grpc v1.81.0
 	google.golang.org/protobuf v1.36.11
 	modernc.org/sqlite v1.48.0
 )
@@ -80,8 +80,6 @@ require (
 	github.com/ugorji/go/codec v1.3.1 // indirect
 	go.etcd.io/bbolt v1.3.5 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
-	go.opentelemetry.io/otel v1.43.0 // indirect
-	go.opentelemetry.io/otel/sdk/metric v1.43.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	golang.org/x/arch v0.25.0 // indirect
 	golang.org/x/crypto v0.50.0 // indirect
