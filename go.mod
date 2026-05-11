@@ -5,7 +5,7 @@ go 1.26.1
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.7
 	github.com/aws/aws-sdk-go-v2/config v1.32.17
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.100.1
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.101.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
@@ -15,7 +15,7 @@ require (
 	github.com/limyedb/limyedb/clients/go v0.0.0-00010101000000-000000000000
 	github.com/prometheus/client_golang v1.23.2
 	go.uber.org/goleak v1.3.0
-	golang.org/x/sys v0.43.0
+	golang.org/x/sys v0.44.0
 	google.golang.org/grpc v1.81.0
 	google.golang.org/protobuf v1.36.11
 	modernc.org/sqlite v1.50.0
