@@ -6,6 +6,18 @@ import (
 	"testing"
 )
 
+// newTestIndex creates an isolated SQLite-backed index for a single test.
+func newTestIndex(t *testing.T) *Index {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "payload.db")
+	idx, err := NewIndex(dbPath)
+	if err != nil {
+		t.Fatalf("NewIndex() failed: %v", err)
+	}
+	t.Cleanup(func() { idx.Close() })
+	return idx
+}
+
 func TestNewIndex(t *testing.T) {
 	t.Parallel()
 
@@ -42,12 +54,7 @@ func TestNewIndexWithPath(t *testing.T) {
 
 func TestIndexPoint(t *testing.T) {
 	t.Parallel()
-
-	idx, err := NewIndex("")
-	if err != nil {
-		t.Fatalf("NewIndex() failed: %v", err)
-	}
-	defer idx.Close()
+	idx := newTestIndex(t)
 
 	payload := map[string]interface{}{
 		"name": "John",
@@ -60,12 +67,7 @@ func TestIndexPoint(t *testing.T) {
 
 func TestIndexPointEmpty(t *testing.T) {
 	t.Parallel()
-
-	idx, err := NewIndex("")
-	if err != nil {
-		t.Fatalf("NewIndex() failed: %v", err)
-	}
-	defer idx.Close()
+	idx := newTestIndex(t)
 
 	// Empty payload should be ignored
 	idx.IndexPoint(1, nil)
@@ -75,12 +77,7 @@ func TestIndexPointEmpty(t *testing.T) {
 
 func TestRemovePoint(t *testing.T) {
 	t.Parallel()
-
-	idx, err := NewIndex("")
-	if err != nil {
-		t.Fatalf("NewIndex() failed: %v", err)
-	}
-	defer idx.Close()
+	idx := newTestIndex(t)
 
 	payload := map[string]interface{}{"key": "value"}
 	idx.IndexPoint(1, payload)
@@ -90,12 +87,7 @@ func TestRemovePoint(t *testing.T) {
 
 func TestFilter(t *testing.T) {
 	t.Parallel()
-
-	idx, err := NewIndex("")
-	if err != nil {
-		t.Fatalf("NewIndex() failed: %v", err)
-	}
-	defer idx.Close()
+	idx := newTestIndex(t)
 
 	// Index some points
 	idx.IndexPoint(1, map[string]interface{}{"category": "A", "price": 100})
@@ -113,12 +105,7 @@ func TestFilter(t *testing.T) {
 
 func TestFilterNil(t *testing.T) {
 	t.Parallel()
-
-	idx, err := NewIndex("")
-	if err != nil {
-		t.Fatalf("NewIndex() failed: %v", err)
-	}
-	defer idx.Close()
+	idx := newTestIndex(t)
 
 	results := idx.Filter(nil)
 	if results != nil {
@@ -128,12 +115,7 @@ func TestFilterNil(t *testing.T) {
 
 func TestFilterAnd(t *testing.T) {
 	t.Parallel()
-
-	idx, err := NewIndex("")
-	if err != nil {
-		t.Fatalf("NewIndex() failed: %v", err)
-	}
-	defer idx.Close()
+	idx := newTestIndex(t)
 
 	idx.IndexPoint(1, map[string]interface{}{"category": "A", "price": 100})
 	idx.IndexPoint(2, map[string]interface{}{"category": "A", "price": 200})
@@ -155,12 +137,7 @@ func TestFilterAnd(t *testing.T) {
 
 func TestFilterOr(t *testing.T) {
 	t.Parallel()
-
-	idx, err := NewIndex("")
-	if err != nil {
-		t.Fatalf("NewIndex() failed: %v", err)
-	}
-	defer idx.Close()
+	idx := newTestIndex(t)
 
 	idx.IndexPoint(1, map[string]interface{}{"status": "active"})
 	idx.IndexPoint(2, map[string]interface{}{"status": "pending"})
@@ -179,12 +156,7 @@ func TestFilterOr(t *testing.T) {
 
 func TestFilterNot(t *testing.T) {
 	t.Parallel()
-
-	idx, err := NewIndex("")
-	if err != nil {
-		t.Fatalf("NewIndex() failed: %v", err)
-	}
-	defer idx.Close()
+	idx := newTestIndex(t)
 
 	idx.IndexPoint(1, map[string]interface{}{"status": "active"})
 	idx.IndexPoint(2, map[string]interface{}{"status": "inactive"})
@@ -200,12 +172,7 @@ func TestFilterNot(t *testing.T) {
 
 func TestFilterRange(t *testing.T) {
 	t.Parallel()
-
-	idx, err := NewIndex("")
-	if err != nil {
-		t.Fatalf("NewIndex() failed: %v", err)
-	}
-	defer idx.Close()
+	idx := newTestIndex(t)
 
 	idx.IndexPoint(1, map[string]interface{}{"score": 10})
 	idx.IndexPoint(2, map[string]interface{}{"score": 50})
@@ -221,12 +188,7 @@ func TestFilterRange(t *testing.T) {
 
 func TestFilterIn(t *testing.T) {
 	t.Parallel()
-
-	idx, err := NewIndex("")
-	if err != nil {
-		t.Fatalf("NewIndex() failed: %v", err)
-	}
-	defer idx.Close()
+	idx := newTestIndex(t)
 
 	idx.IndexPoint(1, map[string]interface{}{"type": "A"})
 	idx.IndexPoint(2, map[string]interface{}{"type": "B"})
@@ -242,12 +204,7 @@ func TestFilterIn(t *testing.T) {
 
 func TestFilterNotIn(t *testing.T) {
 	t.Parallel()
-
-	idx, err := NewIndex("")
-	if err != nil {
-		t.Fatalf("NewIndex() failed: %v", err)
-	}
-	defer idx.Close()
+	idx := newTestIndex(t)
 
 	idx.IndexPoint(1, map[string]interface{}{"type": "A"})
 	idx.IndexPoint(2, map[string]interface{}{"type": "B"})
@@ -263,12 +220,7 @@ func TestFilterNotIn(t *testing.T) {
 
 func TestFilterContains(t *testing.T) {
 	t.Parallel()
-
-	idx, err := NewIndex("")
-	if err != nil {
-		t.Fatalf("NewIndex() failed: %v", err)
-	}
-	defer idx.Close()
+	idx := newTestIndex(t)
 
 	idx.IndexPoint(1, map[string]interface{}{"title": "Hello World"})
 	idx.IndexPoint(2, map[string]interface{}{"title": "Goodbye World"})
@@ -284,12 +236,7 @@ func TestFilterContains(t *testing.T) {
 
 func TestFilterStartsWith(t *testing.T) {
 	t.Parallel()
-
-	idx, err := NewIndex("")
-	if err != nil {
-		t.Fatalf("NewIndex() failed: %v", err)
-	}
-	defer idx.Close()
+	idx := newTestIndex(t)
 
 	idx.IndexPoint(1, map[string]interface{}{"name": "John Smith"})
 	idx.IndexPoint(2, map[string]interface{}{"name": "Jane Doe"})
@@ -305,12 +252,7 @@ func TestFilterStartsWith(t *testing.T) {
 
 func TestFilterEndsWith(t *testing.T) {
 	t.Parallel()
-
-	idx, err := NewIndex("")
-	if err != nil {
-		t.Fatalf("NewIndex() failed: %v", err)
-	}
-	defer idx.Close()
+	idx := newTestIndex(t)
 
 	idx.IndexPoint(1, map[string]interface{}{"email": "user@example.com"})
 	idx.IndexPoint(2, map[string]interface{}{"email": "admin@example.org"})
@@ -326,12 +268,7 @@ func TestFilterEndsWith(t *testing.T) {
 
 func TestFilterIsNull(t *testing.T) {
 	t.Parallel()
-
-	idx, err := NewIndex("")
-	if err != nil {
-		t.Fatalf("NewIndex() failed: %v", err)
-	}
-	defer idx.Close()
+	idx := newTestIndex(t)
 
 	idx.IndexPoint(1, map[string]interface{}{"field": "value"})
 	idx.IndexPoint(2, map[string]interface{}{"field": nil})
@@ -348,12 +285,7 @@ func TestFilterIsNull(t *testing.T) {
 
 func TestFilterIsNotNull(t *testing.T) {
 	t.Parallel()
-
-	idx, err := NewIndex("")
-	if err != nil {
-		t.Fatalf("NewIndex() failed: %v", err)
-	}
-	defer idx.Close()
+	idx := newTestIndex(t)
 
 	idx.IndexPoint(1, map[string]interface{}{"field": "value"})
 	idx.IndexPoint(2, map[string]interface{}{"field": nil})
@@ -368,12 +300,7 @@ func TestFilterIsNotNull(t *testing.T) {
 
 func TestCreateIndex(t *testing.T) {
 	t.Parallel()
-
-	idx, err := NewIndex("")
-	if err != nil {
-		t.Fatalf("NewIndex() failed: %v", err)
-	}
-	defer idx.Close()
+	idx := newTestIndex(t)
 
 	idx.CreateIndex("status", IndexTypeHash)
 
@@ -385,12 +312,7 @@ func TestCreateIndex(t *testing.T) {
 
 func TestDeleteIndex(t *testing.T) {
 	t.Parallel()
-
-	idx, err := NewIndex("")
-	if err != nil {
-		t.Fatalf("NewIndex() failed: %v", err)
-	}
-	defer idx.Close()
+	idx := newTestIndex(t)
 
 	idx.CreateIndex("status", IndexTypeHash)
 	idx.DeleteIndex("status")
@@ -403,12 +325,7 @@ func TestDeleteIndex(t *testing.T) {
 
 func TestGetIndexStats(t *testing.T) {
 	t.Parallel()
-
-	idx, err := NewIndex("")
-	if err != nil {
-		t.Fatalf("NewIndex() failed: %v", err)
-	}
-	defer idx.Close()
+	idx := newTestIndex(t)
 
 	// Non-existent index
 	stats := idx.GetIndexStats("nonexistent")
@@ -426,12 +343,7 @@ func TestGetIndexStats(t *testing.T) {
 
 func TestIndexField(t *testing.T) {
 	t.Parallel()
-
-	idx, err := NewIndex("")
-	if err != nil {
-		t.Fatalf("NewIndex() failed: %v", err)
-	}
-	defer idx.Close()
+	idx := newTestIndex(t)
 
 	// Should not panic
 	idx.IndexField(1, "status", "active")
@@ -453,12 +365,7 @@ func TestClose(t *testing.T) {
 
 func TestFilterGreaterLess(t *testing.T) {
 	t.Parallel()
-
-	idx, err := NewIndex("")
-	if err != nil {
-		t.Fatalf("NewIndex() failed: %v", err)
-	}
-	defer idx.Close()
+	idx := newTestIndex(t)
 
 	idx.IndexPoint(1, map[string]interface{}{"value": 10})
 	idx.IndexPoint(2, map[string]interface{}{"value": 20})
@@ -495,12 +402,7 @@ func TestFilterGreaterLess(t *testing.T) {
 
 func TestFilterNotEqual(t *testing.T) {
 	t.Parallel()
-
-	idx, err := NewIndex("")
-	if err != nil {
-		t.Fatalf("NewIndex() failed: %v", err)
-	}
-	defer idx.Close()
+	idx := newTestIndex(t)
 
 	idx.IndexPoint(1, map[string]interface{}{"status": "active"})
 	idx.IndexPoint(2, map[string]interface{}{"status": "inactive"})

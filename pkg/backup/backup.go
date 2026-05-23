@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -61,6 +62,7 @@ type RestoreOptions struct {
 // Backup creates a backup of the database.
 type Backup struct {
 	dataDir string
+	mu      sync.RWMutex
 }
 
 // NewBackup creates a new backup manager.
@@ -68,12 +70,35 @@ func NewBackup(dataDir string) *Backup {
 	return &Backup{dataDir: dataDir}
 }
 
-// Create creates a new backup.
+// fileEntry holds a snapshot of file metadata captured under a brief lock.
+type fileEntry struct {
+	relPath  string
+	safePath string
+	size     int64
+	mode     os.FileMode
+	modTime  time.Time
+}
+
+// Create creates a non-blocking backup. It takes a brief read-lock to snapshot
+// the file list, then streams file contents without holding any lock so that
+// writes can continue during the backup.
 func (b *Backup) Create(outputPath string, opts BackupOptions) (*BackupMetadata, error) {
-	// Sanitize output path to prevent file inclusion via variable (G304)
 	cleanOutput := filepath.Clean(outputPath)
 
-	// Create output file
+	absDataDir, err := filepath.Abs(b.dataDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve data directory: %w", err)
+	}
+
+	// Phase 1: Snapshot file list under a brief read-lock
+	b.mu.RLock()
+	entries, err := b.snapshotFileList(absDataDir, opts)
+	b.mu.RUnlock()
+	if err != nil {
+		return nil, fmt.Errorf("failed to snapshot file list: %w", err)
+	}
+
+	// Phase 2: Stream files without holding any lock
 	outFile, err := os.Create(cleanOutput)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create backup file: %w", err)
@@ -82,7 +107,6 @@ func (b *Backup) Create(outputPath string, opts BackupOptions) (*BackupMetadata,
 
 	var writer io.Writer = outFile
 
-	// Add gzip compression if enabled
 	var gzWriter *gzip.Writer
 	if opts.Compress {
 		gzWriter = gzip.NewWriter(outFile)
@@ -90,7 +114,6 @@ func (b *Backup) Create(outputPath string, opts BackupOptions) (*BackupMetadata,
 		writer = gzWriter
 	}
 
-	// Create tar archive
 	tarWriter := tar.NewWriter(writer)
 	defer tarWriter.Close()
 
@@ -100,81 +123,32 @@ func (b *Backup) Create(outputPath string, opts BackupOptions) (*BackupMetadata,
 		Version:   "1.0.0",
 	}
 
-	// Resolve base directory for safe path construction (G122)
-	absDataDir, err := filepath.Abs(b.dataDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve data directory: %w", err)
-	}
-
-	// Walk through data directory
-	err = filepath.Walk(absDataDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
+	for _, entry := range entries {
+		header := &tar.Header{
+			Name:    entry.relPath,
+			Size:    entry.size,
+			Mode:    int64(entry.mode),
+			ModTime: entry.modTime,
 		}
-
-		// Skip directories
-		if info.IsDir() {
-			return nil
-		}
-
-		// Get relative path
-		relPath, err := filepath.Rel(absDataDir, path)
-		if err != nil {
-			return err
-		}
-
-		// Construct a safe path from the base dir and relative path (G122)
-		safePath := filepath.Join(absDataDir, relPath)
-
-		// Verify the safe path stays within the data directory
-		if !strings.HasPrefix(safePath, absDataDir+string(filepath.Separator)) && safePath != absDataDir {
-			return fmt.Errorf("path %s escapes data directory", relPath)
-		}
-
-		// Check collection filter
-		if len(opts.Collections) > 0 {
-			collName := filepath.Dir(relPath)
-			if !contains(opts.Collections, collName) {
-				return nil
-			}
-		}
-
-		// Skip index files if not included
-		if !opts.IncludeIndexes && isIndexFile(relPath) {
-			return nil
-		}
-
-		// Create tar header
-		header, err := tar.FileInfoHeader(info, "")
-		if err != nil {
-			return err
-		}
-		header.Name = relPath
 
 		if err := tarWriter.WriteHeader(header); err != nil {
-			return err
+			return nil, fmt.Errorf("failed to write tar header: %w", err)
 		}
 
-		// Write file content using the safe path (G304, G122)
-		// #nosec G304 - safePath is validated above with HasPrefix check
-		file, err := os.Open(safePath)
+		// #nosec G304 - safePath is validated during snapshot phase
+		file, err := os.Open(entry.safePath)
 		if err != nil {
-			return err
+			// File may have been deleted between snapshot and streaming — skip
+			continue
 		}
-		defer file.Close()
 
 		written, err := io.Copy(tarWriter, file)
+		_ = file.Close()
 		if err != nil {
-			return err
+			return nil, fmt.Errorf("failed to write file to backup: %w", err)
 		}
 		metadata.SizeBytes += written
-		metadata.TotalPoints++ // Simplified counting
-
-		return nil
-	})
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to create backup: %w", err)
+		metadata.TotalPoints++
 	}
 
 	// Write metadata
@@ -192,6 +166,53 @@ func (b *Backup) Create(outputPath string, opts BackupOptions) (*BackupMetadata,
 	}
 
 	return metadata, nil
+}
+
+// snapshotFileList walks the data directory and collects file metadata.
+// This must be called under b.mu.RLock().
+func (b *Backup) snapshotFileList(absDataDir string, opts BackupOptions) ([]fileEntry, error) {
+	var entries []fileEntry
+
+	err := filepath.Walk(absDataDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+
+		relPath, err := filepath.Rel(absDataDir, path)
+		if err != nil {
+			return err
+		}
+
+		safePath := filepath.Join(absDataDir, relPath)
+		if !strings.HasPrefix(safePath, absDataDir+string(filepath.Separator)) && safePath != absDataDir {
+			return fmt.Errorf("path %s escapes data directory", relPath)
+		}
+
+		if len(opts.Collections) > 0 {
+			collName := filepath.Dir(relPath)
+			if !contains(opts.Collections, collName) {
+				return nil
+			}
+		}
+
+		if !opts.IncludeIndexes && isIndexFile(relPath) {
+			return nil
+		}
+
+		entries = append(entries, fileEntry{
+			relPath:  relPath,
+			safePath: safePath,
+			size:     info.Size(),
+			mode:     info.Mode(),
+			modTime:  info.ModTime(),
+		})
+		return nil
+	})
+
+	return entries, err
 }
 
 // Restore restores from a backup.

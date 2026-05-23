@@ -113,6 +113,8 @@ const (
 	RecordTypeDelete
 	RecordTypeCheckpoint
 	RecordTypeBatch
+	RecordTypeBatchBegin // Marks the start of an atomic batch
+	RecordTypeBatchEnd   // Marks the end of an atomic batch
 )
 
 // Record represents a WAL record
@@ -324,11 +326,39 @@ func (w *WAL) Write(record *Record) error {
 	return nil
 }
 
-// WriteBatch writes multiple records atomically
+// WriteBatch writes multiple records atomically. Records are wrapped in
+// BatchBegin/BatchEnd markers so that incomplete batches (e.g. from a crash)
+// are detected and skipped during replay.
 func (w *WAL) WriteBatch(records []*Record) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
+	// Generate a batch ID from the next sequence number
+	w.lastSeqNum++
+	batchSeqNum := w.lastSeqNum
+
+	// Write BatchBegin marker
+	beginRec := &Record{
+		SeqNum:    batchSeqNum,
+		Type:      RecordTypeBatchBegin,
+		Timestamp: time.Now().UnixNano(),
+		Data:      encodeBatchSize(len(records)),
+	}
+	beginData, err := encodeRecord(beginRec)
+	if err != nil {
+		return err
+	}
+	if w.currentSegment.size+int64(len(beginData)) > w.segmentSize {
+		if err := w.rotate(); err != nil {
+			return err
+		}
+	}
+	if _, err := w.currentSegment.writer.Write(beginData); err != nil {
+		return err
+	}
+	w.currentSegment.size += int64(len(beginData))
+
+	// Write all records
 	for _, record := range records {
 		w.lastSeqNum++
 		record.SeqNum = w.lastSeqNum
@@ -339,7 +369,6 @@ func (w *WAL) WriteBatch(records []*Record) error {
 			return err
 		}
 
-		// Check if we need to rotate
 		if w.currentSegment.size+int64(len(data)) > w.segmentSize {
 			if err := w.rotate(); err != nil {
 				return err
@@ -352,6 +381,28 @@ func (w *WAL) WriteBatch(records []*Record) error {
 		w.currentSegment.size += int64(len(data))
 	}
 
+	// Write BatchEnd marker
+	w.lastSeqNum++
+	endRec := &Record{
+		SeqNum:    w.lastSeqNum,
+		Type:      RecordTypeBatchEnd,
+		Timestamp: time.Now().UnixNano(),
+		Data:      encodeBatchSize(len(records)),
+	}
+	endData, err := encodeRecord(endRec)
+	if err != nil {
+		return err
+	}
+	if w.currentSegment.size+int64(len(endData)) > w.segmentSize {
+		if err := w.rotate(); err != nil {
+			return err
+		}
+	}
+	if _, err := w.currentSegment.writer.Write(endData); err != nil {
+		return err
+	}
+	w.currentSegment.size += int64(len(endData))
+
 	// Sync after batch
 	if err := w.currentSegment.writer.Flush(); err != nil {
 		return err
@@ -363,6 +414,21 @@ func (w *WAL) WriteBatch(records []*Record) error {
 	}
 
 	return nil
+}
+
+// encodeBatchSize encodes the number of records in a batch to bytes.
+func encodeBatchSize(n int) []byte {
+	buf := make([]byte, 4)
+	binary.LittleEndian.PutUint32(buf, uint32(n)) // #nosec G115 - batch sizes are bounded
+	return buf
+}
+
+// decodeBatchSize decodes the number of records from batch marker data.
+func decodeBatchSize(data []byte) int {
+	if len(data) < 4 {
+		return 0
+	}
+	return int(binary.LittleEndian.Uint32(data))
 }
 
 // WriteAsync queues a record for async batch writing (lower latency, slightly higher data loss risk)
@@ -497,18 +563,28 @@ func (w *WAL) Close() error {
 	return w.currentSegment.file.Close()
 }
 
-// Replay replays all records from the WAL
+// Replay replays all records from the WAL. Batch records (those wrapped in
+// BatchBegin/BatchEnd markers) are buffered and only applied if the batch
+// is complete. Incomplete batches from crashes are silently skipped to
+// guarantee atomicity.
 func (w *WAL) Replay(fn func(*Record) error) error {
+	// Collect all records across segments first, then apply with batch awareness
+	var allRecords []*Record
+
+	collectFn := func(r *Record) error {
+		allRecords = append(allRecords, r)
+		return nil
+	}
+
 	// Replay old segments
 	for _, seg := range w.segments {
-		if err := w.replaySegment(seg.path, fn); err != nil {
+		if err := w.replaySegment(seg.path, collectFn); err != nil {
 			return err
 		}
 	}
 
 	// Replay current segment
 	if w.currentSegment != nil {
-		// Flush first to ensure all data is on disk
 		w.currentSegment.mu.Lock()
 		if err := w.currentSegment.writer.Flush(); err != nil {
 			w.currentSegment.mu.Unlock()
@@ -516,10 +592,48 @@ func (w *WAL) Replay(fn func(*Record) error) error {
 		}
 		w.currentSegment.mu.Unlock()
 
-		if err := w.replaySegment(w.currentSegment.path, fn); err != nil {
+		if err := w.replaySegment(w.currentSegment.path, collectFn); err != nil {
 			return err
 		}
 	}
+
+	// Apply records with batch atomicity
+	var batchBuf []*Record
+	inBatch := false
+	expectedBatchSize := 0
+
+	for _, record := range allRecords {
+		switch record.Type {
+		case RecordTypeBatchBegin:
+			inBatch = true
+			expectedBatchSize = decodeBatchSize(record.Data)
+			batchBuf = batchBuf[:0]
+
+		case RecordTypeBatchEnd:
+			if inBatch && len(batchBuf) == expectedBatchSize {
+				// Complete batch — apply all records
+				for _, br := range batchBuf {
+					if err := fn(br); err != nil {
+						return err
+					}
+				}
+			}
+			// Incomplete batch is silently skipped (crash recovery)
+			inBatch = false
+			batchBuf = batchBuf[:0]
+
+		default:
+			if inBatch {
+				batchBuf = append(batchBuf, record)
+			} else {
+				// Non-batch record — apply immediately
+				if err := fn(record); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	// If we end in an open batch (crash mid-write), skip those records silently
 
 	return nil
 }

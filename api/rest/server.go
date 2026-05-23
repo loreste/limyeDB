@@ -438,8 +438,3 @@ func respondCreated(c *gin.Context, data interface{}) {
 		Data:    data,
 	})
 }
-
-// handleWebSocket transparently passes the Gin HTTP structures into the pure Real-Time WebSocket hub upgrader.
-func (s *Server) handleWebSocket(c *gin.Context) {
-	s.realtimeHub.ServeWS(c.Writer, c.Request)
-}
