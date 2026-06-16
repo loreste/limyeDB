@@ -24,10 +24,12 @@ type IndexMetadata struct {
 
 // NodeMetadata contains the persistent state for a single node
 type NodeMetadata struct {
-	ID          string     `json:"id"`
-	Level       int        `json:"level"`
-	Deleted     bool       `json:"deleted"`
-	Connections [][]uint32 `json:"connections"`
+	ID          string      `json:"id"`
+	Level       int         `json:"level"`
+	Deleted     bool        `json:"deleted"`
+	Connections [][]uint32  `json:"connections"`
+	Vector      []float32   `json:"vector,omitempty"`
+	Payload     interface{} `json:"payload,omitempty"`
 }
 
 const metadataVersion = 1
@@ -67,6 +69,8 @@ func (h *HNSW) SaveMetadata(path string) error {
 			ID:      node.ID,
 			Level:   node.Level,
 			Deleted: node.IsDeleted(),
+			Vector:  h.getVector(uint32(i)),
+			Payload: node.GetPayload(),
 		}
 
 		// Copy connections if not using mmap
@@ -162,14 +166,21 @@ func (h *HNSW) LoadMetadata(path string) error {
 	// Pre-allocate nodes slice
 	h.nodes = make([]*Node, len(meta.Nodes))
 
-	// Restore nodes (without vectors - those come from WAL replay)
+	// Restore nodes with vectors (if persisted) — eliminates WAL replay
 	for i, nodeMeta := range meta.Nodes {
 		if nodeMeta.ID == "" {
 			continue
 		}
 
 		useMmap := h.graphMmap != nil
-		node := NewNode(nodeMeta.ID, nil, nodeMeta.Level, h.M, useMmap)
+		node := NewNode(nodeMeta.ID, nodeMeta.Vector, nodeMeta.Level, h.M, useMmap)
+
+		// Restore payload if persisted
+		if nodeMeta.Payload != nil {
+			if payloadMap, ok := nodeMeta.Payload.(map[string]interface{}); ok {
+				node.SetPayload(payloadMap)
+			}
+		}
 
 		if nodeMeta.Deleted {
 			node.MarkDeleted()
