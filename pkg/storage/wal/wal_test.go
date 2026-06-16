@@ -250,12 +250,13 @@ func TestWALWriteBatch(t *testing.T) {
 		t.Errorf("WriteBatch() error = %v", err)
 	}
 
-	if wal.LastSeqNum() != 3 {
-		t.Errorf("LastSeqNum() = %d, want 3", wal.LastSeqNum())
+	// Batch uses 5 sequence numbers: begin(1) + 3 records(2,3,4) + end(5)
+	if wal.LastSeqNum() != 5 {
+		t.Errorf("LastSeqNum() = %d, want 5", wal.LastSeqNum())
 	}
 
 	for i, r := range records {
-		expectedSeq := uint64(i + 1)
+		expectedSeq := uint64(i + 2) // Records start at seqnum 2 (after batch begin)
 		if r.SeqNum != expectedSeq {
 			t.Errorf("Record[%d].SeqNum = %d, want %d", i, r.SeqNum, expectedSeq)
 		}
