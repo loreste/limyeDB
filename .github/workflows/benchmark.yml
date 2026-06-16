@@ -9,6 +9,10 @@ jobs:
     name: Run Benchmarks
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
 
     steps:
     - uses: actions/checkout@v6
@@ -29,6 +33,7 @@ jobs:
 
     - name: Post benchmark results as PR comment
       if: github.event_name == 'pull_request'
+      continue-on-error: true
       uses: actions/github-script@v9
       with:
         script: |
