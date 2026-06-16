@@ -16,9 +16,9 @@ import (
 
 // Result represents a single search result to be re-ranked.
 type Result struct {
-	ID      string  `json:"id"`
-	Text    string  `json:"text"`
-	Score   float32 `json:"score"`
+	ID      string                 `json:"id"`
+	Text    string                 `json:"text"`
+	Score   float32                `json:"score"`
 	Payload map[string]interface{} `json:"payload,omitempty"`
 }
 
@@ -31,11 +31,11 @@ type Reranker interface {
 
 // Config holds reranker configuration.
 type Config struct {
-	Provider string `json:"provider"` // "cohere", "http"
-	Model    string `json:"model"`
-	APIKey   string `json:"api_key"`
-	Endpoint string `json:"endpoint"` // For custom HTTP endpoints
-	TopN     int    `json:"top_n"`    // Max results to return (0 = all)
+	Provider string        `json:"provider"` // "cohere", "http"
+	Model    string        `json:"model"`
+	APIKey   string        `json:"api_key"`
+	Endpoint string        `json:"endpoint"` // For custom HTTP endpoints
+	TopN     int           `json:"top_n"`    // Max results to return (0 = all)
 	Timeout  time.Duration `json:"timeout"`
 }
 

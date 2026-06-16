@@ -34,6 +34,7 @@ func startNode(t *testing.T, id, restPort, raftPort, dataDir string, bootstrap b
 		"--rest", restPort,
 		"--grpc", ":0", // disable static grpc collision
 		"--data", dataDir,
+		"--allow-anonymous",
 		"--raft-node-id", id,
 		"--raft-bind", "127.0.0.1" + raftPort,
 	}
