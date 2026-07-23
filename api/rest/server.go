@@ -85,8 +85,10 @@ func NewServerWithOptions(cfg *config.ServerConfig, collections *collection.Mana
 	// Start Real-Time Event Hub
 	go s.realtimeHub.Run(context.Background())
 
-	s.setupRoutes()
+	// Middleware first: gin binds the middleware chain to each route when the
+	// route is registered, so routes registered before this would bypass it.
 	s.setupMiddleware()
+	s.setupRoutes()
 
 	return s
 }
@@ -173,6 +175,16 @@ func (s *Server) setupRoutes() {
 	s.router.GET("/metrics", s.handleMetrics)
 }
 
+// setupMiddleware registers the global middleware chain. It MUST run before
+// setupRoutes: gin merges the group's middleware into a route's handler chain
+// at registration time, so any route registered first silently bypasses
+// everything added here.
+//
+// Order matters. Recovery is outermost so it catches panics from every layer.
+// CORS precedes authentication because a browser preflight OPTIONS carries no
+// Authorization header and must be answered, not rejected. The size limit and
+// rate limiter precede authentication so an unauthenticated caller cannot make
+// the server do unbounded work.
 func (s *Server) setupMiddleware() {
 	// Standard Recovery middleware
 	s.router.Use(gin.Recovery())
@@ -180,6 +192,19 @@ func (s *Server) setupMiddleware() {
 	// Request ID middleware — must come early so downstream middleware and
 	// handlers can reference the ID via c.Get("request_id").
 	s.router.Use(RequestIDMiddleware())
+
+	// Observability before rejection, so 401s and 429s are logged and counted.
+	s.router.Use(s.requestLogger())
+	s.router.Use(PrometheusMetricsMiddleware())
+
+	// Answer CORS preflight before authentication can reject it.
+	s.router.Use(s.corsMiddleware())
+
+	// Bound the request body and rate before doing authentication work.
+	s.router.Use(s.requestSizeLimit())
+	if s.opts != nil && s.opts.RateLimits != nil {
+		s.router.Use(EndpointRateLimitMiddleware(s.opts.RateLimits))
+	}
 
 	// Enterprise Zero-Trust Token Bearer Interceptor
 	if s.opts.AuthToken != "" {
@@ -220,17 +245,6 @@ func (s *Server) setupMiddleware() {
 			c.Next()
 		})
 	}
-	// Prometheus request metrics middleware
-	s.router.Use(PrometheusMetricsMiddleware())
-
-	// Per-endpoint rate limiting (only active when configured)
-	if s.opts != nil && s.opts.RateLimits != nil {
-		s.router.Use(EndpointRateLimitMiddleware(s.opts.RateLimits))
-	}
-
-	s.router.Use(s.requestLogger())
-	s.router.Use(s.corsMiddleware())
-	s.router.Use(s.requestSizeLimit())
 }
 
 // Start starts the HTTP server
@@ -269,7 +283,13 @@ func (s *Server) Stop(ctx context.Context) error {
 func (s *Server) checkPermission(c *gin.Context, collection string, action string) bool {
 	claimsRaw, exists := c.Get("token_claims")
 	if !exists {
-		// No auth token configured / passed successfully (meaning auth is disabled)
+		// Claims are absent either because auth is disabled, or because the
+		// auth middleware did not run. Only treat it as "disabled" when no
+		// token is configured; otherwise fail closed, so a middleware
+		// misconfiguration cannot silently grant access.
+		if s.opts != nil && s.opts.AuthToken != "" {
+			return false
+		}
 		return true
 	}
 
