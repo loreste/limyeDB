@@ -37,6 +37,7 @@ const (
 	VectorizerCohere      VectorizerType = "cohere"
 	VectorizerHuggingFace VectorizerType = "huggingface"
 	VectorizerLocal       VectorizerType = "local"
+	VectorizerVLLM        VectorizerType = "vllm"
 	VectorizerCustom      VectorizerType = "custom"
 )
 
@@ -132,6 +133,8 @@ func createVectorizer(cfg *VectorizerConfig) (Vectorizer, error) {
 		return NewHuggingFaceVectorizer(cfg)
 	case VectorizerLocal:
 		return NewLocalVectorizer(cfg)
+	case VectorizerVLLM:
+		return NewVLLMVectorizer(cfg)
 	case VectorizerCustom:
 		return NewCustomVectorizer(cfg)
 	default:
@@ -148,6 +151,10 @@ type OpenAIVectorizer struct {
 	endpoint   string
 	batchSize  int
 	retryCount int
+
+	// provider labels the backend in Name(). vLLM serves the same wire
+	// protocol, so it reuses this type but must not report itself as OpenAI.
+	provider string
 }
 
 // NewOpenAIVectorizer creates an OpenAI vectorizer
@@ -274,7 +281,11 @@ func (v *OpenAIVectorizer) vectorizeBatchInternal(ctx context.Context, texts []s
 		}
 
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+v.apiKey)
+		// Self-hosted OpenAI-compatible servers such as vLLM usually run
+		// without authentication, and some reject an unexpected bearer token.
+		if v.apiKey != "" {
+			req.Header.Set("Authorization", "Bearer "+v.apiKey)
+		}
 
 		resp, err = v.client.Do(req)
 		if err != nil {
@@ -333,7 +344,10 @@ func (v *OpenAIVectorizer) Dimension() int {
 }
 
 func (v *OpenAIVectorizer) Name() string {
-	return "openai/" + v.model
+	if v.provider == "" {
+		return "openai/" + v.model
+	}
+	return v.provider + "/" + v.model
 }
 
 // CohereVectorizer uses Cohere's embedding API
