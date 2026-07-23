@@ -42,9 +42,9 @@ linters:
     gosec:
       severity: medium
       confidence: medium
-      excludes:
-        - G104
-        - G115
+      # G104 (unhandled errors) and G115 (integer overflow on conversion) are
+      # left enabled; conversions go through internal/safecasts and a repo-wide
+      # gosec scan reports no findings for either.
 
     errcheck:
       check-type-assertions: true
@@ -109,17 +109,9 @@ linters:
         linters:
           - all
 
-      - linters:
-          - gosec
-        text: "G304:"
-
-      - linters:
-          - gosec
-        text: "G404:"
-
-      - linters:
-          - gosec
-        text: "G118:"
+      # G304/G404/G118 are not excluded globally on purpose. Every genuine
+      # occurrence carries a per-site #nosec with a justification, so a new
+      # unannotated one should fail rather than pass silently.
 
 severity:
   default: warning
