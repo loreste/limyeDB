@@ -1,13 +1,33 @@
 version: 2
 updates:
+  # Without grouping and a cap, every module opens its own PR and each one
+  # rebases go.sum against the others, so they conflict serially.
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
       interval: "weekly"
     target-branch: "main"
+    open-pull-requests-limit: 5
+    groups:
+      go-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      go-minor-and-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
     target-branch: "main"
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns:
+          - "*"

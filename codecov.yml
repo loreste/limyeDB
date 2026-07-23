@@ -45,6 +45,10 @@ ignore:
 
 flags:
   unittests:
+    # CI now tests ./..., so attribute the non-pkg trees to this flag too;
+    # otherwise their coverage is uploaded but not counted against it.
     paths:
       - pkg/
+      - internal/
+      - api/
     carryforward: true
