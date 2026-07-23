@@ -227,7 +227,9 @@ func generateUUID() (string, error) {
 // back in the X-Request-Id response header.
 func RequestIDMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		id := c.GetHeader("X-Request-Id")
+		// The header is client-supplied, so strip control characters before it
+		// reaches logs, error payloads, or the echoed response header.
+		id := sanitizeLogValue(c.GetHeader("X-Request-Id"))
 		if id == "" {
 			generated, err := generateUUID()
 			if err != nil {

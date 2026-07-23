@@ -311,10 +311,28 @@ func (s *Server) requirePermission(action string) gin.HandlerFunc {
 
 // Middleware
 
+// maxLoggedPathLen bounds how much of a request path reaches the logs.
+const maxLoggedPathLen = 256
+
+// sanitizeLogValue strips control characters from untrusted input so it cannot
+// forge or split log records, and truncates it to a bounded length.
+func sanitizeLogValue(v string) string {
+	if len(v) > maxLoggedPathLen {
+		v = v[:maxLoggedPathLen]
+	}
+	return strings.Map(func(r rune) rune {
+		// Drop C0/C1 control characters (includes CR and LF) and DEL.
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
+			return -1
+		}
+		return r
+	}, v)
+}
+
 func (s *Server) requestLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
-		path := c.Request.URL.Path
+		path := sanitizeLogValue(c.Request.URL.Path)
 
 		c.Next()
 
