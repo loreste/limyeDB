@@ -15,6 +15,21 @@ release/
 # Node
 node_modules/
 
+# Rust and Maven both build into target/
+target/
+# Cargo.lock is not committed for a library crate
+clients/rust/Cargo.lock
+
+# Python build and bytecode artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.tox/
+
+# .NET intermediate output
+obj/
+
 
 # Test binary, built with `go test -c`
 *.test
