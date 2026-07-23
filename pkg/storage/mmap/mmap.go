@@ -292,7 +292,8 @@ func (s *Storage) saveAllocatorState() error {
 	metaPath := filepath.Clean(s.path + ".meta")
 	tmpPath := filepath.Clean(metaPath + ".tmp")
 
-	f, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600) //nolint:gosec
+	// #nosec G304 - tmpPath is derived from the storage path validated during Open.
+	f, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return err
 	}

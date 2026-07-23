@@ -672,7 +672,7 @@ func kmeans2D(points []Point2D, k, iterations int) ([]int, []Point2D) {
 
 	// Initialize centroids randomly
 	centroids := make([]Point2D, k)
-	perm := rand.Perm(n)
+	perm := rand.Perm(n) // #nosec G404 - crypto random not needed for k-means init
 	for i := 0; i < k && i < n; i++ {
 		centroids[i] = points[perm[i]]
 		centroids[i].ID = ""

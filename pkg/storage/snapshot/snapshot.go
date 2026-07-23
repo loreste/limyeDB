@@ -335,7 +335,9 @@ func (sw *SnapshotWriter) Finish() (*Snapshot, error) {
 	}
 	metaPath := filepath.Clean(sw.finalPath + ".meta")
 	metaTmp := filepath.Clean(metaPath + ".tmp")
-	mf, err := os.OpenFile(metaTmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600) //nolint:gosec
+	// #nosec G304 - metaTmp is derived from finalPath, which is built from the
+	// manager snapshot directory and a generated snapshot ID.
+	mf, err := os.OpenFile(metaTmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return nil, err
 	}
