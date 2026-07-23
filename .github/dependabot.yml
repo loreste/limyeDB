@@ -1,7 +1,13 @@
 version: 2
+
+# Every manifest in the repo needs an entry here. Security updates flow for
+# anything in the dependency graph, but version updates only run for the
+# ecosystems declared below -- the client SDKs previously got none.
+# Groups keep this from becoming one PR per module: without grouping each Go
+# bump opened its own PR and rebased go.sum against the others, conflicting
+# serially.
 updates:
-  # Without grouping and a cap, every module opens its own PR and each one
-  # rebases go.sum against the others, so they conflict serially.
+  # --- server (root module) ---
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
@@ -29,5 +35,83 @@ updates:
     open-pull-requests-limit: 5
     groups:
       github-actions:
+        patterns:
+          - "*"
+
+  # --- client SDKs: monthly to keep the PR volume down ---
+  - package-ecosystem: "gomod"
+    directory: "/clients/go"
+    schedule:
+      interval: "monthly"
+    target-branch: "main"
+    open-pull-requests-limit: 3
+    groups:
+      clients-go:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "npm"
+    directory: "/clients/javascript"
+    schedule:
+      interval: "monthly"
+    target-branch: "main"
+    open-pull-requests-limit: 3
+    groups:
+      clients-javascript:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "npm"
+    directory: "/clients/typescript/limyedb"
+    schedule:
+      interval: "monthly"
+    target-branch: "main"
+    open-pull-requests-limit: 3
+    groups:
+      clients-typescript:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "pip"
+    directory: "/clients/python"
+    schedule:
+      interval: "monthly"
+    target-branch: "main"
+    open-pull-requests-limit: 3
+    groups:
+      clients-python:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "cargo"
+    directory: "/clients/rust"
+    schedule:
+      interval: "monthly"
+    target-branch: "main"
+    open-pull-requests-limit: 3
+    groups:
+      clients-rust:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "maven"
+    directory: "/clients/java"
+    schedule:
+      interval: "monthly"
+    target-branch: "main"
+    open-pull-requests-limit: 3
+    groups:
+      clients-java:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "nuget"
+    directory: "/clients/csharp"
+    schedule:
+      interval: "monthly"
+    target-branch: "main"
+    open-pull-requests-limit: 3
+    groups:
+      clients-csharp:
         patterns:
           - "*"
