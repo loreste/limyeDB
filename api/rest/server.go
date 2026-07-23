@@ -53,6 +53,13 @@ func NewServer(cfg *config.ServerConfig, collections *collection.Manager, snapsh
 	return NewServerWithOptions(cfg, collections, &ServerOptions{Snapshots: snapshots})
 }
 
+// Handler returns the configured HTTP handler with all routes and middleware
+// registered. It lets callers outside this package drive the API in tests
+// without binding a port.
+func (s *Server) Handler() http.Handler {
+	return s.router
+}
+
 // NewServerWithOptions creates a new REST API server with optional dependencies
 func NewServerWithOptions(cfg *config.ServerConfig, collections *collection.Manager, opts *ServerOptions) *Server {
 	gin.SetMode(gin.ReleaseMode)

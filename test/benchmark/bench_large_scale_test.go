@@ -13,15 +13,6 @@ import (
 	"github.com/limyedb/limyedb/pkg/quantization"
 )
 
-// toVectors converts [][]float32 to []point.Vector
-func toVectors(vecs [][]float32) []point.Vector {
-	result := make([]point.Vector, len(vecs))
-	for i, v := range vecs {
-		result[i] = point.Vector(v)
-	}
-	return result
-}
-
 // BenchmarkLargeScaleInsert benchmarks insertion throughput at scale
 func BenchmarkLargeScaleInsert(b *testing.B) {
 	scales := []int{10000, 100000, 500000}

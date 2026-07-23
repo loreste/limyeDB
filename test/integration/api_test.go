@@ -16,10 +16,12 @@ import (
 	"github.com/limyedb/limyedb/pkg/point"
 )
 
-func setupTestServer(t *testing.T) *gin.Engine {
+// setupTestServer builds a REST server over a temp-dir collection manager and
+// returns its handler, so tests exercise the real routes and middleware.
+func setupTestServer(t *testing.T) http.Handler {
+	t.Helper()
 	gin.SetMode(gin.TestMode)
 
-	// Create temporary manager
 	mgr, err := collection.NewManager(&collection.ManagerConfig{
 		DataDir:        t.TempDir(),
 		MaxCollections: 100,
@@ -29,22 +31,49 @@ func setupTestServer(t *testing.T) *gin.Engine {
 	}
 
 	server := rest.NewServer(&config.ServerConfig{
-		RESTAddress:    ":8080",
+		RESTAddress:    ":0",
 		MaxRequestSize: 64 * 1024 * 1024,
 	}, mgr, nil)
 
-	// Access the router for testing
-	// Note: In production, we'd expose this through the Server struct
-	_ = server
-	return gin.New()
+	return server.Handler()
 }
 
 func TestHealthEndpoint(t *testing.T) {
 	t.Run("health check returns healthy", func(t *testing.T) {
-		// Test the health check logic
-		resp := map[string]string{"status": "healthy"}
-		if resp["status"] != "healthy" {
-			t.Error("Expected healthy status")
+		rr := makeRequest(t, setupTestServer(t), http.MethodGet, "/health", nil)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("Expected status %d, got %d (body %q)", http.StatusOK, rr.Code, rr.Body.String())
+		}
+
+		var resp struct {
+			Status     string `json:"status"`
+			Version    string `json:"version"`
+			Components struct {
+				Storage     string `json:"storage"`
+				Collections struct {
+					Count  int    `json:"count"`
+					Status string `json:"status"`
+				} `json:"collections"`
+			} `json:"components"`
+		}
+		parseResponse(t, rr, &resp)
+
+		if resp.Status != "healthy" {
+			t.Errorf("Expected status healthy, got %q", resp.Status)
+		}
+		if resp.Components.Storage != "healthy" {
+			t.Errorf("Expected storage healthy, got %q", resp.Components.Storage)
+		}
+		if resp.Components.Collections.Status != "healthy" {
+			t.Errorf("Expected collections healthy, got %q", resp.Components.Collections.Status)
+		}
+	})
+
+	t.Run("unknown route returns 404", func(t *testing.T) {
+		rr := makeRequest(t, setupTestServer(t), http.MethodGet, "/no-such-route", nil)
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("Expected status %d, got %d", http.StatusNotFound, rr.Code)
 		}
 	})
 }
