@@ -320,8 +320,15 @@ func sanitizeLogValue(v string) string {
 	if len(v) > maxLoggedPathLen {
 		v = v[:maxLoggedPathLen]
 	}
+
+	// Remove the record-splitting characters explicitly. strings.Map below is
+	// a superset of this, but static analyzers only recognize the replace form
+	// as a log-injection barrier.
+	v = strings.ReplaceAll(v, "\n", "")
+	v = strings.ReplaceAll(v, "\r", "")
+
 	return strings.Map(func(r rune) rune {
-		// Drop C0/C1 control characters (includes CR and LF) and DEL.
+		// Drop the remaining C0/C1 control characters and DEL.
 		if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
 			return -1
 		}
