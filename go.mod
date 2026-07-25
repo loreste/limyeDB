@@ -13,7 +13,7 @@ require (
 	github.com/hashicorp/raft v1.7.3
 	github.com/hashicorp/raft-boltdb/v2 v2.3.1
 	github.com/limyedb/limyedb/clients/go v0.0.0-00010101000000-000000000000
-	github.com/prometheus/client_golang v1.23.2
+	github.com/prometheus/client_golang v1.24.1
 	go.uber.org/goleak v1.3.0
 	golang.org/x/sys v0.47.0
 	google.golang.org/grpc v1.82.1
