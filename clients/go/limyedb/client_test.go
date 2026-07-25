@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"syscall"
 	"testing"
 	"time"
 
@@ -30,29 +31,56 @@ func waitForServer(url string, timeout time.Duration) bool {
 }
 
 func setupServer(t *testing.T) (*exec.Cmd, string) {
-	// Start the main LimyeDB binary for testing from the root directory
-	cmd := exec.Command("go", "-C", "../../..", "run", "cmd/limyedb/main.go", "--rest", ":8181", "--data", "/tmp/limyedb_gotest")
+	// Start the main LimyeDB binary for testing from the root directory.
+	// The server requires an explicit auth decision at startup and exits
+	// otherwise, so this local instance opts out of authentication.
+	cmd := exec.Command("go", "-C", "../../..", "run", "cmd/limyedb/main.go",
+		"--rest", ":8181",
+		"--data", t.TempDir(),
+		"--allow-anonymous",
+	)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	// `go run` execs the compiled binary as a child, so killing cmd alone
+	// leaves the server running and holding the stdout/stderr pipes open,
+	// which hangs the test harness for a minute. Put it in its own process
+	// group so teardown can signal the whole group.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("Failed to start limyedb: %v", err)
 	}
 
 	host := "http://localhost:8181"
-	if !waitForServer(host, 10*time.Second) {
-		cmd.Process.Kill()
+	if !waitForServer(host, 30*time.Second) {
+		killGroup(cmd)
 		t.Fatalf("Server failed to respond within timeout")
 	}
 
 	return cmd, host
 }
 
+// killGroup terminates the server and every process go run spawned under it.
+// Signaling the negative pgid reaches the whole group, so the compiled binary
+// dies with its wrapper instead of lingering.
+func killGroup(cmd *exec.Cmd) {
+	if cmd.Process == nil {
+		return
+	}
+	pgid, err := syscall.Getpgid(cmd.Process.Pid)
+	if err == nil {
+		_ = syscall.Kill(-pgid, syscall.SIGKILL)
+		return
+	}
+	_ = cmd.Process.Kill()
+}
+
 func TestClientIntegration(t *testing.T) {
 	cmd, host := setupServer(t)
 	defer func() {
-		cmd.Process.Kill()
-		os.RemoveAll("/tmp/limyedb_gotest")
+		// t.TempDir handles the data directory, so only the process group
+		// needs tearing down here.
+		killGroup(cmd)
 	}()
 
 	client := limyedb.NewClient(host)

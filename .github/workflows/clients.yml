@@ -1,0 +1,132 @@
+name: Client SDKs
+
+# The Go server is well covered by CI, but the client SDKs had no build at all.
+# A dependabot bump of the Rust client's reqwest dependency once passed every
+# required check while leaving the crate unable to resolve its dependencies,
+# because nothing here compiled it.
+#
+# These jobs are intentionally not in the branch protection required set yet.
+# They report status first; once each SDK is confirmed green they can be
+# promoted to blocking.
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'clients/**'
+      - '.github/workflows/clients.yml'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'clients/**'
+      - '.github/workflows/clients.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: rust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check
+        working-directory: clients/rust
+        run: cargo check --all-targets
+      - name: Test
+        working-directory: clients/rust
+        run: cargo test
+
+  go-client:
+    name: go-client
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+      - name: Build
+        working-directory: clients/go
+        run: go build ./...
+      - name: Test
+        working-directory: clients/go
+        run: go test ./...
+
+  python:
+    name: python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install
+        working-directory: clients/python
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pytest
+      - name: Test
+        working-directory: clients/python
+        run: pytest tests -q
+
+  typescript:
+    name: typescript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Install
+        working-directory: clients/typescript/limyedb
+        run: npm ci
+      - name: Build
+        working-directory: clients/typescript/limyedb
+        run: npm run build
+
+  javascript:
+    name: javascript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      # No package-lock.json in this directory, so npm ci cannot be used.
+      - name: Install
+        working-directory: clients/javascript
+        run: npm install
+      - name: Build
+        working-directory: clients/javascript
+        run: npm run build
+      - name: Test
+        working-directory: clients/javascript
+        run: npm test
+
+  java:
+    name: java
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Verify
+        working-directory: clients/java
+        run: mvn -B --no-transfer-progress verify
+
+  csharp:
+    name: csharp
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build
+        working-directory: clients/csharp
+        run: dotnet build --nologo
