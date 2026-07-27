@@ -22,10 +22,10 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Server.GRPCAddress != ":50051" {
 		t.Errorf("Server.GRPCAddress = %s, want :50051", cfg.Server.GRPCAddress)
 	}
-	if cfg.Server.ReadTimeout != 30*time.Second {
+	if cfg.Server.ReadTimeout.Std() != 30*time.Second {
 		t.Errorf("Server.ReadTimeout = %v, want 30s", cfg.Server.ReadTimeout)
 	}
-	if cfg.Server.WriteTimeout != 30*time.Second {
+	if cfg.Server.WriteTimeout.Std() != 30*time.Second {
 		t.Errorf("Server.WriteTimeout = %v, want 30s", cfg.Server.WriteTimeout)
 	}
 	if cfg.Server.MaxRequestSize != 64*1024*1024 {
@@ -89,8 +89,8 @@ func TestLoadConfigFromFile(t *testing.T) {
 		Server: ServerConfig{
 			RESTAddress:    ":9090",
 			GRPCAddress:    ":50052",
-			ReadTimeout:    60 * time.Second,
-			WriteTimeout:   60 * time.Second,
+			ReadTimeout:    Duration(60 * time.Second),
+			WriteTimeout:   Duration(60 * time.Second),
 			MaxRequestSize: 128 * 1024 * 1024,
 		},
 		Storage: StorageConfig{

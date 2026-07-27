@@ -242,7 +242,7 @@ func main() {
 	slog.Info("Shutting down LimyeDB...")
 
 	// Graceful shutdown
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.WriteTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.WriteTimeout.Std())
 	defer cancel()
 
 	// Step 1: Stop accepting new requests

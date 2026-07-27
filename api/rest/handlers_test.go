@@ -34,8 +34,8 @@ func setupTestServer(t *testing.T) (*Server, func()) {
 
 	cfg := &config.ServerConfig{
 		RESTAddress:    ":0",
-		ReadTimeout:    5 * time.Second,
-		WriteTimeout:   5 * time.Second,
+		ReadTimeout:    config.Duration(5 * time.Second),
+		WriteTimeout:   config.Duration(5 * time.Second),
 		MaxRequestSize: 1 << 20, // 1 MiB
 	}
 

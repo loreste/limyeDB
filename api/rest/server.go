@@ -252,8 +252,8 @@ func (s *Server) Start() error {
 	server := &http.Server{
 		Addr:         s.opts.Addr,
 		Handler:      s.router,
-		ReadTimeout:  s.config.ReadTimeout,
-		WriteTimeout: s.config.WriteTimeout,
+		ReadTimeout:  s.config.ReadTimeout.Std(),
+		WriteTimeout: s.config.WriteTimeout.Std(),
 	}
 
 	s.httpMu.Lock()

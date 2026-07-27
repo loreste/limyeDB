@@ -2,10 +2,14 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/limyedb/limyedb/pkg/quantization"
+	yaml "gopkg.in/yaml.v3"
 )
 
 // Config holds the main configuration for LimyeDB
@@ -17,13 +21,51 @@ type Config struct {
 	Snapshot SnapshotConfig `json:"snapshot"`
 }
 
+// Duration wraps time.Duration so config files can express timeouts as
+// human-readable strings ("30s") as well as raw nanosecond counts. A plain
+// time.Duration field accepts neither from JSON: json.Unmarshal rejects the
+// string form, so duration settings never actually loaded from any config
+// file, in either JSON or YAML.
+type Duration time.Duration
+
+// UnmarshalJSON accepts either a duration string ("30s", "1m") or a numeric
+// nanosecond count.
+func (d *Duration) UnmarshalJSON(b []byte) error {
+	var v interface{}
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	switch value := v.(type) {
+	case string:
+		parsed, err := time.ParseDuration(value)
+		if err != nil {
+			return fmt.Errorf("invalid duration %q: %w", value, err)
+		}
+		*d = Duration(parsed)
+	case float64:
+		*d = Duration(time.Duration(value))
+	default:
+		return fmt.Errorf("duration must be a string or number, got %T", v)
+	}
+	return nil
+}
+
+// MarshalJSON writes the duration in its human-readable string form so a
+// round-trip through Save produces a file that Load can read back.
+func (d Duration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(time.Duration(d).String())
+}
+
+// Std returns the underlying time.Duration.
+func (d Duration) Std() time.Duration { return time.Duration(d) }
+
 // ServerConfig holds server-related configuration
 type ServerConfig struct {
-	RESTAddress    string        `json:"rest_address"`
-	GRPCAddress    string        `json:"grpc_address"`
-	ReadTimeout    time.Duration `json:"read_timeout"`
-	WriteTimeout   time.Duration `json:"write_timeout"`
-	MaxRequestSize int64         `json:"max_request_size"`
+	RESTAddress    string   `json:"rest_address"`
+	GRPCAddress    string   `json:"grpc_address"`
+	ReadTimeout    Duration `json:"read_timeout"`
+	WriteTimeout   Duration `json:"write_timeout"`
+	MaxRequestSize int64    `json:"max_request_size"`
 }
 
 // StorageConfig holds storage-related configuration
@@ -69,8 +111,8 @@ func DefaultConfig() *Config {
 		Server: ServerConfig{
 			RESTAddress:    ":8080",
 			GRPCAddress:    ":50051",
-			ReadTimeout:    30 * time.Second,
-			WriteTimeout:   30 * time.Second,
+			ReadTimeout:    Duration(30 * time.Second),
+			WriteTimeout:   Duration(30 * time.Second),
 			MaxRequestSize: 64 * 1024 * 1024, // 64MB
 		},
 		Storage: StorageConfig{
@@ -112,8 +154,29 @@ func Load(path string) (*Config, error) {
 	}
 
 	cfg := DefaultConfig()
-	if err := json.Unmarshal(data, cfg); err != nil {
-		return nil, err
+
+	// Accept both JSON and YAML. The config struct is tagged json only, so
+	// YAML is bridged through JSON to honor those tags rather than falling
+	// back to yaml's lowercased-field matching, which would silently drop
+	// fields like rest_address. The shipped config.example.yaml and every
+	// tutorial use YAML, so this path must work.
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".yaml", ".yml":
+		var intermediate map[string]interface{}
+		if err := yaml.Unmarshal(data, &intermediate); err != nil {
+			return nil, fmt.Errorf("parse yaml config: %w", err)
+		}
+		jsonData, err := json.Marshal(intermediate)
+		if err != nil {
+			return nil, fmt.Errorf("convert yaml config: %w", err)
+		}
+		if err := json.Unmarshal(jsonData, cfg); err != nil {
+			return nil, fmt.Errorf("load yaml config: %w", err)
+		}
+	default:
+		if err := json.Unmarshal(data, cfg); err != nil {
+			return nil, fmt.Errorf("load json config: %w", err)
+		}
 	}
 
 	return cfg, nil

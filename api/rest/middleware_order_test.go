@@ -33,8 +33,8 @@ func newAuthTestServer(t *testing.T, token string) *Server {
 
 	return NewServerWithOptions(&config.ServerConfig{
 		RESTAddress:    ":0",
-		ReadTimeout:    5 * time.Second,
-		WriteTimeout:   5 * time.Second,
+		ReadTimeout:    config.Duration(5 * time.Second),
+		WriteTimeout:   config.Duration(5 * time.Second),
 		MaxRequestSize: 1 << 20,
 	}, mgr, &ServerOptions{
 		AuthToken:      token,
