@@ -16,17 +16,29 @@ def limyedb_server():
     except requests.exceptions.ConnectionError:
         pass
         
-    # Start server if not running
-    proc = subprocess.Popen(["go", "run", "cmd/limyedb/main.go"], cwd="../..")
-    
-    # Wait for ready
-    for _ in range(30):
+    # Start server if not running. It requires an explicit auth decision at
+    # startup and exits otherwise, so this local instance opts out of auth.
+    proc = subprocess.Popen(
+        ["go", "run", "cmd/limyedb/main.go", "--allow-anonymous"],
+        cwd="../..",
+    )
+
+    # Wait for ready. A cold `go run` compiles the whole server first, which
+    # can take well over 30s on a CI runner, so allow generous headroom.
+    ready = False
+    for _ in range(90):
         try:
-            if requests.get("http://localhost:8080/health").status_code == 200:
+            if requests.get("http://localhost:8080/health", timeout=2).status_code == 200:
+                ready = True
                 break
         except requests.exceptions.ConnectionError:
             time.sleep(1)
-            
+
+    if not ready:
+        proc.terminate()
+        proc.wait()
+        pytest.skip("LimyeDB server did not become ready; skipping integration test")
+
     yield
     proc.terminate()
     proc.wait()

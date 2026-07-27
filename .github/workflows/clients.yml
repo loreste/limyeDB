@@ -46,6 +46,11 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: '1.26.x'
+      # The integration test launches the server via `go run`. Pre-building it
+      # warms the module and build cache so that first launch is fast instead
+      # of a cold compile that blows the test's readiness timeout.
+      - name: Warm build cache
+        run: go build ./cmd/limyedb/...
       - name: Build
         working-directory: clients/go
         run: go build ./...
@@ -61,12 +66,19 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      # The integration test starts the Go server via `go run`, so this job
+      # needs the Go toolchain too, and a warm cache so startup is fast.
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+      - name: Warm build cache
+        run: go build ./cmd/limyedb/...
       - name: Install
         working-directory: clients/python
         run: |
           python -m pip install --upgrade pip
           pip install -e .
-          pip install pytest
+          pip install pytest requests
       - name: Test
         working-directory: clients/python
         run: pytest tests -q
@@ -94,10 +106,9 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
-      # No package-lock.json in this directory, so npm ci cannot be used.
       - name: Install
         working-directory: clients/javascript
-        run: npm install
+        run: npm ci
       - name: Build
         working-directory: clients/javascript
         run: npm run build

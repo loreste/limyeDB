@@ -21,4 +21,11 @@
     <PackageReference Include="System.Text.Json" Version="10.0.10" />
   </ItemGroup>
 
+  <!-- The SDK globs every .cs under the project directory, which pulls the
+       xUnit-based files in Tests/ into the library build and fails to compile.
+       Tests are their own project (Tests/LimyeDB.Tests.csproj). -->
+  <ItemGroup>
+    <Compile Remove="Tests/**/*.cs" />
+  </ItemGroup>
+
 </Project>
