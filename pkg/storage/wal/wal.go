@@ -122,6 +122,10 @@ const (
 // unreasonable channel allocation.
 const maxAsyncBatchSize = 1_000_000
 
+// maxAsyncQueueCap is the hard ceiling on the async queue capacity, applied at
+// the allocation site itself.
+const maxAsyncQueueCap = maxAsyncBatchSize * 10
+
 // Record represents a WAL record
 type Record struct {
 	SeqNum     uint64
@@ -190,7 +194,15 @@ func Open(cfg *Config) (*WAL, error) {
 
 	// Start async writer if enabled
 	if w.asyncEnabled {
-		w.asyncQueue = make(chan *Record, asyncBatchSize*10)
+		// Bound the queue capacity directly at the point of allocation. The
+		// batch size is already clamped above, but computing and re-checking
+		// the capacity here keeps the sanitizer adjacent to make() so a static
+		// analyzer can prove there is no allocation-size overflow.
+		queueCap := asyncBatchSize * 10
+		if queueCap <= 0 || queueCap > maxAsyncQueueCap {
+			queueCap = maxAsyncQueueCap
+		}
+		w.asyncQueue = make(chan *Record, queueCap)
 		w.asyncDone = make(chan struct{})
 		w.asyncWg.Add(1)
 		go w.asyncWriter()
