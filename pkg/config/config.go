@@ -8,8 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/limyedb/limyedb/pkg/quantization"
-	yaml "gopkg.in/yaml.v3"
 )
 
 // Config holds the main configuration for LimyeDB
