@@ -194,13 +194,13 @@ func Open(cfg *Config) (*WAL, error) {
 
 	// Start async writer if enabled
 	if w.asyncEnabled {
-		// Bound the queue capacity directly at the point of allocation. The
-		// batch size is already clamped above, but computing and re-checking
-		// the capacity here keeps the sanitizer adjacent to make() so a static
-		// analyzer can prove there is no allocation-size overflow.
-		queueCap := asyncBatchSize * 10
-		if queueCap <= 0 || queueCap > maxAsyncQueueCap {
-			queueCap = maxAsyncQueueCap
+		// Bound the batch size before multiplying, so the upper-bound check
+		// directly guards the multiplication and the make() capacity cannot
+		// overflow. The value is also clamped above; this keeps the guard
+		// adjacent to the allocation for static analysis.
+		queueCap := maxAsyncQueueCap
+		if asyncBatchSize > 0 && asyncBatchSize <= maxAsyncBatchSize {
+			queueCap = asyncBatchSize * 10
 		}
 		w.asyncQueue = make(chan *Record, queueCap)
 		w.asyncDone = make(chan struct{})
