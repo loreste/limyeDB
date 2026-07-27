@@ -11,19 +11,40 @@ import (
 
 type Client struct {
 	host       string
+	authToken  string
 	httpClient *http.Client
 }
 
-func NewClient(host string) *Client {
+// Option configures a Client.
+type Option func(*Client)
+
+// WithAuthToken sends the given bearer token on every request. Required to
+// reach a server started with -auth-token; omit it only for a server running
+// with -allow-anonymous.
+func WithAuthToken(token string) Option {
+	return func(c *Client) { c.authToken = token }
+}
+
+// WithHTTPClient overrides the default HTTP client (e.g. to set a custom
+// timeout or transport).
+func WithHTTPClient(hc *http.Client) Option {
+	return func(c *Client) { c.httpClient = hc }
+}
+
+func NewClient(host string, opts ...Option) *Client {
 	if host == "" {
 		host = "http://localhost:8080"
 	}
-	return &Client{
+	c := &Client{
 		host: host,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 func (c *Client) request(method, path string, payload interface{}, target interface{}) error {
@@ -45,6 +66,9 @@ func (c *Client) request(method, path string, payload interface{}, target interf
 
 	if payload != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	if c.authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.authToken)
 	}
 
 	resp, err := c.httpClient.Do(req)
