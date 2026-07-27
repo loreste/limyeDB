@@ -27,7 +27,10 @@ HS256 if they want per-collection ACLs (see the
 ```go
 import "github.com/limyedb/limyedb/clients/go/limyedb"
 
-client := limyedb.NewClient("http://127.0.0.1:8080", "<auth-token>")
+// Against a secured server, pass the bearer token:
+client := limyedb.NewClient("http://127.0.0.1:8080", limyedb.WithAuthToken("<auth-token>"))
+// Against a server started with -allow-anonymous, the token is unnecessary:
+// client := limyedb.NewClient("http://127.0.0.1:8080")
 err := client.Upsert("docs", []limyedb.Point{
     {ID: "p1", Vector: []float32{0.5, 0.6}},
 })

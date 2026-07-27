@@ -294,7 +294,9 @@ pkg/cluster/           Hashicorp Raft consensus + gossip membership
 pkg/collection/        Collection and shard management
 pkg/index/sparse/      BM25 sparse index + RRF fusion
 pkg/quantization/      Product, scalar, and binary quantization
-pkg/embedder/          OpenAI, Cohere, Google embedding orchestration
+pkg/embedder/          OpenAI, Cohere embedding orchestration
+pkg/vectorizer/        Pluggable embedding backends (OpenAI, Cohere, Ollama, vLLM)
+pkg/tokenize/          Token accounting for context-window budgeting
 pkg/auth/              JWT + per-collection RBAC
 pkg/security/          API key generation, encryption
 pkg/realtime/          WebSocket event streaming
@@ -425,60 +427,60 @@ make test
 
 See [`config.example.yaml`](config.example.yaml) for a complete annotated example. Summary:
 
+The file may be JSON or YAML; the loader picks the format from the extension.
+
 ```yaml
 server:
-  rest_addr: "0.0.0.0:8080"
-  grpc_addr: "0.0.0.0:50051"
-  data_dir: "./data"
-
-security:
-  auth_token: "${AUTH_TOKEN}"
-  tls:
-    enabled: true
-    cert_file: "./certs/server.crt"
-    key_file: "./certs/server.key"
-
-cluster:
-  node_id: "node1"
-  raft:
-    bind_addr: "0.0.0.0:7000"
-    bootstrap: true
-  gossip:
-    bind_addr: "0.0.0.0:7001"
-    seeds: ["node2:7001", "node3:7001"]
-
-hnsw:
-  default_m: 16
-  default_ef_construction: 200
-  default_ef_search: 100
+  rest_address: ":8080"
+  grpc_address: ":50051"
+  read_timeout: "30s"
+  write_timeout: "30s"
+  max_request_size: 67108864   # 64MB
 
 storage:
-  wal:
-    sync_writes: true
-    segment_size: 67108864  # 64MB
-  mmap:
-    enabled: true
-  snapshot:
-    interval: "1h"
-    retention: 5
+  data_dir: "./data"
+  max_collections: 1000
+  mmap_enabled: true
+  flush_interval_ms: 1000
 
-observability:
-  metrics:
-    enabled: true
-    path: "/metrics"
+hnsw:
+  m: 16
+  ef_construction: 200
+  ef_search: 100
+  max_elements: 100000
+
+wal:
+  enabled: true
+  dir: "./data/wal"
+  segment_size_mb: 64
+  sync_on_write: true
+
+snapshot:
+  dir: "./data/snapshots"
+  interval_sec: 3600
+  retain_count: 5
+  compression_level: 6
 ```
+
+Authentication, TLS, and clustering are configured with command-line flags,
+not the config file — see the flags table below. So a config file never
+carries secrets.
 
 ### Server Flags
 
-`limyedb` is configured via command-line flags or a YAML config file (`-config <path>`).
+`limyedb` is configured via command-line flags or a config file (`-config <path>`, JSON or YAML).
+
+The server requires an explicit authentication decision at startup: it exits
+unless you pass either `-auth-token` or `-allow-anonymous`.
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `-config` | Path to YAML configuration file | (none) |
+| `-config` | Path to config file (JSON or YAML) | (none) |
 | `-data` | Data directory | `./data` |
 | `-rest` | REST API listen address | `:8080` |
 | `-grpc` | gRPC API listen address | `:50051` |
-| `-auth-token` | Bearer token for API authentication (also used as JWT signing key) | (none, auth disabled) |
+| `-auth-token` | Bearer token for API authentication (also used as JWT signing key). Required unless `-allow-anonymous` is set. | (none) |
+| `-allow-anonymous` | Run without authentication. Not recommended outside local development. | `false` |
 | `-tls-cert` | Path to TLS certificate file | (none) |
 | `-tls-key` | Path to TLS private key file | (none) |
 | `-raft-bind` | Raft TCP bind address (enables clustering) | (none) |
@@ -778,7 +780,7 @@ curl -X POST http://localhost:8080/collections/documents/points/scroll \
 ```bash
 # Health check with component status
 curl http://localhost:8080/health
-# {"status":"healthy","version":"0.2.0","uptime":"2h15m","components":{"storage":"healthy","collections":{"count":5,"status":"healthy"}}}
+# {"status":"healthy","version":"<version>","uptime":"2h15m","components":{"storage":"healthy","collections":{"count":5,"status":"healthy"}}}
 
 # Readiness probe (for Kubernetes)
 curl http://localhost:8080/readiness
@@ -923,32 +925,32 @@ results.forEach(result => {
 ### Go
 
 ```go
-import "github.com/loreste/limyeDB/clients/go/limyedb"
+import "github.com/limyedb/limyedb/clients/go/limyedb"
 
 // Connect to LimyeDB
-client := limyedb.NewClient("http://localhost:8080", "YOUR_API_KEY")
+client := limyedb.NewClient("http://localhost:8080")
 
 // Create a collection
-err := client.CreateCollection(context.Background(), &limyedb.CreateCollectionRequest{
+err := client.CreateCollection(limyedb.CollectionConfig{
     Name:      "documents",
     Dimension: 1536,
     Metric:    "cosine",
 })
 
 // Insert vectors
-err = client.Upsert(context.Background(), "documents", []limyedb.Point{
+err = client.Upsert("documents", []limyedb.Point{
     {
         ID:      "doc1",
-        Vector:  []float32{0.1, 0.2, ...},
+        Vector:  []float32{0.1, 0.2 /* ... */},
         Payload: map[string]interface{}{"title": "Introduction to AI"},
     },
 })
 
-// Search
-results, err := client.Search(context.Background(), "documents", &limyedb.SearchRequest{
-    Vector: []float32{0.1, 0.2, ...},
-    Limit:  10,
-})
+// Search: (collection, vector, limit)
+results, err := client.Search("documents", []float32{0.1, 0.2 /* ... */}, 10)
+for _, m := range results {
+    fmt.Printf("ID: %s, Score: %f\n", m.ID, m.Score)
+}
 ```
 
 ---
@@ -1023,22 +1025,21 @@ signing secret, so JWTs minted on one node are accepted by the others.
 
 ### Node Discovery
 
-LimyeDB supports multiple discovery mechanisms:
+Clustering uses explicit, static membership — there is no automatic peer
+discovery. One node bootstraps the cluster and the others join it by address:
 
-- **Static**: Configure seed nodes manually
-- **DNS SRV**: Discover nodes via DNS service records
-- **Consul**: Integrate with HashiCorp Consul
-- **Kubernetes**: Use Kubernetes service discovery
+```bash
+# Leader
+./limyedb -raft-bind :7000 -raft-bootstrap -raft-node-id node0 \
+  -auth-token "$CLUSTER_SECRET"
 
-```yaml
-cluster:
-  discovery:
-    type: kubernetes
-    kubernetes:
-      namespace: limyedb
-      service: limyedb-headless
-      port_name: gossip
+# Followers
+./limyedb -raft-bind :7000 -raft-join <leader-host>:7000 -raft-node-id node1 \
+  -auth-token "$CLUSTER_SECRET"
 ```
+
+All nodes must share the same `-auth-token`. See the flags table for the full
+set of Raft options.
 
 ### Replication & Consistency
 
