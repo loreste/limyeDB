@@ -76,10 +76,10 @@ public class LimyeDBClientTests
     public void FilterBuilder_ShouldBuildComplexFilter()
     {
         var filter = new Filter()
-            .AddMust(Condition.Match("category", "A"))
-            .AddMust(Condition.Range("price", gte: 10, lte: 100))
-            .AddMustNot(Condition.Match("status", "deleted"))
-            .AddShould(Condition.Match("featured", true));
+            .AddMust(Condition.MatchOn("category", "A"))
+            .AddMust(Condition.RangeOn("price", gte: 10, lte: 100))
+            .AddMustNot(Condition.MatchOn("status", "deleted"))
+            .AddShould(Condition.MatchOn("featured", true));
 
         Assert.NotNull(filter.Must);
         Assert.Equal(2, filter.Must.Count);
@@ -206,7 +206,7 @@ public class LimyeDBClientTests
     [Fact]
     public void ConditionMatch_ShouldCreateCorrectCondition()
     {
-        var condition = Condition.Match("field", "value");
+        var condition = Condition.MatchOn("field", "value");
 
         Assert.Equal("field", condition.Key);
         Assert.NotNull(condition.Match);
@@ -217,7 +217,7 @@ public class LimyeDBClientTests
     [Fact]
     public void ConditionRange_ShouldCreateCorrectCondition()
     {
-        var condition = Condition.Range("field", gt: 10, lt: 100);
+        var condition = Condition.RangeOn("field", gt: 10, lt: 100);
 
         Assert.Equal("field", condition.Key);
         Assert.NotNull(condition.Range);

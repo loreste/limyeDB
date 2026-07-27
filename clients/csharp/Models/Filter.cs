@@ -63,7 +63,7 @@ public class Filter
     /// </summary>
     public static Filter MustMatch(string key, object value)
     {
-        return new Filter().AddMust(Condition.Match(key, value));
+        return new Filter().AddMust(Condition.MatchOn(key, value));
     }
 
     /// <summary>
@@ -71,7 +71,7 @@ public class Filter
     /// </summary>
     public static Filter MustRange(string key, double? gt = null, double? gte = null, double? lt = null, double? lte = null)
     {
-        return new Filter().AddMust(Condition.Range(key, gt, gte, lt, lte));
+        return new Filter().AddMust(Condition.RangeOn(key, gt, gte, lt, lte));
     }
 }
 
@@ -104,7 +104,7 @@ public class Condition
     /// <summary>
     /// Creates a match condition.
     /// </summary>
-    public static Condition Match(string key, object value)
+    public static Condition MatchOn(string key, object value)
     {
         return new Condition
         {
@@ -116,7 +116,7 @@ public class Condition
     /// <summary>
     /// Creates a range condition.
     /// </summary>
-    public static Condition Range(string key, double? gt = null, double? gte = null, double? lt = null, double? lte = null)
+    public static Condition RangeOn(string key, double? gt = null, double? gte = null, double? lt = null, double? lte = null)
     {
         return new Condition
         {
