@@ -117,6 +117,11 @@ const (
 	RecordTypeBatchEnd   // Marks the end of an atomic batch
 )
 
+// maxAsyncBatchSize bounds the configured batch size. The async queue is sized
+// at 10x this, so the cap keeps that product far below overflow and prevents an
+// unreasonable channel allocation.
+const maxAsyncBatchSize = 1_000_000
+
 // Record represents a WAL record
 type Record struct {
 	SeqNum     uint64
@@ -147,10 +152,16 @@ func Open(cfg *Config) (*WAL, error) {
 		return nil, err
 	}
 
-	// Set defaults for async options
+	// Set defaults for async options. The upper bound matters as much as the
+	// lower one: the async queue is sized at asyncBatchSize*10, so an
+	// unvalidated large value would overflow to a negative capacity and panic
+	// in make(chan), or allocate an absurd buffer. Clamp both ends.
 	asyncBatchSize := cfg.AsyncBatchSize
 	if asyncBatchSize <= 0 {
 		asyncBatchSize = 100
+	}
+	if asyncBatchSize > maxAsyncBatchSize {
+		asyncBatchSize = maxAsyncBatchSize
 	}
 	asyncInterval := cfg.AsyncInterval
 	if asyncInterval <= 0 {

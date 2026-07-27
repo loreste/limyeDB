@@ -191,6 +191,29 @@ func TestWALOpenAndClose(t *testing.T) {
 	}
 }
 
+// TestWALOpenClampsAsyncBatchSize guards against an allocation-size overflow:
+// the async queue is sized at asyncBatchSize*10, so a huge configured value
+// would overflow to a negative capacity and panic in make(chan). Open must
+// clamp it and not panic.
+func TestWALOpenClampsAsyncBatchSize(t *testing.T) {
+	cfg := &Config{
+		Dir:            t.TempDir(),
+		SegmentSize:    1024 * 1024,
+		AsyncEnabled:   true,
+		AsyncBatchSize: 1 << 60, // absurd; asyncBatchSize*10 would overflow
+	}
+
+	wal, err := Open(cfg)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	t.Cleanup(func() { _ = wal.Close() })
+
+	if wal.asyncBatchSize > maxAsyncBatchSize {
+		t.Errorf("asyncBatchSize = %d, want it clamped to <= %d", wal.asyncBatchSize, maxAsyncBatchSize)
+	}
+}
+
 func TestWALWrite(t *testing.T) {
 	dir := t.TempDir()
 
