@@ -27,8 +27,8 @@
         <!-- okhttp 5.x is a Kotlin Multiplatform release whose JVM classes
              Maven cannot resolve from the plain artifact, so the client failed
              to compile against it. 4.12.0 is the last stable JVM-only line. -->
-        <okhttp.version>4.12.0</okhttp.version>
-        <jackson.version>2.18.9</jackson.version>
+        <okhttp.version>5.4.0</okhttp.version>
+        <jackson.version>2.22</jackson.version>
         <slf4j.version>2.0.18</slf4j.version>
         <junit.version>6.1.2</junit.version>
     </properties>
